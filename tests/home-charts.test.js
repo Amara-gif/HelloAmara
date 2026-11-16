@@ -1,9 +1,10 @@
 import './setup.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { renderView, paretoSeries, teamLoadSeries } from '../assets/js/views.js';
+import { renderView, homeTeamTotals, mountView, paretoSeries, teamLoadSeries } from '../assets/js/views.js';
 import { renderParetoChart } from '../assets/js/chart.js';
 import { buildDemoData } from '../assets/js/demo-data.js';
+import { updateTaskBadge } from '../assets/js/nav-badge.js';
 
 class FakeNode {
   constructor(tag) {
@@ -38,6 +39,11 @@ const emptyState = {
   issueCounts: null,
 };
 
+const demoState = () => {
+  const demo = buildDemoData();
+  return { ...demo.stores, aiCalls: demo.stores.ai_calls, ...demo.meta };
+};
+
 test('team load counts open tasks plus open orders per owner', () => {
   const rows = teamLoadSeries({
     team: [{ name: 'Amara' }, { name: 'Worker A' }, { name: 'Idle Person' }],
@@ -68,6 +74,73 @@ test('team load labels use full names when first names collide', () => {
     orders: [{ owner: 'Alex Jones', open: true }],
   });
   assert.deepEqual(new Set(rows.map((row) => row.label)), new Set(['Alex Smith', 'Alex Jones']));
+});
+
+test('Home shows open work items and open orders as separate totals', () => {
+  const state = demoState();
+  const html = renderView({ id: 'home', path: '/' }, new URLSearchParams(), state);
+
+  assert.deepEqual(homeTeamTotals(state), { tasks: 13, orders: 2 });
+  assert.match(html, /<a href="#\/tasks" data-home-work-items>13 open work items<\/a>/);
+  assert.match(html, /13 open work items<\/a> · <span data-home-open-orders>2 open orders<\/span>/);
+
+  const rows = teamLoadSeries(state);
+  assert.equal(rows.reduce((sum, row) => sum + row.tasks, 0), 13);
+  assert.equal(rows.reduce((sum, row) => sum + row.orders, 0), 2);
+});
+
+test('Home team-load chart title names the shared task and order totals', () => {
+  const state = demoState();
+  const previous = globalThis.document;
+  const team = new FakeNode('div');
+  globalThis.document = {
+    createElementNS: (_namespace, tag) => new FakeNode(tag),
+    getElementById: (id) => (id === 'home-team-load' ? team : null),
+  };
+  try {
+    mountView({ id: 'home', path: '/' }, new URLSearchParams(), state);
+    const svg = team.children[0];
+    const title = svg.children.find((node) => node.tag === 'title');
+    assert.equal(title.textContent, 'Team load: 13 open work items · 2 open orders by owner');
+  } finally {
+    if (previous === undefined) delete globalThis.document;
+    else globalThis.document = previous;
+  }
+});
+
+test('the shared open count is 13 on the badge, task chip, Team, Projects, Home and My work', () => {
+  const state = demoState();
+  const badge = {
+    textContent: '',
+    hidden: false,
+    title: '',
+    setAttribute() {},
+  };
+  updateTaskBadge(badge, state.tasks);
+
+  const tasksHtml = renderView({ id: 'tasks', path: '/tasks' }, new URLSearchParams(), state);
+  const teamHtml = renderView({ id: 'chat', path: '/chat' }, new URLSearchParams(), state);
+  const projectsHtml = renderView({ id: 'projects', path: '/projects' }, new URLSearchParams(), state);
+  const homeHtml = renderView({ id: 'home', path: '/' }, new URLSearchParams(), state);
+  const myworkHtml = renderView({ id: 'mywork', path: '/mywork' }, new URLSearchParams(), state);
+
+  const counts = {
+    sidebarBadge: Number(badge.textContent),
+    taskChip: Number(tasksHtml.match(/>Open (\d+)<\/a>/)?.[1]),
+    team: Number(teamHtml.match(/<strong>(\d+)<\/strong><span>Open work items<\/span>/)?.[1]),
+    projects: Number(projectsHtml.match(/data-projects-open-count>(\d+) open work items/)?.[1]),
+    home: Number(homeHtml.match(/data-home-work-items>(\d+) open work items/)?.[1]),
+    mywork: Number(myworkHtml.match(/data-mywork-count>(\d+) open work items/)?.[1]),
+  };
+  assert.deepEqual(counts, {
+    sidebarBadge: 13,
+    taskChip: 13,
+    team: 13,
+    projects: 13,
+    home: 13,
+    mywork: 13,
+  });
+  assert.match(homeHtml, /href="#\/tasks" data-home-work-items>13 open work items/);
 });
 
 test('Pareto uses meta issue counts, ordered high to low', () => {

@@ -230,6 +230,15 @@ export function teamLoadSeries(state = {}) {
   }).sort((a, b) => b.value - a.value || a.owner.localeCompare(b.owner));
 }
 
+// Home shows the two totals side by side: tasks come from the shared open-work
+// helper, orders are counted separately so neither number is folded into the other.
+export function homeTeamTotals(state = {}) {
+  return {
+    tasks: openTaskCount(state.tasks),
+    orders: (state.orders ?? []).filter((order) => order.open).length,
+  };
+}
+
 // Demo/meta issue counts first, then task modules, then bug components so every
 // account gets a useful Pareto even before it has any issue-like data.
 export function paretoSeries(state = {}) {
@@ -262,6 +271,7 @@ function home(state) {
   const hour = new Date().getHours();
   const greeting = `${hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'}, Amara`;
   const load = teamLoadSeries(state);
+  const totals = homeTeamTotals(state);
   const ratingRows = visibleRatingSeries(state.ratings);
   return `
     ${pageHead(greeting, new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }))}
@@ -273,12 +283,15 @@ function home(state) {
           <div class="card-head"><h2>Today and coming up · next 6</h2><a class="card-link-small" href="#/calendar">Open calendar</a></div>
           <div class="card-body">${agendaRows(state)}</div>
         </section>
-        <section class="card">
+        <section class="card" data-home-team-load>
           <div class="card-head"><h2>Who has work · live</h2><a class="card-link-small" href="#/chat">Open team</a></div>
           <div class="card-body">
             <div class="chart-box" id="home-team-load"></div>
-            <p class="row-meta">Open tasks plus open orders per owner.</p>
-            <div class="chart-legend">${load.map((row) => `<span class="chart-legend-item">${esc(row.label)} · ${row.value}</span>`).join('')}</div>
+            <p class="row-meta">Bars combine open work items and open orders per owner.</p>
+            <div class="chart-legend">
+              <span class="chart-legend-item" data-home-team-totals aria-label="${totals.tasks} open work items · ${totals.orders} open orders"><a href="#/tasks" data-home-work-items>${totals.tasks} open work items</a> · <span data-home-open-orders>${totals.orders} open orders</span></span>
+              ${load.map((row) => `<span class="chart-legend-item">${esc(row.label)} · ${row.value}</span>`).join('')}
+            </div>
           </div>
         </section>
       </div>
@@ -431,7 +444,7 @@ export function myworkQueues(state, projectFilter = '') {
 function mywork(state, query) {
   const all = query.get('all') === '1';
   const projectFilter = query.get('project') ?? '';
-  const scopedCount = (state.tasks ?? []).filter((task) => !projectFilter || task.projectId === projectFilter).length;
+  const scopedCount = openTaskCount(state.tasks, { projectId: projectFilter });
   const projectOptions = (state.projects ?? []).map((project) => option(project.id, projectFilter, `${project.key} ${project.name}`)).join('');
   const queues = myworkQueues(state, projectFilter);
   return `
@@ -441,7 +454,7 @@ function mywork(state, query) {
       <select class="select" name="project" aria-label="Scope by project"><option value="">All projects</option>${projectOptions}</select>
       <button class="btn btn-sm btn-primary" type="submit">Apply</button>
       ${projectFilter ? `<a class="btn btn-ghost btn-sm" href="${pageUrl('/mywork', { all: all ? 1 : '' })}">All projects</a>` : ''}
-      <span class="toolbar-count">${scopedCount} work items in scope</span>
+      <span class="toolbar-count" data-mywork-count>${scopedCount} open work items in scope</span>
     </form>
     <div class="card-grid three-up">
       ${queues.map((queue) => {
@@ -542,7 +555,7 @@ function projectsPage(state, query) {
   const rows = state.projects.filter((project) => Boolean(project.archived) === archived);
   return `
     ${pageHead('Projects', 'The work in progress, archived work and the daily record.', `<button class="btn btn-primary" type="button" data-action="focus-add-project">${icon('folder', 16)}Add project</button>`)}
-    <div class="chip-row">${chips.join('')}</div>
+    <div class="chip-row">${chips.join('')}<span class="toolbar-count" data-projects-open-count>${openTaskCount(state.tasks)} open work items in all projects</span></div>
     <div class="table-wrap">
       <table class="table table-stack">
         <thead><tr><th>Project</th><th>Status</th><th>Start</th><th>Due</th><th>Open work items</th><th>Pages</th><th>Actions</th></tr></thead>
@@ -2331,10 +2344,11 @@ export function mountView(route, query, state) {
     const team = document.getElementById('home-team-load');
     if (team) {
       const rows = teamLoadSeries(state);
+      const totals = homeTeamTotals(state);
       renderBarChart(team, {
         labels: rows.map((row) => row.label),
         values: rows.map((row) => row.value),
-        title: 'Team load: open tasks plus open orders by owner',
+        title: `Team load: ${totals.tasks} open work items · ${totals.orders} open orders by owner`,
       });
     }
     const pareto = document.getElementById('home-pareto');

@@ -22,6 +22,17 @@ test('demo queues follow the inventory rules and scope by project', () => {
   assert.deepEqual(byProject['Ready for review'].map((row) => row.task.key), ['T-14']);
 });
 
+test('My work count is the shared open count and follows the project filter', () => {
+  const state = { ...buildDemoData().stores };
+  const route = { id: 'mywork', path: '/mywork' };
+
+  const all = renderView(route, new URLSearchParams(), state);
+  assert.match(all, /data-mywork-count>13 open work items in scope/);
+
+  const scoped = renderView(route, new URLSearchParams('project=p4'), state);
+  assert.match(scoped, /data-mywork-count>3 open work items in scope/);
+});
+
 test('queues apply decision notes, QA hand-over, dependencies and review state', () => {
   const state = {
     team: [{ name: 'QA Person', role: 'QA' }],
