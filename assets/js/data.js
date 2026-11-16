@@ -117,6 +117,7 @@ async function readState() {
     orders: live(orders),
     settings: meta.settings ?? structuredClone(DEFAULT_SETTINGS),
     ratings: meta.ratings ?? null,
+    issueCounts: meta.issueCounts ?? null,
     seeded: meta.seedVersion ?? null,
     persistentStorage: {
       supported,

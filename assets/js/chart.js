@@ -90,32 +90,39 @@ export function renderLineChart(container, { labels = [], series = [], title = '
 
 export function renderParetoChart(container, { labels = [], values = [], title = 'Pareto chart' } = {}) {
   if (!container) throw new Error('renderParetoChart: container is required');
+  const data = values.map((value) => (Number.isFinite(value) && value > 0 ? value : 0));
   const width = 420;
   const height = 220;
   const pad = { top: 20, right: 28, bottom: 38, left: 8 };
   const plotW = width - pad.left - pad.right;
   const plotH = height - pad.top - pad.bottom;
-  const max = Math.max(...values, 1);
-  const total = values.reduce((sum, value) => sum + value, 0) || 1;
-  const slot = plotW / Math.max(values.length, 1);
+  const max = Math.max(...data, 1);
+  const total = data.reduce((sum, value) => sum + value, 0) || 1;
+  const slot = plotW / Math.max(data.length, 1);
   const barW = Math.min(34, slot * 0.56);
   const svg = prepare(container, title, width, height);
 
   svg.append(svgEl('line', { class: 'chart-grid', x1: pad.left, y1: pad.top + plotH, x2: width - pad.right, y2: pad.top + plotH }));
+  const points = [];
   let cumulative = 0;
-  let lastX = pad.left;
-  let lastY = pad.top + plotH;
-  values.forEach((value, index) => {
+  data.forEach((value, index) => {
     const barH = (value / max) * plotH;
     const x = pad.left + slot * index + (slot - barW) / 2;
     const y = pad.top + plotH - barH;
     svg.append(svgEl('rect', { class: 'chart-bar', x, y, width: barW, height: barH, rx: 3 }));
     cumulative += value;
-    lastX = x + barW / 2;
-    lastY = pad.top + plotH - (cumulative / total) * plotH;
+    points.push([x + barW / 2, pad.top + plotH - (cumulative / total) * plotH]);
     const label = svgEl('text', { class: 'chart-label', x: x + barW / 2, y: height - 8, 'text-anchor': 'middle' });
     label.textContent = labels[index] ?? '';
     svg.append(label);
   });
+
+  if (points.length) {
+    const path = points.map(([x, y], index) => `${index ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+    svg.append(svgEl('path', { class: 'chart-line chart-line-2', d: path }));
+    points.forEach(([cx, cy]) => {
+      svg.append(svgEl('circle', { class: 'chart-point chart-line-2', cx, cy, r: 2.5 }));
+    });
+  }
   return svg;
 }

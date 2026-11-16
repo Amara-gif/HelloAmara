@@ -1,5 +1,5 @@
 // Demo rows for the Test account. Dates are relative to the day the demo is seeded.
-export const DEMO_VERSION = '2026-11-16.1';
+export const DEMO_VERSION = '2026-11-16.2';
 
 const pad = (n) => String(n).padStart(2, '0');
 const dayIso = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -263,6 +263,17 @@ const ratings = {
   })),
 };
 
+// Issue-like counts saved with the demo meta. The Home Pareto card orders these
+// high to low; a fresh account falls back to its task modules instead.
+const issueCounts = [
+  { category: 'Display', count: 18 },
+  { category: 'Battery', count: 11 },
+  { category: 'BFT', count: 8 },
+  { category: 'Supplier', count: 6 },
+  { category: 'Firmware', count: 4 },
+  { category: 'Packaging', count: 2 },
+];
+
 export const demoSettings = {
   ai: { status: 'Connected', model: 'deepseek-v4-pro', timeout: 90, key: 'sk-demo-••••-2c13' },
   aiLimits: { summary: 12, progress: 8, comment: 6, issue: 40, benchmark: 10 },
@@ -275,6 +286,6 @@ export const demoSettings = {
 export function buildDemoData() {
   return {
     stores: { projects, tasks, task_history: taskHistory, task_comments: taskComments, bugs, bug_history: bugHistory, bug_comments: bugComments, events, pages, ai_calls: aiCalls, team, orders },
-    meta: { seedVersion: DEMO_VERSION, settings: demoSettings, ratings },
+    meta: { seedVersion: DEMO_VERSION, settings: demoSettings, ratings, issueCounts },
   };
 }

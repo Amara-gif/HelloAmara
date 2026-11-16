@@ -161,23 +161,65 @@ function agendaRows(state) {
   return `<div class="row-list">${items}</div>${remaining ? `<a class="btn btn-ghost btn-sm" href="#/calendar" data-agenda-more>${remaining} more in the calendar</a>` : ''}`;
 }
 
-function teamLoad(state) {
-  const active = state.tasks.filter((task) => task.status !== 'Done');
-  return state.team.map((agent) => {
-    const count = active.filter((task) => task.owner === agent.name).length;
-    const orders = state.orders.filter((order) => order.owner === agent.name && order.open).length;
-    return `<div class="row-item">
-      ${avatar(agent.name)}
-      <span class="row-main"><span class="row-title">${esc(agent.name)}</span><span class="row-meta">${esc(agent.role)}</span></span>
-      <span class="row-count">${count}<small>${orders ? ` +${orders} order` : ' rows'}</small></span>
-      <a class="btn btn-ghost btn-sm" href="#/chat">Go</a>
-    </div>`;
-  }).join('');
+export function teamLoadSeries(state = {}) {
+  const tasks = state.tasks ?? [];
+  const orders = state.orders ?? [];
+  const names = [...new Set([
+    ...(state.team ?? []).map((agent) => agent.name),
+    ...tasks.filter((task) => task.status !== 'Done').map((task) => task.owner),
+    ...orders.filter((order) => order.open).map((order) => order.owner),
+  ].filter(Boolean))];
+  const firstNames = names.reduce((counts, name) => {
+    const first = String(name).split(/\s+/)[0];
+    counts.set(first, (counts.get(first) ?? 0) + 1);
+    return counts;
+  }, new Map());
+  return names.map((name) => {
+    const taskCount = tasks.filter((task) => task.owner === name && task.status !== 'Done').length;
+    const orderCount = orders.filter((order) => order.owner === name && order.open).length;
+    const first = String(name).split(/\s+/)[0];
+    return {
+      owner: name,
+      label: firstNames.get(first) > 1 ? name : first,
+      tasks: taskCount,
+      orders: orderCount,
+      value: taskCount + orderCount,
+    };
+  }).sort((a, b) => b.value - a.value || a.owner.localeCompare(b.owner));
+}
+
+// Demo/meta issue counts first, then task modules, then bug components so every
+// account gets a useful Pareto even before it has any issue-like data.
+export function paretoSeries(state = {}) {
+  const counts = new Map();
+  const add = (label, value = 1) => {
+    const key = String(label ?? '').trim();
+    if (key) counts.set(key, (counts.get(key) ?? 0) + value);
+  };
+  for (const row of Array.isArray(state.issueCounts) ? state.issueCounts : []) {
+    const value = Number(row?.count ?? row?.value);
+    if (Number.isFinite(value) && value > 0) add(row?.category ?? row?.label ?? row?.name, value);
+  }
+  if (!counts.size) for (const task of state.tasks ?? []) add(task.module || task.title || 'General');
+  if (!counts.size) for (const bug of state.bugs ?? []) add(bug.component || 'Other');
+  const ordered = [...counts.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+  const top = ordered.slice(0, 6);
+  const rest = ordered.slice(6);
+  if (rest.length) {
+    const other = top.find((row) => row.label === 'Other');
+    const value = rest.reduce((sum, row) => sum + row.value, 0);
+    if (other) other.value += value;
+    else top.push({ label: 'Other', value });
+  }
+  return top;
 }
 
 function home(state) {
   const hour = new Date().getHours();
   const greeting = `${hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'}, Amara`;
+  const load = teamLoadSeries(state);
   return `
     ${pageHead(greeting, new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }))}
     <div class="home-layout">
@@ -189,7 +231,11 @@ function home(state) {
         </section>
         <section class="card">
           <div class="card-head"><h2>Who has work · live</h2><a class="card-link-small" href="#/chat">Open team</a></div>
-          <div class="card-body"><div class="row-list">${teamLoad(state)}</div></div>
+          <div class="card-body">
+            <div class="chart-box" id="home-team-load"></div>
+            <p class="row-meta">Open tasks plus open orders per owner.</p>
+            <div class="chart-legend">${load.map((row) => `<span class="chart-legend-item">${esc(row.label)} · ${row.value}</span>`).join('')}</div>
+          </div>
         </section>
       </div>
       <div class="home-column">
@@ -201,8 +247,11 @@ function home(state) {
           </div>
         </section>
         <section class="card">
-          <div class="card-head"><h2>Roselite Pareto · saved default</h2><a class="card-link-small" href="#/project/MR">Open analysis</a></div>
-          <div class="card-body"><div class="chart-box" id="home-pareto"></div></div>
+          <div class="card-head"><h2>Market Review Pareto · saved default</h2><a class="card-link-small" href="#/project/MR">Open analysis</a></div>
+          <div class="card-body">
+            <div class="chart-box" id="home-pareto"></div>
+            <p class="row-meta">Ordered high to low; the line is cumulative share.</p>
+          </div>
         </section>
         <section class="card">
           <div class="card-head"><h2>Recent AI calls</h2><a class="card-link-small" href="#/settings/ai">AI settings</a></div>
@@ -756,12 +805,23 @@ export function mountView(route, query, state) {
   if (route.id === 'home') {
     const rating = document.getElementById('home-rating');
     if (rating && state.ratings) renderLineChart(rating, { labels: state.ratings.labels, series: state.ratings.series.slice(0, 4), title: 'Rating trend' });
+    const team = document.getElementById('home-team-load');
+    if (team) {
+      const rows = teamLoadSeries(state);
+      renderBarChart(team, {
+        labels: rows.map((row) => row.label),
+        values: rows.map((row) => row.value),
+        title: 'Team load: open tasks plus open orders by owner',
+      });
+    }
     const pareto = document.getElementById('home-pareto');
     if (pareto) {
-      const counts = {};
-      state.bugs.forEach((bug) => { counts[bug.component] = (counts[bug.component] || 0) + 1; });
-      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
-      renderBarChart(pareto, { labels: sorted.map(([name]) => name.split(' ')[0]), values: sorted.map(([, value]) => value), title: 'Issues by component' });
+      const rows = paretoSeries(state);
+      renderParetoChart(pareto, {
+        labels: rows.map((row) => row.label),
+        values: rows.map((row) => row.value),
+        title: 'Issue Pareto: ordered categories with cumulative share',
+      });
     }
   }
   if (route.id === 'rating-trend' && state.ratings) {

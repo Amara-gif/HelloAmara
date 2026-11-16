@@ -1936,14 +1936,14 @@ code {
   align-items: center;
   gap: var(--space-1);
   color: var(--color-text-secondary);
- 
+  font-size: var(--font-size-xs);
+}
 
 .chart-dot.chart-line-2 { background: var(--color-chart-series-2); }
 .chart-dot.chart-line-3 { background: var(--color-chart-series-3); }
 .chart-dot.chart-line-4 { background: var(--color-chart-series-4); }
 .chart-dot.chart-line-5 { background: var(--color-chart-series-5); }
-.chart-dot.chart-line-6 { background: var(--color-chart-series-6); } font-size: var(--font-size-xs);
-}
+.chart-dot.chart-line-6 { background: var(--color-chart-series-6); }
 
 .chart-dot {
   width: 8px;

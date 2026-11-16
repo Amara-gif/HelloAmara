@@ -1,4 +1,4 @@
-import { renderBarChart } from './chart.js';
+import { renderBarChart, renderParetoChart } from './chart.js';
 import { toast, openModal } from './ui.js';
 
 const rootStyle = getComputedStyle(document.documentElement);
@@ -142,12 +142,21 @@ function setupDemos() {
 
 function drawChart() {
   const box = document.getElementById('sg-chart');
-  if (!box) return;
-  renderBarChart(box, {
-    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
-    values: [12, 18, 9, 22, 15],
-    title: 'Sample weekly task completions',
-  });
+  if (box) {
+    renderBarChart(box, {
+      labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+      values: [12, 18, 9, 22, 15],
+      title: 'Sample weekly task completions',
+    });
+  }
+  const pareto = document.getElementById('sg-pareto');
+  if (pareto) {
+    renderParetoChart(pareto, {
+      labels: ['Display', 'Battery', 'BFT', 'Supplier'],
+      values: [18, 11, 8, 6],
+      title: 'Sample issue Pareto with cumulative share',
+    });
+  }
 }
 
 export async function initStyleguide() {
