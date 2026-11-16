@@ -28,6 +28,33 @@ test('tasks default to open scope, All shows everything, and an explicit status 
   assert.ok(closed.rows.some((task) => task.key === 'T-4'), 'a status filter may return Done rows');
 });
 
+test('the Open and All chips count exactly the rows filterTasks returns', () => {
+  const state = demoState();
+  const route = { id: 'tasks', path: '/tasks', title: 'All work items' };
+
+  const openRows = filterTasks(state, new URLSearchParams()).rows;
+  const openHtml = renderView(route, new URLSearchParams(), state);
+  assert.equal(openRows.length, 13, 'the demo has 13 live open rows');
+  assert.match(openHtml, new RegExp(`>Open ${openRows.length}</a>`));
+
+  const allRows = filterTasks(state, new URLSearchParams('scope=all')).rows;
+  const allHtml = renderView(route, new URLSearchParams('scope=all'), state);
+  assert.equal(allRows.length, 18, 'the demo has 18 live rows');
+  assert.match(allHtml, new RegExp(`>All ${allRows.length}</a>`));
+});
+
+test('the toolbar In review count matches the board In Review column', () => {
+  const state = demoState();
+  const route = { id: 'tasks', path: '/tasks', title: 'All work items' };
+  const html = renderView(route, new URLSearchParams('view=board&scope=all'), state);
+  const toolbar = html.match(/<span class="toolbar-count">([^<]*)<\/span>/)?.[1] ?? '';
+  const inReview = Number(toolbar.match(/(\d+) in review/)?.[1]);
+  const column = html.match(/data-board-column="In Review"[\s\S]*?<\/section>/)?.[0] ?? '';
+
+  assert.equal(inReview, (column.match(/data-board-task=/g) ?? []).length);
+  assert.equal(inReview, 1, 'only the QA-owned Waiting row is In Review');
+});
+
 test('task filters cover status, priority, owner, severity, component, module, project and q', () => {
   const tasks = [
     {

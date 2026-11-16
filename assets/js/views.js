@@ -20,6 +20,7 @@ import {
   AI_LIMIT_DEFAULTS,
 } from './data.js';
 import { BOARD_COLUMNS, columnForTask } from './board-columns.js';
+import { allTaskCount, inProgressTaskCount, openTaskCount, openTasks } from './work-counts.js';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const today = () => {
@@ -170,8 +171,8 @@ function miniCalendar(state) {
 function agendaRows(state) {
   const rows = [];
   const todayIso = today();
-  for (const task of state.tasks) {
-    if (task.status !== 'Done' && task.due) rows.push({ date: task.due, kind: 'Task', title: task.title, href: `#/task/${task.id}`, tone: 'task' });
+  for (const task of openTasks(state.tasks)) {
+    if (task.due) rows.push({ date: task.due, kind: 'Task', title: task.title, href: `#/task/${task.id}`, tone: 'task' });
   }
   for (const bug of state.bugs) {
     if (!['Closed', 'Verified', 'Wont fix'].includes(bug.status) && bug.due) rows.push({ date: bug.due, kind: 'Bug', title: bug.title, href: `#/bug/${bug.id}`, tone: 'bug' });
@@ -207,7 +208,7 @@ export function teamLoadSeries(state = {}) {
   const orders = state.orders ?? [];
   const names = [...new Set([
     ...(state.team ?? []).map((agent) => agent.name),
-    ...tasks.filter((task) => task.status !== 'Done').map((task) => task.owner),
+    ...openTasks(tasks).map((task) => task.owner),
     ...orders.filter((order) => order.open).map((order) => order.owner),
   ].filter(Boolean))];
   const firstNames = names.reduce((counts, name) => {
@@ -216,7 +217,7 @@ export function teamLoadSeries(state = {}) {
     return counts;
   }, new Map());
   return names.map((name) => {
-    const taskCount = tasks.filter((task) => task.owner === name && task.status !== 'Done').length;
+    const taskCount = openTaskCount(tasks, { owner: name });
     const orderCount = orders.filter((order) => order.owner === name && order.open).length;
     const first = String(name).split(/\s+/)[0];
     return {
@@ -403,7 +404,7 @@ function reasonForReview(task) {
 
 export function myworkQueues(state, projectFilter = '') {
   const scoped = (state.tasks ?? []).filter((task) => !projectFilter || task.projectId === projectFilter);
-  const open = scoped.filter((task) => task.status !== 'Done');
+  const open = openTasks(scoped);
   const decisionRows = open
     .filter((task) => task.pendingDecision || noteHas(task, '[待确认]'))
     .map((task) => ({
@@ -548,7 +549,7 @@ function projectsPage(state, query) {
         <tbody>
           ${rows.map((project) => {
             if (project.id === editId) return projectEditRow(project, archived);
-            const open = state.tasks.filter((task) => task.projectId === project.id && task.status !== 'Done').length;
+            const open = openTaskCount(state.tasks, { projectId: project.id });
             const pages = state.pages.filter((page) => page.projectId === project.id).length;
             const openHref = pageUrl(`/project/${project.key}`, { tab: 'work', scope: 'open' });
             return `<tr class="project-row" data-project-row data-project-id="${esc(project.id)}" data-project-key="${esc(project.key)}"${project.archived ? '' : ' draggable="true"'}>
@@ -634,12 +635,17 @@ export function filterTasks(state, query, options = {}) {
   // A project-scoped page owns the scope; another project= value must not hide its rows.
   const projects = forcedProject ? [] : projectFilter.split(',').filter(Boolean);
   const needle = q.toLowerCase();
+  // Scope=open is the same shared definition the chips and nav badge use, so a
+  // row cannot be listed without being counted (or counted without being listed).
+  const openScopeIds = scope === 'open' && !statuses.length
+    ? new Set(openTasks(state.tasks, { projectId: forcedProject || undefined }).map((task) => task.id))
+    : null;
 
   let rows = state.tasks.filter((task) => {
     const project = projectOf(state, task.projectId);
     const haystack = `${task.title} ${task.notes ?? ''} ${task.note ?? ''} ${task.owner} ${task.id} ${task.key} ${task.component ?? ''} ${task.description ?? ''} ${task.module ?? ''} ${project?.name ?? ''}`.toLowerCase();
     // An explicit workflow status filter overrides the open-only default (inventory §3.2).
-    if (scope === 'open' && task.status === 'Done' && !statuses.length) return false;
+    if (openScopeIds && !openScopeIds.has(task.id)) return false;
     return (!needle || haystack.includes(needle))
       && (!forcedProject || task.projectId === forcedProject)
       && matchesFilter(statuses, task.workflow)
@@ -841,7 +847,7 @@ function milestoneDate(task) {
 
 function undatedSummary(rows, isUndated = (task) => !dateOnly(task.due)) {
   const undated = rows.filter(isUndated);
-  const open = undated.filter((task) => task.status !== 'Done');
+  const open = openTasks(undated);
   return { undated, open };
 }
 
@@ -974,9 +980,10 @@ function workItemsBody(state, query, options = {}) {
   const view = ['list', 'board', 'calendar', 'timeline'].includes(query.get('view')) ? query.get('view') : 'list';
   // The board shows every status by default; list, calendar and timeline stay open-first.
   const { rows, scope, q, status, owner, priorityFilter, severity, component, module, projectFilter, sort } = filterTasks(scopedState, query, { projectId, defaultScope: view === 'board' ? 'all' : 'open' });
-  const openCount = tasks.filter((task) => task.status !== 'Done').length;
-  const allCount = tasks.length;
-  const overdue = tasks.filter((task) => task.due && task.due < today() && task.status !== 'Done').length;
+  const openCount = openTaskCount(tasks);
+  const allCount = allTaskCount(tasks);
+  const overdue = openTasks(rows).filter((task) => task.due && task.due < today()).length;
+  const inReviewCount = rows.filter((task) => columnForTask(state, task) === 'In Review').length;
   const monthParam = query.get('m') ?? '';
   const carried = { q, status, owner, priority: priorityFilter, severity, component, module, project: projectId || projectFilter, sort, scope, m: monthParam, tab };
   const url = (params) => pageUrl(path, { ...carried, ...params });
@@ -996,7 +1003,7 @@ function workItemsBody(state, query, options = {}) {
         <a class="chip${scope === 'open' ? ' is-active' : ''}" href="${url({ scope: 'open' })}">Open ${openCount}</a>
         <a class="chip${scope === 'all' ? ' is-active' : ''}" href="${url({ scope: 'all' })}">All ${allCount}</a>
       </div>
-      <span class="toolbar-count">${tasks.filter((task) => task.status === 'In progress').length} in progress · ${tasks.filter((task) => task.status === 'Waiting').length} in review · ${overdue} overdue</span>
+      <span class="toolbar-count">${inProgressTaskCount(rows)} in progress · ${inReviewCount} in review · ${overdue} overdue</span>
     </div>
     <form class="toolbar" data-form="task-filters" data-path="${esc(path)}">
       <input type="hidden" name="view" value="${view}" /><input type="hidden" name="scope" value="${scope}" /><input type="hidden" name="m" value="${esc(monthParam)}" />${tab ? `<input type="hidden" name="tab" value="${esc(tab)}" />` : ''}
@@ -1021,8 +1028,8 @@ function tasksPage(state, query) {
 
 function calendarItems(state, date, projectFilter) {
   const items = [];
-  for (const task of state.tasks) {
-    if (task.due === date && task.status !== 'Done' && (!projectFilter || task.projectId === projectFilter)) items.push({ title: task.title, href: `#/task/${task.id}`, kind: 'Task', tone: 'task' });
+  for (const task of openTasks(state.tasks, { projectId: projectFilter || undefined })) {
+    if (task.due === date) items.push({ title: task.title, href: `#/task/${task.id}`, kind: 'Task', tone: 'task' });
   }
   for (const bug of state.bugs) {
     if (bug.due === date && !['Closed', 'Verified', 'Wont fix'].includes(bug.status) && !projectFilter) items.push({ title: bug.title, href: `#/bug/${bug.id}`, kind: 'Bug', tone: 'bug' });
@@ -1193,14 +1200,14 @@ function bugsPage(state, query) {
 }
 
 function teamPage(state) {
-  const openTasks = state.tasks.filter((task) => task.status !== 'Done');
+  const openWork = openTasks(state.tasks);
   const lead = state.team.find((agent) => /lead|owner/i.test(String(agent?.role ?? ''))) ?? state.team[0];
   const leadName = String(lead?.name ?? 'Amara');
   const stats = [
-    ['Decisions awaiting the lead', openTasks.filter((task) => task.pendingDecision || String(task.notes ?? '').includes('[待确认')).length],
+    ['Decisions awaiting the lead', openWork.filter((task) => task.pendingDecision || String(task.notes ?? '').includes('[待确认')).length],
     ['Reviews ready', state.tasks.filter((task) => task.status === 'Done' && !task.reviewed).length],
     ['People working', state.team.filter((agent) => /^working$/i.test(String(agent.status ?? ''))).length],
-    ['Open work items', openTasks.length],
+    ['Open work items', openWork.length],
     ["Today's actions", state.events.filter((event) => event.date === today()).length],
   ];
   return `
@@ -1213,7 +1220,7 @@ function teamPage(state) {
     </section>
     <div class="card-grid three-up">
       ${state.team.map((agent) => {
-        const owned = openTasks.filter((task) => task.owner === agent.name);
+        const owned = openTasks(state.tasks, { owner: agent.name });
         const openOrders = state.orders.filter((order) => order.owner === agent.name && order.open);
         const todayCount = owned.filter((task) => dateOnly(task.updatedAt) === today()).length + openOrders.filter((order) => dateOnly(order.createdAt) === today()).length;
         const name = owned[0] ? `<a class="table-title" href="#/task/${owned[0].id}">${esc(agent.name)}</a>` : `<span class="table-title">${esc(agent.name)}</span>`;
@@ -1308,7 +1315,7 @@ export function buildChartSeries(state, tableId = 'work-status', filter = '') {
 export function agentBrief(state = {}, owner) {
   const agent = (state.team ?? []).find((row) => row.name === owner);
   const name = String(agent?.name ?? owner ?? 'Agent');
-  const openTasks = (state.tasks ?? []).filter((task) => task.owner === name && task.status !== 'Done');
+  const openWork = openTasks(state.tasks ?? [], { owner: name });
   const openOrders = (state.orders ?? []).filter((order) => order.owner === name && order.open);
   return [
     `Brief for ${name}`,
@@ -1316,14 +1323,14 @@ export function agentBrief(state = {}, owner) {
     `Status: ${agent?.status || '—'}`,
     `Focus: ${agent?.focus || '—'}`,
     `Model: ${agent?.model || '—'}`,
-    `Workload: ${openTasks.length} open work item${openTasks.length === 1 ? '' : 's'}, ${openOrders.length} open order${openOrders.length === 1 ? '' : 's'}`,
+    `Workload: ${openWork.length} open work item${openWork.length === 1 ? '' : 's'}, ${openOrders.length} open order${openOrders.length === 1 ? '' : 's'}`,
     `Latest activity: ${agent?.activity || 'No activity recorded yet.'}`,
     '',
     'Open orders:',
     ...(openOrders.length ? openOrders.map((order) => `- ${order.text}`) : ['- None']),
     '',
     'Owned work items:',
-    ...(openTasks.length ? openTasks.slice(0, 12).map((task) => `- ${task.key ? `${task.key} · ` : ''}${task.title}`) : ['- None']),
+    ...(openWork.length ? openWork.slice(0, 12).map((task) => `- ${task.key ? `${task.key} · ` : ''}${task.title}`) : ['- None']),
   ].join('\n');
 }
 
@@ -1332,7 +1339,7 @@ export function renderAgentTodo(state = {}, owner) {
   const orders = (state.orders ?? [])
     .filter((order) => order.owner === owner)
     .sort((a, b) => Number(Boolean(b.open)) - Number(Boolean(a.open)) || String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? '')));
-  const tasks = (state.tasks ?? []).filter((task) => task.owner === owner && task.status !== 'Done').slice(0, 12);
+  const tasks = openTasks(state.tasks ?? [], { owner }).slice(0, 12);
   return `<div class="stack">
     <h3>Open orders</h3>
     <div class="row-list">${orders.map((order) => `<div class="row-item"><span class="row-main"><span class="row-title">${esc(order.text)}</span><span class="row-meta">${order.open ? 'Open' : 'Closed'}${order.updatedAt ? ` · ${fmtStamp(order.updatedAt)}` : ''}</span></span>${order.open ? `<button class="btn btn-ghost btn-sm" type="button" data-action="close-order" data-id="${esc(order.id)}">Close</button>` : `<button class="btn btn-ghost btn-sm" type="button" data-action="reopen-order" data-id="${esc(order.id)}">Reopen</button>`}</div>`).join('') || '<p class="empty-state">No orders.</p>'}</div>
@@ -2097,7 +2104,7 @@ function projectPage(state, route, query) {
   const tab = projectTabId(project, query.get('tab'));
   const tasks = state.tasks.filter((task) => task.projectId === project.id);
   const pages = state.pages.filter((page) => page.projectId === project.id);
-  const open = tasks.filter((task) => task.status !== 'Done');
+  const open = openTasks(tasks);
   const body = tab === 'work' ? workItemsBody(state, query, { path: `/project/${project.key}`, projectId: project.id, tab: 'work' })
     : tab === 'modules' ? projectModulesTab(project, tasks)
       : tab === 'pages' ? projectPagesTab(pages)
