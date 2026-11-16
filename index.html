@@ -15,8 +15,8 @@
     <script type="module" src="./assets/js/app.js"></script>
   </head>
   <body>
-    <div class="shell">
-      <a class="skip-link" href="#view">Skip to content</a>
+    <div class="shell" id="shell">
+      <a class="skip-link" id="skip-link" href="#view">Skip to content</a>
 
       <aside class="sidebar" id="sidebar" aria-label="My Platform">
         <a class="brand" href="#/">
@@ -41,7 +41,7 @@
           <p><strong>Your data stays here</strong>Stored in this browser. Export a file to move it.</p>
         </div>
 
-        <p class="sidebar-meta"><span id="today-date">Today</span><span>Static build</span></p>
+        <p class="sidebar-meta"><span id="today-date">Today</span><button class="link-button" id="account-name" type="button">Switch account</button></p>
       </aside>
 
       <div class="backdrop" id="backdrop" aria-hidden="true"></div>
@@ -74,5 +74,11 @@
         </footer>
       </div>
     </div>
+    <div class="auth-screen" id="auth-screen" hidden></div>
+    <button class="fab" id="fab" type="button" data-action="open-create" aria-label="Create a task, bug or event">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+    </button>
   </body>
 </html>

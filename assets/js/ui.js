@@ -60,14 +60,16 @@ function trapTab(event, modal) {
 export function openModal({
   title = 'Dialog',
   message = '',
+  content = null,
   confirmLabel = 'OK',
   cancelLabel = 'Cancel',
   tone = 'primary',
+  size = '',
   onConfirm,
 } = {}) {
   const lastFocus = document.activeElement;
   const backdrop = el('div', 'modal-backdrop');
-  const modal = el('div', 'modal');
+  const modal = el('div', size === 'lg' ? 'modal modal-lg' : 'modal');
   const titleId = `ui-modal-title-${++modalCount}`;
   modal.setAttribute('role', 'dialog');
   modal.setAttribute('aria-modal', 'true');
@@ -80,9 +82,12 @@ export function openModal({
   head.append(heading);
 
   const body = el('div', 'modal-body');
-  const paragraph = el('p');
-  paragraph.textContent = message;
-  body.append(paragraph);
+  if (content instanceof Node) body.append(content);
+  else {
+    const paragraph = el('p');
+    paragraph.textContent = message;
+    body.append(paragraph);
+  }
 
   const actions = el('div', 'modal-actions');
   const cancel = el('button', 'btn btn-ghost');
@@ -113,7 +118,7 @@ export function openModal({
 
   cancel.addEventListener('click', close);
   confirm.addEventListener('click', () => {
-    if (onConfirm) onConfirm();
+    if (onConfirm && onConfirm() === false) return;
     close();
   });
   backdrop.addEventListener('click', (event) => {
@@ -122,6 +127,6 @@ export function openModal({
   document.addEventListener('keydown', onKey);
 
   document.body.append(backdrop);
-  confirm.focus();
-  return { close };
+  (body.querySelector('input, select, textarea') ?? confirm).focus();
+  return { close, modal, body };
 }

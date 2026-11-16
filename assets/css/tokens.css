@@ -36,7 +36,12 @@
   --color-focus: #2e6da8;
   --color-chart-series-1: #4a90d9;
   --color-chart-series-2: #7fb8e8;
+  --color-chart-series-3: #e48cb4;
+  --color-chart-series-4: #f0b45b;
+  --color-chart-series-5: #63c2a3;
+  --color-chart-series-6: #9b8ce0;
   --color-chart-grid: #e6e6ea;
+  --color-nav-active: #ece9fb;
 
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
     "Noto Sans", "Noto Sans SC", Arial, sans-serif;
@@ -128,7 +133,12 @@
     --color-danger: #f2a9a3;
     --color-danger-hover: #f7c2bd;
     --color-on-danger: #2a0b09;
-    --color-overlay: rgba(3, 5, 9, 0.62);
+    --color-overlaseries-3: #f0a3c8;
+    --color-chart-series-4: #f5c97b;
+    --color-chart-series-5: #79d7b8;
+    --color-chart-series-6: #b3a6ee;
+    --color-chart-grid: #2a2a31;
+    --color-nav-active: #242138 9, 0.62);
     --color-topbar: rgba(17, 17, 20, 0.82);
     --color-focus: #9bcbf2;
     --color-chart-series-1: #5c9fe0;
