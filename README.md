@@ -35,6 +35,21 @@ python3 -m http.server 4173
 Then open <http://localhost:4173/>. The design system is at
 <http://localhost:4173/styleguide.html>.
 
+## Tests
+
+The data layer has Node tests that use an in-memory fake IndexedDB. There is no browser,
+server or build step involved.
+
+```sh
+npm install
+npm test
+```
+
+`npm test` runs `node --test` and creates a temporary database per test. It covers
+`put`/`get`/`getAll`/`clear` for every store in `assets/js/db.js`, the version 1 schema plus a
+version 1 → 2 upgrade, soft-delete filtering through `assets/js/data.js` (live rows only), and
+Test-account boot with demo data. Tests live in `tests/` and clean up their databases.
+
 ## UI rules
 
 - `assets/css/tokens.css` is the only file with colour, type, spacing, radius, shadow and
@@ -62,6 +77,8 @@ assets/js/chart.js       the only chart renderer
 assets/js/ui.js          the only toast and dialog implementation
 assets/js/styleguide.js  token and demo rendering for the style guide
 scripts/check-styles.mjs design-system guard
+tests/                   Node tests for IndexedDB CRUD, schema upgrades and soft deletes
+package.json             test script and the fake-indexeddb dev dependency
 docs/BRIEF.md            architecture and privacy rules
 docs/FEATURE-INVENTORY.md feature standard and acceptance checklist
 docs/PROGRESS.md         phase log, evidence and checklist counts
@@ -70,5 +87,6 @@ docs/PROGRESS.md         phase log, evidence and checklist counts
 ## Status
 
 Phase P0 (static shell) is complete. The sidebar matches inventory §1, the Settings sub-links
-expand on every `/settings*` page, and three acceptance items are checked. Phases P1–P7 are
-tracked in [docs/PROGRESS.md](docs/PROGRESS.md).
+expand on every `/settings*` page, and three acceptance items are checked. P1 now has
+Node-based IndexedDB CRUD and schema-upgrade tests; persistent-storage status is still pending.
+Phases P1–P7 are tracked in [docs/PROGRESS.md](docs/PROGRESS.md).

@@ -1,4 +1,4 @@
-name: Style check
+name: Style and tests
 
 on:
   push:
@@ -13,4 +13,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - run: npm ci
+      - run: npm test
       - run: node scripts/check-styles.mjs

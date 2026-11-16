@@ -89,7 +89,7 @@ async function readState() {
     orders: live(orders),
     settings: meta.settings ?? structuredClone(DEFAULT_SETTINGS),
     ratings: meta.ratings ?? null,
-    seeded: meta.seedVersion?.value ?? null,
+    seeded: meta.seedVersion ?? null,
   };
 }
 

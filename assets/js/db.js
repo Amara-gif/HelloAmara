@@ -1,7 +1,7 @@
 // One IndexedDB database per account: my-platform-<accountId>.
-const DB_VERSION = 1;
+export const DB_VERSION = 1;
 
-const STORES = {
+export const STORES = {
   tasks: { keyPath: 'id', indexes: ['status', 'projectId', 'owner', 'due'] },
   task_history: { keyPath: 'id', indexes: ['taskId'] },
   task_comments: { keyPath: 'id', indexes: ['taskId'] },
@@ -23,19 +23,29 @@ export function dbNameFor(accountId) {
   return `my-platform-${accountId}`;
 }
 
-export async function openAccountDb(accountId) {
-  if (db) {
-    db.close();
-    db = null;
-  }
+export function closeAccountDb() {
+  if (!db) return;
+  db.close();
+  db = null;
+}
+
+// `version` is only passed by the schema upgrade test; the app uses DB_VERSION.
+export async function openAccountDb(accountId, version = DB_VERSION) {
+  closeAccountDb();
   db = await new Promise((resolve, reject) => {
-    const request = indexedDB.open(dbNameFor(accountId), DB_VERSION);
+    const request = indexedDB.open(dbNameFor(accountId), version);
     request.onupgradeneeded = () => {
       const database = request.result;
+      const transaction = request.transaction;
       for (const [name, definition] of Object.entries(STORES)) {
-        if (database.objectStoreNames.contains(name)) continue;
-        const store = database.createObjectStore(name, { keyPath: definition.keyPath });
-        for (const index of definition.indexes ?? []) store.createIndex(index, index, { unique: false });
+        const store = database.objectStoreNames.contains(name)
+          ? transaction.objectStore(name)
+          : database.createObjectStore(name, { keyPath: definition.keyPath });
+        for (const index of definition.indexes ?? []) {
+          if (!store.indexNames.contains(index)) {
+            store.createIndex(index, index, { unique: false });
+          }
+        }
       }
     };
     request.onsuccess = () => resolve(request.result);

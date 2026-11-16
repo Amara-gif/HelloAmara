@@ -1,0 +1,13 @@
+{
+  "name": "my-platform",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-first static workspace for tasks, calendar, bugs and pages.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.2.8"
+  }
+}
