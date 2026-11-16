@@ -114,7 +114,7 @@ test('flat surface rules contain no raw pixel radii', () => {
   }
 });
 
-test('.card-interactive owns the hover lift and .card-link remains an alias', () => {
+test('.card-interactive owns the hover lift and the dead .card-link alias is gone', () => {
   const interactive = componentRules.find((rule) =>
     splitSelectors(rule.selector).includes('.card-interactive'),
   );
@@ -128,13 +128,10 @@ test('.card-interactive owns the hover lift and .card-link remains an alias', ()
   assert.ok(hover, '.card-interactive lifts on hover');
   assert.match(hover.body, /box-shadow\s*:\s*var\(--shadow-lg\)\s*;/);
 
-  assert.ok(
-    componentRules.some(
-      (rule) =>
-        splitSelectors(rule.selector).includes('.card-link') &&
-        splitSelectors(rule.selector).includes('.card-interactive'),
-    ),
-    '.card-link stays as a compatibility alias',
+  assert.equal(
+    ruleWithSelector('.card-link'),
+    undefined,
+    '.card-link is not kept as a dead compatibility alias',
   );
 });
 

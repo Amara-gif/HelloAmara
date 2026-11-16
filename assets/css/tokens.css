@@ -90,6 +90,7 @@ html {
   --font-size-lg: 1.1875rem;
   --font-size-xl: 1.375rem;
   --font-size-page-title: clamp(1.7rem, 1.3rem + 1.6vw, 2.3rem);
+  /* Kept on purpose: the display step is part of the published type scale. */
   --font-size-display: clamp(2rem, 1.5rem + 2vw, 3rem);
 
   --font-weight-regular: 400;
@@ -99,6 +100,7 @@ html {
 
   --line-height: 1.6;
   --line-height-tight: 1.2;
+  /* Kept on purpose: pairs with --font-size-display above. */
   --line-height-display: 1.05;
 
   --space-1: 0.25rem;
@@ -114,7 +116,6 @@ html {
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
-  --radius-xl: 22px;
   --radius-pill: 999px;
 
   /* Cards follow Settings -> Card radius. Opaque flat boxes keep a fixed
@@ -163,7 +164,8 @@ html {
   --content-max: 1120px;
   --timeline-track-min: 16rem;
 
-  /* Breakpoints. Mirrored as literal values in @media rules. */
+  /* Breakpoints. Mirrored as literal values in @media rules. Kept on purpose
+     as the documented scale shown on styleguide.html. */
   --bp-sm: 560px;
   --bp-md: 700px;
   --bp-lg: 900px;
@@ -172,7 +174,6 @@ html {
   --border-width: 1px;
   --size-brand-mark: 40px;
   --size-icon-tile: 36px;
-  --size-fact-icon: 28px;
   --size-badge-height: 22px;
   --size-badge-dot: 6px;
   --size-card-min: 150px;
