@@ -1155,9 +1155,8 @@ code {
   }
 }
 
-/* .btn-link and .link-button are one component until DS-20. */
-.btn-link,
-.link-button {
+/* Link button variant. */
+.btn-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1180,56 +1179,45 @@ code {
 }
 
 .btn-link:hover:not(:disabled):not([aria-disabled="true"]),
-.link-button:hover:not(:disabled):not([aria-disabled="true"]),
-.btn-link.is-hover:not(:disabled):not([aria-disabled="true"]),
-.link-button.is-hover:not(:disabled):not([aria-disabled="true"]) {
+.btn-link.is-hover:not(:disabled):not([aria-disabled="true"]) {
   color: var(--color-accent-strong-hover);
   background: var(--color-accent-soft);
   text-decoration-thickness: calc(var(--border-width) * 2);
 }
 
 .btn-link:active:not(:disabled):not([aria-disabled="true"]),
-.link-button:active:not(:disabled):not([aria-disabled="true"]),
-.btn-link.is-active:not(:disabled):not([aria-disabled="true"]),
-.link-button.is-active:not(:disabled):not([aria-disabled="true"]) {
+.btn-link.is-active:not(:disabled):not([aria-disabled="true"]) {
   color: var(--color-accent-strong-hover);
   background: var(--color-accent-soft);
   transform: translateY(var(--border-width));
 }
 
 .btn-link:focus-visible,
-.link-button:focus-visible,
-.btn-link.is-focus-visible,
-.link-button.is-focus-visible {
+.btn-link.is-focus-visible {
   outline: calc(var(--border-width) * 2) solid var(--color-focus);
   outline-offset: var(--border-width);
 }
 
-.btn-link[aria-pressed="true"]:not(:disabled):not([aria-disabled="true"]),
-.link-button[aria-pressed="true"]:not(:disabled):not([aria-disabled="true"]) {
+.btn-link[aria-pressed="true"]:not(:disabled):not([aria-disabled="true"]) {
   color: var(--color-accent-strong-hover);
   background: var(--color-accent-soft);
   text-decoration-thickness: calc(var(--border-width) * 2);
 }
 
 .btn-link:disabled,
-.btn-link[aria-disabled="true"],
-.link-button:disabled,
-.link-button[aria-disabled="true"] {
+.btn-link[aria-disabled="true"] {
   opacity: 0.55;
   cursor: not-allowed;
   text-decoration: none;
 }
 
-.btn-link[aria-busy="true"],
-.link-button[aria-busy="true"] {
+.btn-link[aria-busy="true"] {
   opacity: 0.55;
   cursor: progress;
   pointer-events: none;
 }
 
-.btn-link[aria-busy="true"]::before,
-.link-button[aria-busy="true"]::before {
+.btn-link[aria-busy="true"]::before {
   content: "";
   flex: none;
   width: var(--space-3);
@@ -1253,8 +1241,7 @@ code {
 .chip-remove:focus-visible,
 .palette-card:focus-visible,
 .account-row:focus-visible,
-.sidebar-tool:focus-visible,
-.link-button:focus-visible {
+.sidebar-tool:focus-visible {
   outline: calc(var(--border-width) * 2) solid var(--color-focus);
   outline-offset: var(--border-width);
 }
@@ -1268,9 +1255,7 @@ code {
 .account-row:disabled,
 .account-row[aria-disabled="true"],
 .sidebar-tool:disabled,
-.sidebar-tool[aria-disabled="true"],
-.link-button:disabled,
-.link-button[aria-disabled="true"] {
+.sidebar-tool[aria-disabled="true"] {
   opacity: 0.55;
   cursor: not-allowed;
   transform: none;
@@ -3628,8 +3613,7 @@ details.card > summary::-webkit-details-marker {
     padding-inline: var(--space-3);
   }
 
-  .btn-link,
-  .link-button {
+  .btn-link {
     display: inline-flex;
     align-items: center;
     min-width: var(--tap-size);
@@ -3765,8 +3749,7 @@ details.card > summary::-webkit-details-marker {
   .btn-primary[aria-busy="true"]::before,
   .btn-ghost[aria-busy="true"]::before,
   .btn-danger[aria-busy="true"]::before,
-  .btn-link[aria-busy="true"]::before,
-  .link-button[aria-busy="true"]::before {
+  .btn-link[aria-busy="true"]::before {
     animation: none;
   }
 }

@@ -178,7 +178,7 @@ test('no hover rule targets an unguarded button', () => {
   const unguarded = componentRules.flatMap((rule) =>
     splitSelectors(rule.selector).filter(
       (selector) =>
-        /^\.(?:btn(?:-[a-z]+)?|link-button):hover/.test(selector) &&
+        /^\.btn(?:-[a-z]+)?:hover/.test(selector) &&
         !selector.includes(':not(:disabled)'),
     ),
   );
@@ -199,44 +199,25 @@ test('.btn-secondary is a named alias for the default button', () => {
   );
 });
 
-test('.btn-link and .link-button share one look and all states', () => {
+test('.btn-link has one look and all states', () => {
   const base = componentRules.find((rule) =>
     splitSelectors(rule.selector).includes('.btn-link'),
   );
   assert.ok(base, 'components.css defines .btn-link');
-  assert.ok(
-    splitSelectors(base.selector).includes('.link-button'),
-    '.btn-link and .link-button share the base rule',
-  );
 
   for (const state of [':hover:not(:disabled)', ':active:not(:disabled)', ':focus-visible']) {
     assert.ok(
-      componentRules.some((rule) => {
-        const selectors = splitSelectors(rule.selector);
-        return (
-          selectors.some((selector) => selector.startsWith(`.btn-link${state}`)) &&
-          selectors.some((selector) => selector.startsWith(`.link-button${state}`))
-        );
-      }),
-      `.btn-link and .link-button share ${state}`,
+      hasSelectorStarting(`.btn-link${state}`),
+      `.btn-link has ${state}`,
     );
   }
 
   assert.ok(hasSelectorStarting('.btn-link:disabled'), '.btn-link has :disabled');
-  assert.ok(hasSelectorStarting('.link-button:disabled'), '.link-button has :disabled');
   assert.ok(
     hasSelectorStarting('.btn-link[aria-pressed="true"]'),
     '.btn-link has [aria-pressed="true"]',
   );
-  assert.ok(
-    hasSelectorStarting('.link-button[aria-pressed="true"]'),
-    '.link-button has [aria-pressed="true"]',
-  );
   assert.ok(hasSelectorStarting('.btn-link[aria-busy="true"]'), '.btn-link has [aria-busy="true"]');
-  assert.ok(
-    hasSelectorStarting('.link-button[aria-busy="true"]'),
-    '.link-button has [aria-busy="true"]',
-  );
 });
 
 test('the busy spinner uses a token colour and reduced motion stops it', () => {
@@ -262,7 +243,7 @@ test('styleguide.html documents all button variants and states', () => {
   for (const state of ['Default', 'Hover', 'Active', 'Focus-visible', 'Disabled', 'Pressed', 'Busy']) {
     assert.match(styleguide, new RegExp(`<th scope="col">${state}</th>`), `${state} column`);
   }
-  for (const variant of ['btn-secondary', 'btn-primary', 'btn-ghost', 'btn-danger', 'btn-link', 'link-button']) {
+  for (const variant of ['btn-secondary', 'btn-primary', 'btn-ghost', 'btn-danger', 'btn-link']) {
     assert.match(
       styleguide,
       new RegExp(`class="[^"]*\\b${variant}\\b[^"]*"`),
@@ -277,7 +258,6 @@ const buttonLikeClasses = [
   '.palette-card',
   '.account-row',
   '.sidebar-tool',
-  '.link-button',
 ];
 
 test('every button-like class takes its height from a token', () => {

@@ -118,7 +118,7 @@ test('Appearance offers six palette presets, live preview and the PWA install ca
   assert.deepEqual(presets, ['soft', 'apple', 'ocean', 'sunset', 'candy', 'graphite']);
   assert.match(html, /Live preview/);
   assert.match(html, /<span class="btn btn-primary btn-sm"[^>]*>Primary<\/span>/);
-  assert.match(html, /<span class="btn btn-sm"[^>]*>Secondary<\/span>/);
+  assert.match(html, /<span class="btn btn-secondary btn-sm"[^>]*>Secondary<\/span>/);
   assert.match(html, /Selected chip/);
   assert.match(html, /name="preset"/);
   assert.match(html, /name="radiusBtn"/);

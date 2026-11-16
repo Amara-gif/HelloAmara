@@ -884,7 +884,7 @@ function openAgendaDialog(rowEl) {
 
   if (isHttpLink(link)) {
     const join = document.createElement('a');
-    join.className = 'btn';
+    join.className = 'btn btn-secondary';
     join.href = link;
     join.target = '_blank';
     join.rel = 'noopener noreferrer';

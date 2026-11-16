@@ -108,20 +108,20 @@
       <section class="section" aria-labelledby="sg-buttons-title">
         <div class="section-head">
           <h2 id="sg-buttons-title">Buttons</h2>
-          <p>One button base with secondary (the default), primary, ghost, danger, link and icon variants. Use <code>-sm</code>, the default or <code>-md</code> to make the size explicit; touch targets stay at least 44 px.</p>
+          <p>One button base with secondary (the default), primary, ghost, danger, link and icon variants. Use the class order <code>btn btn-&lt;variant&gt; btn-&lt;size&gt;</code> (variant before size); the bare default below documents the base class. Use <code>-sm</code>, the default or <code>-md</code> to make the size explicit; touch targets stay at least 44 px.</p>
         </div>
         <div class="card">
           <div class="card-body">
             <div class="sg-row">
               <button class="btn" type="button">Default</button>
               <button class="btn btn-secondary" type="button">Secondary</button>
-              <button class="btn btn-md" type="button">Medium</button>
-              <button class="btn btn-sm" type="button">Small</button>
+              <button class="btn btn-secondary btn-md" type="button">Medium</button>
+              <button class="btn btn-secondary btn-sm" type="button">Small</button>
               <button class="btn btn-primary" type="button">Primary</button>
               <button class="btn btn-ghost" type="button">Ghost</button>
               <button class="btn btn-danger" type="button">Danger</button>
               <button class="btn-link" type="button">Link</button>
-              <button class="btn btn-icon" type="button" aria-label="Icon button">+</button>
+              <button class="btn btn-secondary btn-icon" type="button" aria-label="Icon button">+</button>
               <button class="btn" type="button" disabled>Disabled</button>
             </div>
           </div>
@@ -218,16 +218,6 @@
                     <td><button class="btn-link" type="button" aria-pressed="true">Pressed</button></td>
                     <td><button class="btn-link" type="button" aria-busy="true">Busy</button></td>
                   </tr>
-                  <tr>
-                    <th scope="row">Link alias</th>
-                    <td><button class="link-button" type="button">Link alias</button></td>
-                    <td><button class="link-button is-hover" type="button">Hover</button></td>
-                    <td><button class="link-button is-active" type="button">Active</button></td>
-                    <td><button class="link-button is-focus-visible" type="button">Focus</button></td>
-                    <td><button class="link-button" type="button" disabled>Disabled</button></td>
-                    <td><button class="link-button" type="button" aria-pressed="true">Pressed</button></td>
-                    <td><button class="link-button" type="button" aria-busy="true">Busy</button></td>
-                  </tr>
                 </tbody>
               </table>
             </div>
@@ -248,7 +238,7 @@
         <div class="card">
           <div class="card-body">
             <div class="sg-row">
-              <button class="link-button" type="button">Link button</button>
+              <button class="btn-link" type="button">Link button</button>
               <button class="btn btn-ghost btn-icon sidebar-tool" type="button" aria-pressed="false" aria-label="Pin sidebar open" title="Pin sidebar open">
                 <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M9 3.8h6l-1 6.1 2.5 2.5H6.5L9 9.9Z" />
@@ -383,7 +373,7 @@
             <div class="theme-preview" role="group" aria-label="Live preview">
               <span class="theme-preview-label">Live preview</span>
               <span class="btn btn-primary btn-sm" aria-hidden="true">Primary</span>
-              <span class="btn btn-sm" aria-hidden="true">Secondary</span>
+              <span class="btn btn-secondary btn-sm" aria-hidden="true">Secondary</span>
               <span class="chip is-active" aria-hidden="true">Selected chip</span>
             </div>
           </div>

@@ -74,7 +74,7 @@ function exportAgeText(info) {
 function exportReminder(currentState) {
   const info = exportStatus(currentState);
   if (!info.overdue) return '';
-  return `<div class="note" data-export-reminder>${icon('download', 16)}<span><strong>Back up your data.</strong> ${esc(exportAgeText(info))} Export a fresh JSON file to keep a copy on this device. <button class="link-button" type="button" data-action="export-json">Export a file</button></span></div>`;
+  return `<div class="note" data-export-reminder>${icon('download', 16)}<span><strong>Back up your data.</strong> ${esc(exportAgeText(info))} Export a fresh JSON file to keep a copy on this device. <button class="btn-link" type="button" data-action="export-json">Export a file</button></span></div>`;
 }
 
 function backupCard(currentState) {
@@ -452,7 +452,7 @@ function mywork(state, query) {
     <form class="toolbar" data-form="mywork-filters">
       <input type="hidden" name="all" value="${all ? '1' : ''}" />
       <select class="control control-sm" name="project" aria-label="Scope by project"><option value="">All projects</option>${projectOptions}</select>
-      <button class="btn btn-sm btn-primary" type="submit">Apply</button>
+      <button class="btn btn-primary btn-sm" type="submit">Apply</button>
       ${projectFilter ? `<a class="btn btn-ghost btn-sm" href="${pageUrl('/mywork', { all: all ? 1 : '' })}">All projects</a>` : ''}
       <span class="toolbar-count" data-mywork-count>${scopedCount} open work items in scope</span>
     </form>
@@ -493,7 +493,7 @@ function pagesPage(state, query) {
     <form class="toolbar" data-form="page-filters">
       <input class="control control-sm" type="search" name="q" value="${esc(query.get('q') ?? '')}" placeholder="Search Pages…" aria-label="Search pages" />
       <select class="control control-sm" name="project" aria-label="Filter by project"><option value="">All projects</option>${projectOptions}</select>
-      <button class="btn btn-sm" type="submit">Search</button>
+      <button class="btn btn-secondary btn-sm" type="submit">Search</button>
       <span class="toolbar-count">${rows.length} Pages</span>
     </form>
     <div class="row-actions" data-page-selection>
@@ -1029,7 +1029,7 @@ function workItemsBody(state, query, options = {}) {
       <select class="control control-sm" name="module" aria-label="Module"><option value="">All modules</option>${moduleOptions.map((value) => option(value, module)).join('')}</select>
       ${projectField}
       <select class="control control-sm" name="sort" aria-label="Sort"><option value="smart"${sort === 'smart' ? ' selected' : ''}>Smart order</option>${[['due', 'Due date'], ['priority', 'Priority'], ['key', 'Key']].map(([value, label]) => `<option value="${value}"${sort === value ? ' selected' : ''}>${label}</option>`).join('')}</select>
-      <button class="btn btn-sm btn-primary" type="submit">Apply</button>
+      <button class="btn btn-primary btn-sm" type="submit">Apply</button>
       <a class="btn btn-ghost btn-sm" href="${pageUrl(path, { view, ...(tab ? { tab } : {}) })}">Reset</a>
     </form>
     ${view === 'board' ? taskBoard(scopedState, rows) : view === 'calendar' ? taskCalendarView(rows, query, carried, path) : view === 'timeline' ? taskTimelineView(rows, carried) : taskTable(scopedState, rows)}`;
@@ -1084,7 +1084,7 @@ function calendarPage(state, query) {
     for (const item of calendarItems(state, date, projectFilter)) nextSeven.push({ ...item, date });
   }
   return `
-    ${pageHead('Calendar', 'Deadlines, project dues and events in one place.', `<button class="btn" type="button" data-action="enable-reminders">${icon('camera', 16)}Enable reminders</button>`)}
+    ${pageHead('Calendar', 'Deadlines, project dues and events in one place.', `<button class="btn btn-secondary" type="button" data-action="enable-reminders">${icon('camera', 16)}Enable reminders</button>`)}
     <div class="calendar-toolbar">
       <a class="btn btn-ghost btn-sm" href="${pageUrl('/calendar', { m: `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`, project: projectFilter })}">Previous</a>
       <a class="btn btn-ghost btn-sm" href="${pageUrl('/calendar', { m: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`, project: projectFilter })}">This month</a>
@@ -1200,7 +1200,7 @@ function bugsPage(state, query) {
       <select class="control control-sm" name="component" aria-label="Component"><option value="">All components</option>${unique('component').map((value) => option(value, component)).join('')}</select>
       <select class="control control-sm" name="assignee" aria-label="Assignee"><option value="">All assignees</option>${unique('assignee').map((value) => option(value, assignee)).join('')}</select>
       <select class="control control-sm" name="sort" aria-label="Sort">${BUG_SORT_OPTIONS.map(([value, label]) => option(value, sort, label)).join('')}</select>
-      <button class="btn btn-sm btn-primary" type="submit">Apply</button><a class="btn btn-ghost btn-sm" href="#/bugs">Reset</a>
+      <button class="btn btn-primary btn-sm" type="submit">Apply</button><a class="btn btn-ghost btn-sm" href="#/bugs">Reset</a>
     </form>
     <div class="toolbar" aria-label="Bulk actions">
       <span class="toolbar-count" data-bug-selection aria-live="polite">0 selected</span>
@@ -1224,7 +1224,7 @@ function teamPage(state) {
     ["Today's actions", state.events.filter((event) => event.date === today()).length],
   ];
   return `
-    ${pageHead('Team', 'Decisions, blocked work and the agents who own it.', `<button class="btn" type="button" data-action="open-create">${icon('spark', 16)}New order</button>`)}
+    ${pageHead('Team', 'Decisions, blocked work and the agents who own it.', `<button class="btn btn-secondary" type="button" data-action="open-create">${icon('spark', 16)}New order</button>`)}
     <section class="card team-lead" aria-labelledby="team-lead-name">
       <div class="card-body team-lead-body">
         <div class="team-lead-id">${avatar(leadName, 'avatar-lg')}<div><h2 class="team-lead-name" id="team-lead-name">${esc(leadName)}</h2><p class="row-meta">You lead this team · ${esc(lead?.role ?? 'Lead / owner')}</p><p class="row-meta">${esc(lead?.focus ?? '')}</p></div></div>
@@ -1451,7 +1451,7 @@ function paletteCard(preset, currentPreset) {
 }
 
 function appearancePreview() {
-  return `<div class="theme-preview field-wide" role="group" aria-label="Live preview"><span class="theme-preview-label">Live preview</span><span class="btn btn-primary btn-sm" aria-hidden="true">Primary</span><span class="btn btn-sm" aria-hidden="true">Secondary</span><span class="chip is-active" aria-hidden="true">Selected chip</span></div>`;
+  return `<div class="theme-preview field-wide" role="group" aria-label="Live preview"><span class="theme-preview-label">Live preview</span><span class="btn btn-primary btn-sm" aria-hidden="true">Primary</span><span class="btn btn-secondary btn-sm" aria-hidden="true">Secondary</span><span class="chip is-active" aria-hidden="true">Selected chip</span></div>`;
 }
 
 // One save pattern for every settings form: shared dirty/saved text plus a
@@ -2284,7 +2284,7 @@ function ratingPage(state) {
         <div class="chart-box" id="rating-chart"></div>
         ${visible.length ? `<div class="chart-legend">${visible.map((item, index) => `<span class="chart-legend-item"><span class="chart-dot chart-line-${index + 1}"></span>${esc(item.name)}</span>`).join('')}</div>` : empty('No products are selected. Choose products to show their lines.')}
         <div class="row-actions">
-          <button class="btn" type="button" data-action="rating-copy">Copy image</button>
+          <button class="btn btn-secondary" type="button" data-action="rating-copy">Copy image</button>
           <button class="btn btn-ghost" type="button" data-action="rating-choose">Choose products</button>
           ${styleButton('smooth', 'Smooth curve')}
           ${styleButton('straight', 'Straight line')}
