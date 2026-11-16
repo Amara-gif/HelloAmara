@@ -1735,37 +1735,75 @@ function projectPage(state, route, query) {
     ${body}`;
 }
 
-function pageView(state, route) {
+function pageRevision(page, raw) {
+  const key = String(raw ?? '').trim();
+  if (!key) return null;
+  const revisions = Array.isArray(page.revisions) ? page.revisions : [];
+  return revisions.find((revision) => String(revision.id) === key || String(revision.rev) === key) ?? null;
+}
+
+function revisionHistory(page, readOnly) {
+  const revisions = [...(Array.isArray(page.revisions) ? page.revisions : [])].sort((a, b) => (Number(b.rev) || 0) - (Number(a.rev) || 0));
+  const rows = [
+    `<li class="revision-item"><a class="revision-link" href="#/page/${page.id}">Revision ${Number(page.rev) || 1} · ${fmtStamp(page.updatedAt)}</a><span class="badge badge-${readOnly ? 'muted' : 'success'}">${readOnly ? 'Latest' : 'Current'}</span></li>`,
+    ...revisions.map((revision) => `<li class="revision-item"><a class="revision-link" href="#/page/${page.id}?rev=${encodeURIComponent(revision.rev)}" data-revision="${esc(revision.rev)}">Revision ${esc(revision.rev)} · ${fmtStamp(revision.updatedAt)}</a><span class="badge badge-muted">Older</span></li>`),
+  ];
+  return `<section class="revision-history" data-revision-history><h2 class="card-title">Revision history</h2><ol class="revision-list">${rows.join('')}</ol><p class="field-help">A save snapshots the previous version. Choose a revision to view it.</p></section>`;
+}
+
+function pageView(state, route, query) {
   const page = state.pages.find((row) => row.id === route.params.id);
   if (!page) return notFound(`/page/${route.params.id}`);
-  const project = projectOf(state, page.projectId);
-  const task = state.tasks.find((row) => row.id === page.taskId);
-  const tags = pageTags(page.tags);
+  const requestedRev = query?.get?.('rev') ?? '';
+  const revision = pageRevision(page, requestedRev);
+  const readOnly = Boolean(revision);
+  const shown = revision ?? page;
+  const project = projectOf(state, shown.projectId);
+  const task = state.tasks.find((row) => row.id === shown.taskId);
+  const tags = pageTags(shown.tags);
+  const actions = readOnly
+    ? `<div class="row-actions"><a class="btn btn-ghost btn-sm" href="#/page/${page.id}">Current version</a><button class="btn btn-ghost btn-sm" type="button" data-action="print">Print</button></div>`
+    : `<div class="row-actions"><a class="btn btn-ghost btn-sm" href="#/page/${page.id}/edit">Edit</a><button class="btn btn-ghost btn-sm" type="button" data-action="print">Print</button></div>`;
+  const subtitle = readOnly
+    ? `${shown.type} · Revision ${shown.rev} of ${page.rev} · read-only`
+    : `${shown.type}${task ? ` · ${task.key}` : ''}`;
+  const revisionNotice = readOnly
+    ? `<p class="revision-note" role="status">You are viewing an older revision. It is read-only; restore it by copying the text into the current version.</p>`
+    : requestedRev
+      ? `<p class="revision-note" role="status">Revision “${esc(requestedRev)}” was not found. Showing the current version.</p>`
+      : '';
   return `
     <nav class="breadcrumb"><a href="#/pages">← Pages</a></nav>
-    ${pageHead(page.title, `${page.type}${task ? ` · ${task.key}` : ''}`, `<div class="row-actions"><a class="btn btn-ghost btn-sm" href="#/page/${page.id}/edit">Edit</a><button class="btn btn-ghost btn-sm" type="button" data-action="print">Print</button></div>`)}
+    ${pageHead(shown.title, subtitle, actions)}
+    ${revisionNotice}
     <dl class="details compact page-meta">
-      <div><dt>Author</dt><dd>${esc(page.author || 'Unknown author')}</dd></div>
-      <div><dt>Date</dt><dd>${fmtStamp(page.updatedAt)}</dd></div>
+      <div><dt>Author</dt><dd>${esc(shown.author || 'Unknown author')}</dd></div>
+      <div><dt>Date</dt><dd>${fmtStamp(shown.updatedAt)}</dd></div>
       <div><dt>Project</dt><dd>${project ? `<a class="mono-link" href="#/project/${encodeURIComponent(project.key)}?tab=pages">${esc(project.key)} ${esc(project.name)}</a>` : 'No project'}</dd></div>
       ${tags.length ? `<div><dt>Tags</dt><dd>${tags.map((tag) => `<span class="badge badge-muted">${esc(tag)}</span>`).join(' ')}</dd></div>` : ''}
     </dl>
     <div class="page-workspace">
-      <aside class="page-rail card"><div class="card-head"><h2>Pages</h2></div><div class="card-body"><div class="row-list">${state.pages.map((item) => `<a class="row-item${item.id === page.id ? ' is-active' : ''}" href="#/page/${item.id}"><span class="row-main"><span class="row-title">${esc(item.title)}</span><span class="row-meta">${esc(item.type)} · ${fmt(item.updatedAt)}</span></span></a>`).join('')}</div></div></aside>
-      <article class="card print-friendly" data-print-region><div class="card-body"><div class="prose">${markdown(page.body)}</div></div></article>
+      <aside class="page-rail card"><div class="card-head"><h2>Pages</h2></div><div class="card-body"><div class="row-list">${state.pages.map((item) => `<a class="row-item${item.id === page.id ? ' is-active' : ''}" href="#/page/${item.id}"><span class="row-main"><span class="row-title">${esc(item.title)}</span><span class="row-meta">${esc(item.type)} · ${fmt(item.updatedAt)}</span></span></a>`).join('')}</div>${revisionHistory(page, readOnly)}</div></aside>
+      <article class="card print-friendly" data-print-region><div class="card-body"><div class="prose" data-page-body>${markdown(shown.body)}</div></div></article>
     </div>`;
 }
 
-function pageEditor(state, route) {
+function pageEditor(state, route, query) {
   const isNew = route.id === 'page-new';
   const page = isNew ? null : state.pages.find((row) => row.id === route.params.id);
   if (!isNew && !page) return notFound(`/page/${route.params.id}/edit`);
+  // An old revision is never editable, even through the edit URL.
+  if (page && query?.get?.('rev')) {
+    const revision = pageRevision(page, query.get('rev'));
+    if (revision) return pageView(state, route, query);
+  }
+  const projectId = page?.projectId ?? query?.get?.('project') ?? '';
   return `
     <nav class="breadcrumb"><a href="#/pages">← Pages</a></nav>
-    ${pageHead(isNew ? 'New page' : 'Edit page', 'Stored in this account only. Blank titles are rejected.')}
+    ${pageHead(isNew ? 'New page' : 'Edit page', 'Stored in this account only. Blank titles are rejected. The preview updates as you type.')}
     <div class="page-workspace">
       <aside class="page-rail card"><div class="card-head"><h2>Pages</h2></div><div class="card-body"><div class="row-list">${state.pages.map((item) => `<a class="row-item${item.id === page?.id ? ' is-active' : ''}" href="#/page/${item.id}"><span class="row-main"><span class="row-title">${esc(item.title)}</span><span class="row-meta">${esc(item.type)}</span></span></a>`).join('')}</div></div></aside>
-      <section class="card"><div class="card-body"><form class="stack" data-form="page-save"><input type="hidden" name="id" value="${esc(page?.id ?? '')}" /><div class="field"><label for="page-title">Title</label><input id="page-title" name="title" type="text" value="${esc(page?.title ?? '')}" required /></div><div class="field"><label for="page-project">Project</label><select id="page-project" class="select" name="projectId"><option value="">No project</option>${state.projects.map((p) => option(p.id, page?.projectId ?? '', `${p.key} ${p.name}`)).join('')}</select></div><div class="field"><label for="page-tags">Tags</label><input id="page-tags" name="tags" type="text" value="${esc(page?.tags ?? '')}" placeholder="Comma-separated, optional" /><p class="field-help">Optional. Separate tags with commas.</p></div><div class="field"><label for="page-body">Body</label><textarea id="page-body" name="body" rows="16" placeholder="Write markdown…">${esc(page?.body ?? '')}</textarea></div><div class="row-actions"><button class="btn btn-primary" type="submit">${isNew ? 'Create page' : 'Save page'}</button><a class="btn btn-ghost" href="${page ? `#/page/${page.id}` : '#/pages'}">Cancel</a></div></form></div></section>
+      <section class="card"><div class="card-body"><form class="stack" data-form="page-save" data-page-editor><input type="hidden" name="id" value="${esc(page?.id ?? '')}" /><div class="field"><label for="page-title">Title</label><input id="page-title" name="title" type="text" value="${esc(page?.title ?? '')}" required aria-required="true" /><p class="field-help">Required. Leading and trailing spaces are trimmed.</p></div><div class="field"><label for="page-project">Project</label><select id="page-project" class="select" name="projectId"><option value="">No project</option>${state.projects.map((p) => option(p.id, projectId, `${p.key} ${p.name}`)).join('')}</select></div><div class="field"><label for="page-tags">Tags</label><input id="page-tags" name="tags" type="text" value="${esc(page?.tags ?? '')}" placeholder="Comma-separated, optional" /><p class="field-help">Optional. Separate tags with commas.</p></div><div class="page-editor-body"><div class="field page-editor-source"><label for="page-body">Body</label><textarea id="page-body" name="body" rows="18" placeholder="Write markdown…" data-page-preview-source>${esc(page?.body ?? '')}</textarea><p class="field-help">Markdown: ## heading, - list and **bold**.</p></div><section class="page-editor-preview" aria-label="Markdown preview"><div class="page-editor-preview-head"><span class="card-title">Preview</span><span class="badge badge-muted">Live</span></div><div class="prose" data-page-preview aria-live="polite">${markdown(page?.body ?? '')}</div></section></div><div class="row-actions"><button class="btn btn-primary" type="submit">${isNew ? 'Create page' : 'Save page'}</button><button class="btn btn-ghost" type="button" data-action="ai-polish">AI Polish</button><a class="btn btn-ghost" href="${page ? `#/page/${page.id}` : '#/pages'}">Cancel</a></div></form></div></section>
     </div>`;
 }
 
@@ -1785,7 +1823,7 @@ function notFound(path) {
   return `${pageHead('Page not found', `There is no screen at ${path}.`)}<p><a class="btn btn-primary" href="#/">${icon('arrow', 16)}Back to Home</a></p>`;
 }
 
-function markdown(body) {
+export function markdown(body) {
   const lines = esc(body || '').split('\n');
   const out = [];
   let inList = false;
@@ -1827,9 +1865,9 @@ export function renderView(route, query, state) {
     case 'task-detail': return taskDetail(state, route);
     case 'bug-detail': return bugDetail(state, route);
     case 'project-detail': return projectPage(state, route, query);
-    case 'page-view': return pageView(state, route);
+    case 'page-view': return pageView(state, route, query);
     case 'page-edit':
-    case 'page-new': return pageEditor(state, route);
+    case 'page-new': return pageEditor(state, route, query);
     case 'bug-new': return bugNew(state);
     case 'rating-trend': return ratingPage(state);
     case 'go': return notFound(route.path);

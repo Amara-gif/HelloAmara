@@ -547,13 +547,39 @@ export function normalizePageTags(value) {
   return list.map((tag) => String(tag).trim()).filter(Boolean).join(', ');
 }
 
+function pageTitle(value) {
+  const title = String(value ?? '').trim();
+  if (!title) throw new Error('A page title is required.');
+  return title;
+}
+
+// A revision keeps the full row that was current before a save, so the view can
+// render it with ?rev= without a second store or a second read.
+function revisionSnapshot(page, savedAt) {
+  return {
+    id: newId('rev'),
+    rev: Number(page.rev) || 1,
+    title: page.title,
+    type: page.type || 'Page',
+    projectId: page.projectId || '',
+    taskId: page.taskId || '',
+    author: page.author || '',
+    tags: page.tags || '',
+    body: page.body || '',
+    createdAt: page.createdAt || page.updatedAt || savedAt,
+    updatedAt: page.updatedAt || savedAt,
+    savedAt,
+  };
+}
+
 export async function createPage(input) {
   const now = nowIso();
   const page = {
-    id: newId('page'), title: input.title, type: input.type || 'Page',
-    projectId: input.projectId || '', taskId: input.taskId || '', author: 'Amara',
+    id: newId('page'), title: pageTitle(input.title), type: input.type || 'Page',
+    projectId: input.projectId || '', taskId: input.taskId || '', author: input.author || 'Amara',
     tags: normalizePageTags(input.tags),
-    body: input.body || '', createdAt: now, updatedAt: now, deletedAt: null,
+    body: input.body || '', rev: 1, revisions: [],
+    createdAt: now, updatedAt: now, deletedAt: null,
   };
   await putRecord('pages', page);
   state = await readState();
@@ -563,8 +589,17 @@ export async function createPage(input) {
 export async function updatePage(id, input) {
   const page = state.pages.find((row) => row.id === id);
   if (!page) throw new Error('Page not found.');
-  const patch = 'tags' in input ? { ...input, tags: normalizePageTags(input.tags) } : input;
-  const updated = { ...page, ...patch, updatedAt: nowIso() };
+  const patch = 'tags' in input ? { ...input, tags: normalizePageTags(input.tags) } : { ...input };
+  if ('title' in patch) patch.title = pageTitle(patch.title);
+  const now = nowIso();
+  const rev = (Number(page.rev) || 1) + 1;
+  const updated = {
+    ...page,
+    ...patch,
+    rev,
+    revisions: [...(Array.isArray(page.revisions) ? page.revisions : []), revisionSnapshot(page, now)],
+    updatedAt: now,
+  };
   await putRecord('pages', updated);
   state = await readState();
   return updated;

@@ -7,7 +7,7 @@ import {
   reorderProjects, createOrder, closeOrder, saveSettings, restoreQaMark,
 } from './data.js';
 import { readLocation, routeForPath, groupRoutes, SETTINGS_LINKS } from './routes.js';
-import { renderView, mountView, renderAccountScreen, renderCreateDialog, canSendToQa, qaOwnerName } from './views.js';
+import { renderView, mountView, renderAccountScreen, renderCreateDialog, canSendToQa, qaOwnerName, markdown } from './views.js';
 import { icon } from './icons.js';
 import { updateTaskBadge } from './nav-badge.js';
 import { openModal, toast } from './ui.js';
@@ -648,7 +648,8 @@ document.addEventListener('click', async (event) => {
         toast('Notification permission was not granted.', { tone: 'danger' });
       }
     } else toast('This browser does not support notifications.', { tone: 'danger' });
-  } else if (action === 'print') window.print();
+  } else if (action === 'ai-polish') toast('AI Polish is not connected in this build. No external AI was called.', { tone: 'danger' });
+  else if (action === 'print') window.print();
   else if (action === 'open-folder') toast('Folder access is not available in a browser.', { tone: 'danger' });
   else if (action === 'fake-download') toast('Attachment placeholder — file storage is a later phase.');
   else if (action === 'toast-copy') toast('Copied actions are placeholders in this build.');
@@ -665,6 +666,13 @@ document.addEventListener('click', async (event) => {
     render();
     toast('Default look restored.', { tone: 'success' });
   }
+});
+
+document.addEventListener('input', (event) => {
+  const source = event.target.closest?.('[data-page-preview-source]');
+  if (!source) return;
+  const preview = main.querySelector('[data-page-preview]');
+  if (preview) preview.innerHTML = markdown(source.value);
 });
 
 document.addEventListener('change', async (event) => {
@@ -781,9 +789,16 @@ document.addEventListener('submit', async (event) => {
       settings.appearance = { primary: data.primary, radiusBtn: Number(data.radiusBtn), radiusCard: Number(data.radiusCard), glass: Number(data.glass), enableGlass: Boolean(data.enableGlass) };
       await saveSettings(settings); applyAppearance(settings); await rerender(); toast('Theme saved.', { tone: 'success' });
     } else if (form.dataset.form === 'page-save') {
-      const page = data.id ? await updatePage(data.id, { title: data.title, projectId: data.projectId, tags: data.tags, body: data.body }) : await createPage(data);
+      const title = String(data.title ?? '').trim();
+      if (!title) {
+        toast('A page title is required.', { tone: 'danger' });
+        form.elements.title?.focus();
+        return;
+      }
+      data.title = title;
+      const page = data.id ? await updatePage(data.id, { title, projectId: data.projectId, tags: data.tags, body: data.body }) : await createPage(data);
       navigate(`/page/${page.id}`);
-      toast('Page saved.', { tone: 'success' });
+      toast('Page saved. The previous version is in the revision history.', { tone: 'success' });
     } else if (form.dataset.form === 'bug-create') {
       const bug = await createBug(data);
       navigate(`/bug/${bug.id}`);
