@@ -4,7 +4,9 @@ import {
   transitionTask, reviewTask,
   createBug, updateBug, addBugComment, createEvent, deleteEvent, createPage,
   updatePage, softDeletePage, softDeletePages, createProject, updateProject, softDeleteProject,
-  reorderProjects, createOrder, closeOrder, saveSettings, restoreQaMark,
+  reorderProjects, createOrder, closeOrder, saveSettings, restoreQaMark, buildExport,
+  parseImportJson, planImport, applyImportPlan,
+  addAttachment, removeAttachment, attachmentObjectUrl,
 } from './data.js';
 import { readLocation, routeForPath, groupRoutes, SETTINGS_LINKS } from './routes.js';
 import { renderView, mountView, renderAccountScreen, renderCreateDialog, canSendToQa, qaOwnerName, markdown } from './views.js';
@@ -13,6 +15,7 @@ import { updateTaskBadge } from './nav-badge.js';
 import { openModal, toast } from './ui.js';
 import { taskFormPatch } from './task-form.js';
 import { dueReminders, notificationText } from './schedule.js';
+import { startPwa, applyUpdate, setupInstallPrompt, UPDATE_MESSAGE } from './pwa.js';
 
 const shell = document.getElementById('shell');
 const authScreen = document.getElementById('auth-screen');
@@ -39,6 +42,7 @@ let createTab = 'task';
 let createClose = null;
 let reminderTimer = null;
 const notifiedReminders = new Set();
+const installPrompt = setupInstallPrompt({ onChange: () => syncInstallUi() });
 
 // Pin always wins if an older session somehow stored a folded, pinned sidebar.
 if (sidebarPinned && sidebarFolded) {
@@ -243,6 +247,25 @@ function applyAppearance(settings) {
   }
 }
 
+function syncInstallUi() {
+  const status = document.getElementById('install-status');
+  if (!status) return;
+  const available = installPrompt.available;
+  status.textContent = available ? 'Ready to install' : 'Use browser menu';
+  status.className = `badge badge-${available ? 'success' : 'muted'}`;
+}
+
+function offerUpdate(registration) {
+  toast(UPDATE_MESSAGE, {
+    tone: 'info',
+    duration: 0,
+    action: {
+      label: 'Reload',
+      onClick: () => applyUpdate(registration, { reload: () => window.location.reload() }),
+    },
+  });
+}
+
 function render() {
   const { path, query } = readLocation();
   const state = getState();
@@ -254,6 +277,7 @@ function render() {
   updateNav(route);
   applyAppearance(state.settings);
   mountView(route, query, state);
+  syncInstallUi();
   setDrawer(false);
   if (accountButton) accountButton.textContent = state.account.name;
   if (storageStatus) storageStatus.textContent = state.persistentStorage?.status ?? 'Unsupported';
@@ -437,6 +461,161 @@ async function resetDemoData() {
   }
 }
 
+function backupFilename(exportedAt) {
+  const stamp = String(exportedAt).replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+  return `my-platform-backup-${stamp}.json`;
+}
+
+// Build the JSON entirely in the browser, then hand it to the browser's normal
+// download flow. Nothing is fetched or uploaded.
+async function exportJsonBackup() {
+  try {
+    const payload = await buildExport();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = backupFilename(payload.exportedAt);
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    render();
+    toast('Backup downloaded. Keep the JSON file somewhere safe.', { tone: 'success' });
+  } catch (error) {
+    toast(error.message || 'The backup could not be exported.', { tone: 'danger' });
+  }
+}
+
+function importCountsText(plan) {
+  const total = plan.totals ?? plan;
+  return `${total.added} added, ${total.updated} updated, ${total.skipped} skipped`;
+}
+
+function importTableRow(cells, tagName = 'td') {
+  const row = document.createElement('tr');
+  for (const value of cells) {
+    const cell = document.createElement(tagName);
+    cell.textContent = String(value);
+    row.append(cell);
+  }
+  return row;
+}
+
+function importModeChoice(value, label, help, checked) {
+  const wrap = document.createElement('label');
+  wrap.className = 'checkbox-row';
+  const input = document.createElement('input');
+  input.type = 'radio';
+  input.name = 'import-mode';
+  input.value = value;
+  input.checked = checked;
+  const text = document.createElement('span');
+  const strong = document.createElement('strong');
+  strong.textContent = label;
+  const detail = document.createElement('span');
+  detail.className = 'field-help';
+  detail.textContent = ` ${help}`;
+  text.append(strong, detail);
+  wrap.append(input, text);
+  return wrap;
+}
+
+// Build the confirmation dialog from a read-only plan. The DB is only touched
+// after the user presses Import and the selected mode is read from the form.
+function openImportDialog(plan, filename) {
+  const content = document.createElement('div');
+  content.className = 'stack';
+
+  const intro = document.createElement('p');
+  intro.textContent = `${filename || 'Backup file'} · exported ${plan.exportedAt} from ${plan.deviceId}.`;
+  content.append(intro);
+
+  const totals = document.createElement('p');
+  totals.textContent = `Merge summary: ${importCountsText(plan)}.`;
+  content.append(totals);
+
+  const tableWrap = document.createElement('div');
+  tableWrap.className = 'table-wrap';
+  const table = document.createElement('table');
+  table.className = 'table';
+  const thead = document.createElement('thead');
+  thead.append(importTableRow(['Store', 'Added', 'Updated', 'Skipped'], 'th'));
+  const tbody = document.createElement('tbody');
+  let tableWasEmpty = true;
+  for (const [name, summary] of Object.entries(plan.stores)) {
+    if (!summary.added && !summary.updated && !summary.skipped) continue;
+    tableWasEmpty = false;
+    tbody.append(importTableRow([name, summary.added, summary.updated, summary.skipped]));
+  }
+  if (tableWasEmpty) tbody.append(importTableRow(['No rows would be written', 0, 0, 0]));
+  const tfoot = document.createElement('tfoot');
+  tfoot.append(importTableRow([
+    'Total',
+    plan.added,
+    plan.updated,
+    plan.skipped,
+  ]));
+  table.append(thead, tbody, tfoot);
+  tableWrap.append(table);
+  content.append(tableWrap);
+
+  const deletedNote = document.createElement('p');
+  deletedNote.className = 'field-help';
+  deletedNote.textContent = `Soft-deleted rows in the file only replace a local row when their updatedAt is newer (${plan.deleted} incoming tombstone${plan.deleted === 1 ? '' : 's'} would be written). The local device id and storage status are always kept.`;
+  content.append(deletedNote);
+
+  content.append(
+    importModeChoice('merge', 'Merge', 'Keep newer local rows and add or update the rest. This is the safe default.', true),
+    importModeChoice('replace', 'Replace all', 'Clear this account first, then write every row from the file. Local-only rows are removed.', false),
+  );
+
+  const warning = document.createElement('div');
+  warning.className = 'note';
+  warning.textContent = 'Nothing is written yet. Merge never removes local-only rows. Replace all only runs when you select it and press Import.';
+  content.append(warning);
+
+  openModal({
+    title: 'Import backup',
+    content,
+    confirmLabel: 'Import backup',
+    cancelLabel: 'Cancel',
+    onConfirm: async () => {
+      const selected = content.querySelector('input[name="import-mode"]:checked');
+      const mode = selected?.value === 'replace' ? 'replace' : 'merge';
+      try {
+        const result = await applyImportPlan(plan, { mode });
+        render();
+        if (mode === 'replace') {
+          toast(`Local data replaced from ${filename || 'the backup'}.`, { tone: 'success' });
+        } else {
+          toast(`Import complete: ${importCountsText(result)}.`, { tone: 'success' });
+        }
+      } catch (error) {
+        toast(error.message || 'The backup could not be imported.', { tone: 'danger' });
+        return false;
+      }
+      return true;
+    },
+  });
+}
+
+async function importJsonFile(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  try {
+    if (file.size === 0) throw new Error('The selected file is empty.');
+    const text = typeof file.text === 'function' ? await file.text() : await new Response(file).text();
+    const payload = parseImportJson(text);
+    const plan = await planImport(payload);
+    openImportDialog(plan, file.name);
+  } catch (error) {
+    toast(error.message || 'The backup could not be read.', { tone: 'danger' });
+  } finally {
+    input.value = '';
+  }
+}
+
 function isHttpLink(value) {
   try {
     const url = new URL(String(value ?? '').trim());
@@ -514,6 +693,58 @@ function openAgendaDialog(rowEl) {
   open.addEventListener('click', () => dialog.close());
 }
 
+function attachmentZone(node) {
+  return node?.closest?.('[data-attachments]') ?? null;
+}
+
+function filesFromTransfer(transfer) {
+  if (!transfer) return [];
+  if (transfer.files?.length) return [...transfer.files];
+  return [...(transfer.items ?? [])]
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.getAsFile())
+    .filter(Boolean);
+}
+
+async function addAttachmentFiles(zone, fileList, label = 'Attached') {
+  const files = [...(fileList ?? [])].filter((file) => file && (file.size > 0 || file.name));
+  if (!zone || !files.length) return 0;
+  const ownerType = zone.dataset.attachmentOwner;
+  const ownerId = zone.dataset.attachmentId;
+  let added = 0;
+  let failed = 0;
+  for (const file of files) {
+    try {
+      await addAttachment(ownerType, ownerId, file);
+      added += 1;
+    } catch (error) {
+      failed += 1;
+      toast(error.message || 'That file could not be attached.', { tone: 'danger' });
+    }
+  }
+  if (added) {
+    render();
+    toast(`${label} ${added} file${added === 1 ? '' : 's'} on this device.`, { tone: 'success' });
+  } else if (failed) {
+    toast('No files were attached.', { tone: 'danger' });
+  }
+  return added;
+}
+
+function downloadAttachment(url, name) {
+  if (!url) return;
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name || 'attachment';
+  link.rel = 'noopener';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  if (url.startsWith('blob:') && typeof URL.revokeObjectURL === 'function') {
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+}
+
 function openAgentTodo(owner) {
   const state = getState();
   const body = document.createElement('div');
@@ -549,9 +780,20 @@ document.addEventListener('click', async (event) => {
     input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     input?.focus();
   }
-  else if (action === 'reset-demo') {
+  else if (action === 'install-app') {
+    const choice = await installPrompt.prompt();
+    if (!choice) {
+      toast('This browser has not offered an install prompt yet. Use the browser menu to install My Platform.', { tone: 'info' });
+    } else if (choice.outcome === 'accepted') {
+      toast('My Platform was installed on this device.', { tone: 'success' });
+    } else {
+      toast('Install was dismissed. You can try again from Appearance.', { tone: 'info' });
+    }
+  } else if (action === 'reset-demo') {
     openModal({ title: 'Reset demo data?', message: 'All changes in the Test account will be replaced by the original demo rows.', confirmLabel: 'Reset', tone: 'danger', onConfirm: () => { resetDemoData(); } });
-  } else if (action === 'task-toqa') sendToQA(id);
+  } else if (action === 'export-json') exportJsonBackup();
+  else if (action === 'import-json') document.querySelector('[data-import-file]')?.click();
+  else if (action === 'task-toqa') sendToQA(id);
   else if (action === 'task-restore-mark') {
     try {
       const result = await restoreQaMark(id);
@@ -651,7 +893,28 @@ document.addEventListener('click', async (event) => {
   } else if (action === 'ai-polish') toast('AI Polish is not connected in this build. No external AI was called.', { tone: 'danger' });
   else if (action === 'print') window.print();
   else if (action === 'open-folder') toast('Folder access is not available in a browser.', { tone: 'danger' });
-  else if (action === 'fake-download') toast('Attachment placeholder — file storage is a later phase.');
+  else if (action === 'attachment-open') {
+    try {
+      const url = await attachmentObjectUrl(id);
+      if (!url) {
+        toast('This attachment has no local file data to open.', { tone: 'danger' });
+        return;
+      }
+      const row = actionEl.closest('[data-attachment-row]');
+      const name = row?.querySelector('.row-title')?.textContent ?? 'attachment';
+      downloadAttachment(url, name);
+    } catch (error) {
+      toast(error.message || 'That attachment could not be opened.', { tone: 'danger' });
+    }
+  } else if (action === 'attachment-remove') {
+    try {
+      const removed = await removeAttachment(id);
+      render();
+      toast(removed ? 'Attachment detached. The local file stays in this account.' : 'Attachment was already detached.', { tone: removed ? 'success' : 'info' });
+    } catch (error) {
+      toast(error.message || 'That attachment could not be removed.', { tone: 'danger' });
+    }
+  } else if (action === 'fake-download') toast('Attachment placeholder — file storage is a later phase.');
   else if (action === 'toast-copy') toast('Copied actions are placeholders in this build.');
   else if (action === 'test-key') toast('Demo key is valid for preview.', { tone: 'success' });
   else if (action === 'fill-gaps') toast('Backfill is not connected to an AI service yet.');
@@ -685,6 +948,17 @@ document.addEventListener('change', async (event) => {
     syncPageSelection();
     return;
   }
+  const attachmentInput = event.target.closest('[data-attachment-input]');
+  if (attachmentInput) {
+    await addAttachmentFiles(attachmentZone(attachmentInput), attachmentInput.files, 'Attached');
+    attachmentInput.value = '';
+    return;
+  }
+  const importFile = event.target.closest('[data-import-file]');
+  if (importFile) {
+    await importJsonFile(importFile);
+    return;
+  }
   const move = event.target.closest('[data-move-task]');
   if (move) {
     const status = move.value;
@@ -698,6 +972,48 @@ document.addEventListener('change', async (event) => {
     const form = calendarProject.form;
     navigate('/calendar', { m: form.elements.m.value, project: calendarProject.value });
   }
+  const chartTable = event.target.closest('[data-chart-table]');
+  if (chartTable) {
+    navigate('/files', { run: '1', table: chartTable.value });
+    return;
+  }
+  const chartFilter = event.target.closest('[data-chart-filter]');
+  if (chartFilter) {
+    navigate('/files', { run: '1', table: chartFilter.dataset.chartFilter, filter: chartFilter.value });
+  }
+});
+
+document.addEventListener('dragover', (event) => {
+  const zone = event.target.closest?.('[data-attachment-dropzone]');
+  if (!zone) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+  zone.classList.add('is-dragover');
+});
+
+document.addEventListener('dragleave', (event) => {
+  const zone = event.target.closest?.('[data-attachment-dropzone]');
+  if (!zone || zone.contains(event.relatedTarget)) return;
+  zone.classList.remove('is-dragover');
+});
+
+document.addEventListener('drop', async (event) => {
+  const zone = event.target.closest?.('[data-attachment-dropzone]');
+  if (!zone) return;
+  event.preventDefault();
+  zone.classList.remove('is-dragover');
+  await addAttachmentFiles(attachmentZone(zone), filesFromTransfer(event.dataTransfer), 'Dropped');
+});
+
+// Paste anywhere on a task/bug detail page. Files found on the clipboard are
+// saved to IndexedDB; plain text pasting keeps its normal textarea behaviour.
+document.addEventListener('paste', async (event) => {
+  const files = filesFromTransfer(event.clipboardData);
+  if (!files.length) return;
+  const zone = attachmentZone(event.target) ?? document.querySelector('[data-attachments]');
+  if (!zone) return;
+  event.preventDefault();
+  await addAttachmentFiles(zone, files, 'Pasted');
 });
 
 document.addEventListener('submit', async (event) => {
@@ -912,4 +1228,5 @@ window.addEventListener('hashchange', render);
 accountButton?.addEventListener('click', () => { clearActiveAccount(); window.location.reload(); });
 
 applySidebarState();
+startPwa({ onUpdate: offerUpdate });
 boot();

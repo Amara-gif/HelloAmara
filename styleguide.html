@@ -201,7 +201,41 @@
                 <label for="sg-notes">Notes</label>
                 <textarea id="sg-notes" rows="2">A textarea uses the same field styling.</textarea>
               </div>
+              <div class="field">
+                <label for="sg-backup">Backup file</label>
+                <input id="sg-backup" type="file" accept="application/json,.json" />
+                <p class="field-help">A file input uses the same field styling. Import validates the JSON before writing anything.</p>
+              </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-attachments-title">
+        <div class="section-head">
+          <h2 id="sg-attachments-title">Local attachments</h2>
+          <p>Drop, paste or choose a file on a task or bug detail page. The file is stored in IndexedDB and is never uploaded.</p>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <div class="row-list">
+              <div class="row-item">
+                <span class="badge badge-muted">IMAGE</span>
+                <span class="row-main">
+                  <span class="row-title">screenshot-20261116-101500.png</span>
+                  <span class="row-meta">image · 84.2 KB</span>
+                </span>
+                <span class="row-actions">
+                  <button class="btn btn-ghost btn-sm" type="button">Open</button>
+                  <button class="btn btn-ghost btn-sm" type="button">Remove</button>
+                </span>
+              </div>
+            </div>
+            <label class="dropzone">
+              <input class="sr-only" type="file" multiple />
+              <span class="dropzone-title">Drop files here, paste a screenshot, or choose a file</span>
+              <span class="field-help">Files are saved in this browser's IndexedDB and are never uploaded. Remove soft-detaches the local file.</span>
+            </label>
           </div>
         </div>
       </section>

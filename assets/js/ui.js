@@ -17,7 +17,7 @@ function ensureToastRegion() {
   return toastRegion;
 }
 
-export function toast(message, { tone = 'info', duration = 4000 } = {}) {
+export function toast(message, { tone = 'info', duration = 4000, action = null } = {}) {
   const region = ensureToastRegion();
   const node = el('div', tone === 'success' ? 'toast toast-success' : tone === 'danger' ? 'toast toast-danger' : 'toast');
   const text = el('span', 'toast-message');
@@ -36,10 +36,23 @@ export function toast(message, { tone = 'info', duration = 4000 } = {}) {
     node.remove();
   };
   close.addEventListener('click', remove);
-  node.append(text, close);
+  node.append(text);
+
+  if (action?.label) {
+    const actionButton = el('button', 'btn btn-ghost btn-sm');
+    actionButton.type = 'button';
+    actionButton.textContent = action.label;
+    actionButton.addEventListener('click', () => {
+      remove();
+      action.onClick?.();
+    });
+    node.append(actionButton);
+  }
+
+  node.append(close);
   region.append(node);
 
-  const timer = setTimeout(remove, duration);
+  const timer = duration > 0 ? setTimeout(remove, duration) : null;
   return remove;
 }
 

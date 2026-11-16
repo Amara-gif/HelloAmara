@@ -36,7 +36,11 @@ export function renderBarChart(container, { labels = [], values = [], title = 'B
     const barH = (value / max) * plotH;
     const x = pad.left + slot * index + (slot - barW) / 2;
     const y = pad.top + plotH - barH;
-    svg.append(svgEl('rect', { class: index % 2 ? 'chart-bar-alt' : 'chart-bar', x, y, width: barW, height: barH, rx: 4 }));
+    const bar = svgEl('rect', { class: index % 2 ? 'chart-bar-alt' : 'chart-bar', x, y, width: barW, height: barH, rx: 4 });
+    const barTitle = svgEl('title');
+    barTitle.textContent = `${labels[index] ?? 'Unlabelled'}: ${value}`;
+    bar.append(barTitle);
+    svg.append(bar);
     const valueLabel = svgEl('text', { class: 'chart-value', x: x + barW / 2, y: Math.max(y - 6, 12), 'text-anchor': 'middle' });
     valueLabel.textContent = String(value);
     svg.append(valueLabel);

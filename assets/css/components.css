@@ -1097,6 +1097,39 @@ code {
   font-size: var(--font-size-xs);
 }
 
+/* Local attachment drop target. The Blob lives in IndexedDB; this only picks it up. */
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  border: var(--border-width) dashed var(--color-divider-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color var(--duration) var(--ease), background var(--duration) var(--ease);
+}
+
+.dropzone:hover,
+.dropzone:focus-within,
+.dropzone.is-dragover {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.dropzone:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.dropzone-title {
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
 /* ----------------------------------------------------------------- Table */
 .table-wrap {
   overflow-x: auto;

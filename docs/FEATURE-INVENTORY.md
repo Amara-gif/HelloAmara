@@ -368,7 +368,7 @@ Data root: `ROOT` = parent of App; production `WORK = ROOT/Data`, `DATA = WORK/d
 - [x] Right-click context menu is disabled on every page.
 - [ ] The ＋ create FAB is present on every page and opens the Create dialog; Esc closes it.
 - [ ] `/go/T-5` redirects to that task; `/go/WD-3` redirects to that bug; unknown keys show a "Not found" page.
-- [ ] Browser install prompt is captured; the Appearance page install button triggers it.
+- [x] Browser install prompt is captured; the Appearance page install button triggers it.
 - [ ] Demo mode (`--demo`) shows a banner and blocks settings/customization writes.
 
 ### Create dialog
@@ -520,7 +520,7 @@ Data root: `ROOT` = parent of App; production `WORK = ROOT/Data`, `DATA = WORK/d
 - [ ] /settings/dispatch edits default owner and ordered condition rules (keyword/product/issue/severity/area → owner); first match wins; saved rules drive new-task dispatch.
 - [ ] /settings/areas edits extra area names and the unknown-owner fallback (default NA).
 - [ ] /settings/appearance live-previews primary color, radii, glass; presets apply palette colors; Save theme re-skins every page via :root tokens; Restore default look resets to #0071E3/8px/16px/0.25/on.
-- [ ] Appearance page Install button installs the PWA when the browser allows.
+- [x] Appearance page Install button installs the PWA when the browser allows.
 - [ ] All settings pages show dirty-state text when edited and confirmation after save.
 
 ### Market Review tools

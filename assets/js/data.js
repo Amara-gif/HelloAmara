@@ -1,4 +1,6 @@
 import {
+  DB_VERSION,
+  STORES,
   openAccountDb,
   getAll,
   getOne,
@@ -21,6 +23,9 @@ const STORAGE_PERSIST_META = {
   supported: 'storagePersistSupported',
   checkedAt: 'storagePersistCheckedAt',
 };
+const DEVICE_ID_META = 'deviceId';
+const LAST_EXPORT_META = 'lastExportAt';
+export const EXPORT_REMINDER_DAYS = 7;
 
 // The task detail page exposes the eleven workflow statuses while the task row
 // still stores one of the four board statuses. Only a workflow whose class
@@ -160,6 +165,193 @@ export function attachmentsFingerprint(attachments) {
   }));
 }
 
+// Attachments are local-only. The row in the `attachments` store is the
+// durable copy: metadata plus a Blob (or data URL) that IndexedDB can clone.
+// The task/bug record keeps a small metadata list only, so rendering detail
+// pages never needs to load every blob. Object URLs are made on demand for
+// Open and revoked again; they are never stored, because they die on reload.
+const ATTACHMENT_OWNERS = {
+  task: { type: 'task', store: 'tasks', ownerKey: 'taskId', otherKey: 'bugId' },
+  bug: { type: 'bug', store: 'bugs', ownerKey: 'bugId', otherKey: 'taskId' },
+};
+
+function attachmentOwner(ownerType) {
+  const key = String(ownerType ?? '').trim().toLowerCase();
+  const owner = ATTACHMENT_OWNERS[key] ?? ATTACHMENT_OWNERS[`${key}s`];
+  if (!owner) throw new Error('Attachments belong to a task or a bug.');
+  return owner;
+}
+
+function isBlob(value) {
+  return typeof Blob !== 'undefined' && value instanceof Blob;
+}
+
+function attachmentName(file) {
+  const name = String(file?.name ?? file?.filename ?? '').trim();
+  if (name) return name;
+  return `attachment-${Date.now()}.bin`;
+}
+
+function attachmentKind(file) {
+  const explicit = String(file?.kind ?? '').trim().toLowerCase();
+  if (explicit) return explicit;
+  const type = String(file?.type ?? '').trim().toLowerCase();
+  if (type.startsWith('image/')) return 'image';
+  if (type.startsWith('video/')) return 'video';
+  if (type.startsWith('audio/')) return 'audio';
+  return 'file';
+}
+
+function attachmentSize(file) {
+  const size = Number(file?.size);
+  return Number.isFinite(size) && size >= 0 ? size : 0;
+}
+
+// Keep the owner record's array free of the Blob. attachmentsFingerprint uses
+// name/kind/size, so adding or detaching still marks a review stale.
+function attachmentMetadata(record) {
+  return {
+    id: record.id,
+    name: record.name,
+    kind: record.kind,
+    type: record.type,
+    size: record.size,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+}
+
+function matchesAttachment(file, record) {
+  if (typeof file === 'string') return file === record.id || file === record.name;
+  const fileId = String(file?.id ?? '');
+  if (fileId) return fileId === record.id;
+  return String(file?.name ?? '') === record.name && attachmentSize(file) === record.size;
+}
+
+export async function addAttachment(ownerTypeOrInput, ownerIdOrFile, maybeFile) {
+  let ownerType = ownerTypeOrInput;
+  let ownerId = ownerIdOrFile;
+  let file = maybeFile;
+  if (ownerTypeOrInput && typeof ownerTypeOrInput === 'object') {
+    const input = ownerTypeOrInput;
+    ownerType = input.ownerType ?? input.owner ?? input.parentType ?? input.type;
+    ownerId = input.ownerId ?? input.taskId ?? input.bugId ?? input.id;
+    file = input.file ?? input.blob ?? input;
+  }
+  if (!file || typeof file !== 'object') throw new Error('Choose a file to attach.');
+  const owner = attachmentOwner(ownerType);
+  const ownerRecord = state?.[owner.store]?.find((row) => row.id === ownerId);
+  if (!ownerRecord) throw new Error(`${owner.type === 'task' ? 'Task' : 'Bug'} not found.`);
+
+  const now = nowIso();
+  const name = attachmentName(file);
+  const type = String(file?.type ?? '');
+  const record = {
+    id: newId('attachment'),
+    ownerType: owner.type,
+    ownerId: String(ownerId),
+    [owner.ownerKey]: String(ownerId),
+    [owner.otherKey]: null,
+    name,
+    kind: attachmentKind(file),
+    type,
+    size: attachmentSize(file),
+    blob: isBlob(file) ? file : (isBlob(file?.blob) ? file.blob : null),
+    dataUrl: typeof file?.dataUrl === 'string' ? file.dataUrl : '',
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+  };
+  await putRecord('attachments', record);
+  const metadata = attachmentMetadata(record);
+
+  if (owner.type === 'task') {
+    await updateTask(ownerId, { attachments: [...(ownerRecord.attachments ?? []), metadata] });
+  } else {
+    await updateBug(ownerId, { attachments: [...(ownerRecord.attachments ?? []), metadata] });
+  }
+  state = await readState();
+  return record;
+}
+
+export async function addTaskAttachment(taskId, file) {
+  return addAttachment('task', taskId, file);
+}
+
+export async function addBugAttachment(bugId, file) {
+  return addAttachment('bug', bugId, file);
+}
+
+export const attachFile = addAttachment;
+export const attachTaskFile = addTaskAttachment;
+export const attachBugFile = addBugAttachment;
+
+export function listAttachments(ownerType, ownerId) {
+  const owner = attachmentOwner(ownerType);
+  return (state?.attachments ?? []).filter((row) => (
+    !row.deletedAt
+    && String(row[owner.ownerKey] ?? row.ownerId) === String(ownerId)
+  ));
+}
+
+export async function getAttachment(attachmentId) {
+  return getOne('attachments', attachmentId);
+}
+
+// Create a short-lived object URL for Open. The Blob itself stays in
+// IndexedDB; callers must revoke the URL after the download/open starts.
+export async function attachmentObjectUrl(attachmentId) {
+  const record = await getOne('attachments', attachmentId);
+  if (!record || record.deletedAt) return '';
+  if (record.dataUrl) return record.dataUrl;
+  if (!isBlob(record.blob) || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return '';
+  return URL.createObjectURL(record.blob);
+}
+
+export const objectUrlForAttachment = attachmentObjectUrl;
+
+export async function removeAttachment(attachmentId) {
+  let id = attachmentId;
+  if (attachmentId && typeof attachmentId === 'object') id = attachmentId.id;
+  if (!id) return false;
+  const record = await getOne('attachments', id);
+  if (!record || record.deletedAt) return false;
+
+  const now = nowIso();
+  await putRecord('attachments', { ...record, deletedAt: now, updatedAt: now });
+
+  const ownerType = record.ownerType ?? (record.bugId ? 'bug' : 'task');
+  const owner = attachmentOwner(ownerType);
+  const ownerId = String(record.ownerId ?? record[owner.ownerKey] ?? '');
+  const ownerRecord = state?.[owner.store]?.find((row) => row.id === ownerId);
+  if (ownerRecord) {
+    const attachments = (ownerRecord.attachments ?? []).filter((file) => !matchesAttachment(file, record));
+    if (owner.type === 'task') await updateTask(ownerId, { attachments });
+    else await updateBug(ownerId, { attachments });
+  }
+  state = await readState();
+  return { ...record, deletedAt: now, updatedAt: now };
+}
+
+export const detachAttachment = removeAttachment;
+
+export async function removeTaskAttachment(taskId, attachmentIdOrFile) {
+  const task = state?.tasks?.find((row) => row.id === taskId);
+  const match = (task?.attachments ?? []).find((file) => matchesAttachment(attachmentIdOrFile, file));
+  const id = attachmentIdOrFile?.id ?? match?.id ?? attachmentIdOrFile;
+  return removeAttachment(id);
+}
+
+export async function removeBugAttachment(bugId, attachmentIdOrFile) {
+  const bug = state?.bugs?.find((row) => row.id === bugId);
+  const match = (bug?.attachments ?? []).find((file) => matchesAttachment(attachmentIdOrFile, file));
+  const id = attachmentIdOrFile?.id ?? match?.id ?? attachmentIdOrFile;
+  return removeAttachment(id);
+}
+
+export const detachTaskAttachment = removeTaskAttachment;
+export const detachBugAttachment = removeBugAttachment;
+
 export function taskReviewFingerprint(task) {
   return String(task?.reviewFingerprint ?? task?.review?.fingerprint ?? '');
 }
@@ -211,9 +403,20 @@ export async function start(account) {
   currentAccount = account;
   await openAccountDb(account.id);
   if (account.test) await seedDemo(false);
+  await ensureDeviceId();
   await requestPersistentStorage();
   state = await readState();
   return state;
+}
+
+// The device id is created once per local account database and reused for every
+// export. It is not a user account or a server identifier.
+async function ensureDeviceId() {
+  const existing = await getOne('meta', DEVICE_ID_META);
+  if (existing?.value) return existing.value;
+  const deviceId = newId('device');
+  await putRecord('meta', { key: DEVICE_ID_META, value: deviceId, updatedAt: nowIso() });
+  return deviceId;
 }
 
 // Ask the browser for exempt-from-eviction storage and keep the answer per account.
@@ -253,7 +456,10 @@ async function seedDemo(force) {
 
 export async function resetDemo() {
   if (!currentAccount?.test) throw new Error('Only the Test account has demo data.');
+  const device = await getOne('meta', DEVICE_ID_META);
   await seedDemo(true);
+  if (device?.value) await putRecord('meta', device);
+  else await ensureDeviceId();
   state = await readState();
   return state;
 }
@@ -264,10 +470,11 @@ export async function refresh() {
 }
 
 async function readState() {
-  const [tasks, taskHistory, taskComments, bugs, bugHistory, bugComments, events, projects, pages, aiCalls, team, orders, metaRows] = await Promise.all([
+  const [tasks, taskHistory, taskComments, bugs, bugHistory, bugComments, attachments, events, projects, pages, aiCalls, team, orders, metaRows] = await Promise.all([
     getAll('tasks'), getAll('task_history'), getAll('task_comments'), getAll('bugs'),
-    getAll('bug_history'), getAll('bug_comments'), getAll('events'), getAll('projects'),
-    getAll('pages'), getAll('ai_calls'), getAll('team'), getAll('orders'), getAll('meta'),
+    getAll('bug_history'), getAll('bug_comments'), getAll('attachments'), getAll('events'),
+    getAll('projects'), getAll('pages'), getAll('ai_calls'), getAll('team'), getAll('orders'),
+    getAll('meta'),
   ]);
   const meta = Object.fromEntries(metaRows.map((row) => [row.key, row.value]));
   const supported = meta[STORAGE_PERSIST_META.supported] === true;
@@ -280,6 +487,7 @@ async function readState() {
     bugs: live(bugs).sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true })),
     bugHistory: live(bugHistory),
     bugComments: live(bugComments),
+    attachments: live(attachments),
     events: live(events).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)),
     projects: live(projects).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)),
     pages: live(pages).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
@@ -291,6 +499,8 @@ async function readState() {
     issueCounts: meta.issueCounts ?? null,
     marketReview: meta.marketReview ?? null,
     seeded: meta.seedVersion ?? null,
+    deviceId: meta[DEVICE_ID_META] ?? null,
+    lastExportAt: meta[LAST_EXPORT_META] ?? null,
     persistentStorage: {
       supported,
       granted,
@@ -692,6 +902,264 @@ export async function closeOrder(id) {
   await putRecord('orders', { ...order, open: false, updatedAt: nowIso() });
   state = await readState();
 }
+
+// Build the one-file JSON backup: schema metadata plus every object store,
+// including soft-deleted rows so a later import can merge without losing them.
+export async function buildExport({ exportedAt = nowIso() } = {}) {
+  const deviceId = await ensureDeviceId();
+  await putRecord('meta', { key: LAST_EXPORT_META, value: exportedAt, updatedAt: nowIso() });
+  const stores = {};
+  for (const name of Object.keys(STORES)) stores[name] = await getAll(name);
+  state = await readState();
+  return { schemaVersion: DB_VERSION, exportedAt, deviceId, stores };
+}
+
+export const exportAllStores = buildExport;
+
+export function exportStatus(currentState = state, now = new Date()) {
+  const lastExportAt = currentState?.lastExportAt ?? null;
+  const timestamp = lastExportAt ? Date.parse(lastExportAt) : NaN;
+  if (!Number.isFinite(timestamp)) return { lastExportAt, daysSince: null, overdue: true };
+  const daysSince = Math.floor(Math.max(0, now.getTime() - timestamp) / 86400000);
+  return { lastExportAt, daysSince, overdue: now.getTime() - timestamp >= EXPORT_REMINDER_DAYS * 86400000 };
+}
+
+// ---------------------------------------------------------------- Import JSON
+// An import is read-only until the summary is confirmed. These helpers are
+// deliberately separate from the UI so the merge rules can be tested.
+export const IMPORT_META_PROTECTED = Object.freeze([
+  'deviceId',
+  'lastExportAt',
+  'seedVersion',
+  'storagePersist',
+  'storagePersistSupported',
+  'storagePersistCheckedAt',
+]);
+const IMPORT_META_PROTECTED_SET = new Set(IMPORT_META_PROTECTED);
+
+function importError(message) {
+  const error = new Error(message);
+  error.name = 'ImportValidationError';
+  return error;
+}
+
+function isObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isTimestamp(value) {
+  return typeof value === 'string' && value.trim() !== '' && Number.isFinite(Date.parse(value));
+}
+
+// Validate the full backup envelope and every row before any write happens.
+// Rows are returned as shallow copies with a normalized deletedAt.
+export function validateImportPayload(payload) {
+  if (!isObject(payload)) throw importError('The selected file is not a My Platform backup object.');
+  if (!Number.isInteger(payload.schemaVersion)) {
+    throw importError('The backup has no numeric schemaVersion.');
+  }
+  if (payload.schemaVersion !== DB_VERSION) {
+    throw importError(`Unsupported backup schema version ${payload.schemaVersion}. This app reads version ${DB_VERSION}.`);
+  }
+  if (!isTimestamp(payload.exportedAt)) {
+    throw importError('The backup has an invalid exportedAt timestamp.');
+  }
+  if (typeof payload.deviceId !== 'string' || !payload.deviceId.trim()) {
+    throw importError('The backup has no deviceId.');
+  }
+  if (!isObject(payload.stores)) {
+    throw importError('The backup has no stores object.');
+  }
+
+  const unknown = Object.keys(payload.stores).filter((name) => !Object.prototype.hasOwnProperty.call(STORES, name));
+  if (unknown.length) {
+    throw importError(`The backup contains unknown stores: ${unknown.join(', ')}.`);
+  }
+
+  const stores = {};
+  for (const [name, definition] of Object.entries(STORES)) {
+    const rows = payload.stores[name];
+    if (!Array.isArray(rows)) {
+      throw importError(`The backup is missing the “${name}” store array.`);
+    }
+    const seen = new Set();
+    stores[name] = rows.map((record) => {
+      if (!isObject(record)) {
+        throw importError(`The ${name} store contains a row that is not an object.`);
+      }
+      const keyPath = definition.keyPath;
+      const rawKey = record[keyPath];
+      if (rawKey === undefined || rawKey === null || String(rawKey).trim() === '') {
+        throw importError(`A row in the ${name} store has no “${keyPath}”.`);
+      }
+      const key = String(rawKey);
+      if (seen.has(key)) {
+        throw importError(`The ${name} store contains duplicate ${keyPath} “${key}”.`);
+      }
+      seen.add(key);
+      if (!isTimestamp(record.updatedAt)) {
+        throw importError(`Row “${key}” in ${name} has an invalid updatedAt; imports need an ISO 8601 timestamp.`);
+      }
+      if (record.deletedAt !== undefined && record.deletedAt !== null && !isTimestamp(record.deletedAt)) {
+        throw importError(`Row “${key}” in ${name} has an invalid deletedAt timestamp.`);
+      }
+      return { ...record, [keyPath]: key, deletedAt: record.deletedAt ?? null };
+    });
+  }
+
+  return {
+    schemaVersion: payload.schemaVersion,
+    exportedAt: payload.exportedAt,
+    deviceId: payload.deviceId,
+    stores,
+  };
+}
+
+export function parseImportJson(text) {
+  const raw = String(text ?? '').trim();
+  if (!raw) throw importError('The selected file is empty.');
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw importError('That file is not valid JSON. Choose a My Platform backup exported as .json.');
+  }
+  return validateImportPayload(parsed);
+}
+
+// Read the current database and decide, per store, which rows would be added,
+// updated or skipped. This does not write anything.
+export async function planImport(payload) {
+  const backup = validateImportPayload(payload);
+  const stores = {};
+  const writes = {};
+  let added = 0;
+  let updated = 0;
+  let skipped = 0;
+  let deleted = 0;
+
+  for (const [name, definition] of Object.entries(STORES)) {
+    const summary = { added: 0, updated: 0, skipped: 0, deleted: 0 };
+    const existing = await getAll(name);
+    const byKey = new Map(existing.map((row) => [String(row[definition.keyPath]), row]));
+    const records = [];
+
+    for (const record of backup.stores[name]) {
+      const key = String(record[definition.keyPath]);
+      // Device identity, storage status and export markers always stay local.
+      if (name === 'meta' && IMPORT_META_PROTECTED_SET.has(key)) {
+        summary.skipped += 1;
+        continue;
+      }
+      const local = byKey.get(key);
+      if (!local) {
+        summary.added += 1;
+        records.push(record);
+        continue;
+      }
+      const localTime = Date.parse(local.updatedAt);
+      if (!Number.isFinite(localTime) || Date.parse(record.updatedAt) > localTime) {
+        summary.updated += 1;
+        if (record.deletedAt) summary.deleted += 1;
+        records.push(record);
+      } else {
+        summary.skipped += 1;
+      }
+    }
+
+    stores[name] = summary;
+    writes[name] = records;
+    added += summary.added;
+    updated += summary.updated;
+    skipped += summary.skipped;
+    deleted += summary.deleted;
+  }
+
+  return {
+    ...backup,
+    added,
+    updated,
+    skipped,
+    deleted,
+    totals: { added, updated, skipped, deleted },
+    stores,
+    rows: backup.stores,
+    writes,
+  };
+}
+
+// Merge is the default. `replace` is only reached from an explicit radio
+// choice in the confirmation dialog; it clears the account before restoring
+// the file, then puts the local device-only meta rows back.
+export async function applyImportPlan(plan, { mode = 'merge' } = {}) {
+  if (!plan || !plan.writes || !plan.stores) throw importError('Choose a backup to import first.');
+  if (!['merge', 'replace'].includes(mode)) throw importError('Choose Merge or Replace all before importing.');
+  if (mode === 'replace' && !plan.rows) {
+    throw importError('The backup rows are no longer available; choose the file again.');
+  }
+
+  let localMeta = [];
+  if (mode === 'replace') {
+    localMeta = (await getAll('meta')).filter((row) => IMPORT_META_PROTECTED_SET.has(String(row.key)));
+    await clearAllStores();
+  }
+
+  if (mode === 'replace') {
+    // Replace all writes every file row, even when merge would have skipped it
+    // because the local copy was newer.
+    for (const [name, rows] of Object.entries(plan.rows)) {
+      const records = name === 'meta'
+        ? rows.filter((row) => !IMPORT_META_PROTECTED_SET.has(String(row.key)))
+        : rows;
+      if (records.length) await putRecords(name, records);
+    }
+    if (localMeta.length) await putRecords('meta', localMeta);
+  } else {
+    for (const [name, records] of Object.entries(plan.writes)) {
+      if (records.length) await putRecords(name, records);
+    }
+  }
+
+  if (currentAccount) state = await readState();
+
+  if (mode === 'replace') {
+    const source = plan.rows ?? {};
+    const replaceRows = Object.entries(source).flatMap(([name, rows]) => (
+      name === 'meta' ? rows.filter((row) => !IMPORT_META_PROTECTED_SET.has(String(row.key))) : rows
+    ));
+    const written = replaceRows.length;
+    const deletedRows = replaceRows.filter((row) => row.deletedAt).length;
+    const protectedCount = Object.values(source).flat().length - written;
+    return {
+      mode,
+      added: written,
+      updated: 0,
+      skipped: protectedCount,
+      deleted: deletedRows,
+      totals: { added: written, updated: 0, skipped: protectedCount, deleted: deletedRows },
+      stores: plan.stores,
+    };
+  }
+
+  return {
+    mode,
+    added: plan.added,
+    updated: plan.updated,
+    skipped: plan.skipped,
+    deleted: plan.deleted,
+    totals: { ...plan.totals },
+    stores: plan.stores,
+  };
+}
+
+export async function importBackup(payload, options = {}) {
+  const plan = await planImport(payload);
+  return applyImportPlan(plan, options);
+}
+
+export const validateImport = validateImportPayload;
+export const buildImportPlan = planImport;
+export const applyImport = applyImportPlan;
 
 export async function saveSettings(settings) {
   await putRecord('meta', { key: 'settings', value: settings, updatedAt: nowIso() });

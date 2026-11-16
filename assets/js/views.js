@@ -11,6 +11,7 @@ import {
   taskWorkflowTargets,
   attachmentsFingerprint,
   taskReviewFingerprint,
+  exportStatus,
 } from './data.js';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
@@ -53,6 +54,27 @@ const STATUS_TONE = {
 const statusBadge = (status) => `<span class="badge badge-${STATUS_TONE[status] ?? 'muted'}">${esc(status)}</span>`;
 const STORAGE_TONE = { Granted: 'success', Denied: 'warning', Unsupported: 'muted' };
 const storageBadge = (storage) => `<span class="badge badge-${STORAGE_TONE[storage?.status] ?? 'muted'}">${esc(storage?.status ?? 'Unsupported')}</span>`;
+
+function exportAgeText(info) {
+  if (!info.lastExportAt) return 'No JSON backup has been exported from this account yet.';
+  if (info.daysSince === null) return 'The last export date could not be read.';
+  if (info.daysSince === 0) return 'The last export was today.';
+  return `The last export was ${info.daysSince} ${info.daysSince === 1 ? 'day' : 'days'} ago.`;
+}
+
+function exportReminder(currentState) {
+  const info = exportStatus(currentState);
+  if (!info.overdue) return '';
+  return `<div class="note" data-export-reminder>${icon('download', 16)}<span><strong>Back up your data.</strong> ${esc(exportAgeText(info))} Export a fresh JSON file to keep a copy on this device. <button class="link-button" type="button" data-action="export-json">Export a file</button></span></div>`;
+}
+
+function backupCard(currentState) {
+  const info = exportStatus(currentState);
+  const lastExport = info.lastExportAt ? fmtStamp(info.lastExportAt) : 'Never';
+  const reminder = exportReminder(currentState);
+  const importHelp = 'Choose a My Platform JSON backup. Nothing is written until you review the added, updated and skipped counts and confirm. Merge is the default; Replace all is a separate, explicit choice.';
+  return `<section class="card" data-export-card><div class="card-head"><h2>Backup</h2><span class="badge badge-${info.overdue ? 'warning' : 'success'}">${info.overdue ? 'Export due' : 'Current'}</span></div><div class="card-body"><p>Download one JSON file containing every store in this account, or restore one from another device. Files are read and written in your browser and are never uploaded.</p><dl class="details"><div><dt>Last export</dt><dd>${esc(lastExport)}</dd></div><div><dt>Device ID</dt><dd>${esc(currentState.deviceId ?? '—')}</dd></div><div><dt>File</dt><dd>JSON · all stores</dd></div></dl>${reminder}<div class="field"><label for="import-backup-file">Import a backup</label><input id="import-backup-file" type="file" accept="application/json,.json" data-import-file /><p class="field-help">${esc(importHelp)}</p></div><p class="field-help">Imports merge rows by id; the row with the newer <code>updatedAt</code> wins. A soft-deleted row (<code>deletedAt</code>) only hides a local row when its <code>updatedAt</code> is newer. Equal or older rows are skipped.</p><div class="row-actions"><button class="btn btn-primary" type="button" data-action="export-json">${icon('download', 16)}Export a file</button></div></div></section>`;
+}
 const priorityClass = { Highest: 'danger', High: 'danger', Medium: 'warning', Low: 'success', Lowest: 'muted' };
 const priority = (value) => `<span class="priority priority-${priorityClass[value] ?? 'muted'}"><span class="priority-dot" aria-hidden="true"></span>${esc(value)}</span>`;
 
@@ -233,6 +255,7 @@ function home(state) {
   const load = teamLoadSeries(state);
   return `
     ${pageHead(greeting, new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }))}
+    ${exportReminder(state)}
     <div class="home-layout">
       <div class="home-column">
         <section class="card"><div class="card-body">${miniCalendar(state)}</div></section>
@@ -1114,13 +1137,110 @@ function teamPage(state) {
     </div>`;
 }
 
+const CHART_DATASETS = [
+  { id: 'work-status', label: 'Work items by status', source: 'tasks', groupBy: 'status', filterBy: 'projectId', order: ['To do', 'In progress', 'Waiting', 'Done'] },
+  { id: 'work-priority', label: 'Work items by priority', source: 'tasks', groupBy: 'priority', filterBy: 'projectId', order: PRIORITY_ORDER },
+  { id: 'bug-severity', label: 'Bugs by severity', source: 'bugs', groupBy: 'severity', filterBy: 'status', order: ['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'] },
+  { id: 'bug-component', label: 'Bugs by component', source: 'bugs', groupBy: 'component', filterBy: 'status' },
+];
+
+const BUG_STATUS_ORDER = ['New', 'Triaged', 'In progress', 'Fixed', 'Verified', 'Closed', 'Reopened', 'Duplicate', 'Wont fix', 'Deferred', 'Rejected'];
+
+function chartDataset(tableId) {
+  return CHART_DATASETS.find((dataset) => dataset.id === tableId) ?? CHART_DATASETS[0];
+}
+
+function orderChartValues(values, preferred = []) {
+  const rank = new Map(preferred.map((value, index) => [value, index]));
+  return [...new Set(values)].sort((a, b) => {
+    const rankA = rank.has(a) ? rank.get(a) : preferred.length;
+    const rankB = rank.has(b) ? rank.get(b) : preferred.length;
+    return rankA - rankB || String(a).localeCompare(String(b));
+  });
+}
+
+export function chartDatasets() {
+  return CHART_DATASETS.map(({ id, label }) => ({ id, label }));
+}
+
+export function chartFilters(state, tableId) {
+  const dataset = chartDataset(tableId);
+  const rows = state?.[dataset.source] ?? [];
+  if (dataset.filterBy === 'projectId') {
+    const projects = state?.projects ?? [];
+    const projectIds = orderChartValues(rows.map((row) => row.projectId).filter(Boolean));
+    const options = projectIds
+      .map((id) => projects.find((project) => project.id === id) ?? { id, name: id })
+      .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || String(a.name).localeCompare(String(b.name)))
+      .map((project) => ({
+        value: project.id,
+        label: [project.key, project.name].filter(Boolean).join(' · '),
+      }));
+    return { field: 'projectId', label: 'Project', allLabel: 'All projects', options };
+  }
+  const statuses = orderChartValues(rows.map((row) => row.status).filter(Boolean), BUG_STATUS_ORDER);
+  return {
+    field: 'status',
+    label: 'Status',
+    allLabel: 'All statuses',
+    options: statuses.map((status) => ({ value: status, label: status })),
+  };
+}
+
+export function buildChartSeries(state, tableId = 'work-status', filter = '') {
+  const dataset = chartDataset(tableId);
+  const filters = chartFilters(state, dataset.id);
+  const selected = filters.options.some((optionRow) => optionRow.value === filter) ? filter : '';
+  const rows = state?.[dataset.source] ?? [];
+  const scoped = selected ? rows.filter((row) => String(row[filters.field] ?? '') === selected) : rows;
+  const counts = new Map();
+  for (const row of scoped) {
+    const label = String(row[dataset.groupBy] ?? '').trim() || 'Unset';
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  const labels = orderChartValues([...counts.keys()], dataset.order);
+  const filterLabel = selected
+    ? filters.options.find((optionRow) => optionRow.value === selected)?.label ?? selected
+    : filters.allLabel;
+  return {
+    dataset: { id: dataset.id, label: dataset.label },
+    labels,
+    values: labels.map((label) => counts.get(label) ?? 0),
+    total: scoped.length,
+    filter: selected,
+    filterLabel,
+    title: `${dataset.label} · ${filterLabel}`,
+  };
+}
+
 function filesPage(state, query) {
   const tab = query.get('tab') === 'agents' ? 'agents' : 'charts';
+  const agents = state.team ?? [];
+  const tableId = chartDataset(query.get('table')).id;
+  const filters = chartFilters(state, tableId);
+  const requestedFilter = query.get('filter') ?? '';
+  const filter = filters.options.some((optionRow) => optionRow.value === requestedFilter) ? requestedFilter : '';
   const run = query.get('run') === '1';
+  const series = buildChartSeries(state, tableId, filter);
+  const openChartHref = pageUrl('/files', { run: 1, table: tableId, ...(filter ? { filter } : {}) });
   return `
     ${pageHead('Tools & Files', 'Chart Studio and the agent configuration files.')}
     <div class="tabs"><a class="tab" href="#/files"${tab === 'charts' ? ' aria-current="page"' : ''}>Chart Studio</a><a class="tab" href="#/files?tab=agents"${tab === 'agents' ? ' aria-current="page"' : ''}>Agent Configuration</a></div>
-    ${tab === 'charts' ? `<section class="card"><div class="card-head"><h2>Chart Studio</h2></div><div class="card-body"><div class="form-grid"><div class="field"><label for="chart-table">Target table</label><select id="chart-table" class="select"><option>Roselite_After_Sales.xlsx</option><option>Review_Master.xlsx</option><option>PQA_Tracker.xlsx</option></select></div><div class="field"><label for="chart-sheet">Sheet</label><select id="chart-sheet" class="select"><option>(first readable sheet)</option><option>Open issues</option><option>Weekly totals</option></select></div></div><div class="row-actions"><a class="btn btn-primary btn-sm" href="#/files?run=1">Open chart page</a><button class="btn btn-ghost btn-sm" type="button" data-action="open-folder">Open chart folder</button></div>${run ? `<div class="chart-box" id="files-chart"></div>` : ''}</div></section>` : `<section class="card"><div class="card-head"><h2>Agent Configuration</h2><span class="badge badge-muted">${state.team.length} files</span></div><div class="card-body"><div class="table-wrap"><table class="table table-stack"><thead><tr><th>Agent</th><th>Role</th><th>Model</th><th>Focus</th></tr></thead><tbody>${state.team.map((agent) => `<tr><td data-label="Agent">${esc(agent.name)}</td><td data-label="Role">${esc(agent.role)}</td><td data-label="Model">${esc(agent.model)}</td><td data-label="Focus">${esc(agent.focus)}</td></tr>`).join('')}</tbody></table></div></div></section>`}`;
+    ${tab === 'charts' ? `<section class="card">
+      <div class="card-head"><h2>Chart Studio</h2><span class="badge badge-muted">Local data</span></div>
+      <div class="card-body">
+        <p class="field-help">Pick a table that already lives in this browser. Filters and the chart are drawn from your local IndexedDB records — no workbook path and nothing uploaded.</p>
+        <div class="form-grid">
+          <div class="field"><label for="chart-table">Target table</label><select id="chart-table" class="select" data-chart-table>${chartDatasets().map((dataset) => option(dataset.id, tableId, dataset.label)).join('')}</select></div>
+          <div class="field"><label for="chart-filter">Filter by ${esc(filters.label.toLowerCase())}</label><select id="chart-filter" class="select" data-chart-filter="${esc(tableId)}"${filters.options.length ? '' : ' disabled'}><option value="">${esc(filters.allLabel)}</option>${filters.options.map((optionRow) => option(optionRow.value, filter, optionRow.label)).join('')}</select></div>
+        </div>
+        <div class="row-actions"><a class="btn btn-primary btn-sm" href="${openChartHref}">Open chart page</a><button class="btn btn-ghost btn-sm" type="button" data-action="open-folder">Open chart folder</button></div>
+        ${run ? `<div class="chart-box" id="files-chart"></div><div class="chart-legend">${series.labels.map((label, index) => `<span class="chart-legend-item"><span class="chart-dot chart-line-${(index % 2) + 1}"></span>${esc(label)} · ${series.values[index]}</span>`).join('')}</div><p class="field-help">${series.total} local ${series.total === 1 ? 'record' : 'records'} · ${esc(series.filterLabel)}</p>` : '<p class="field-help">Choose a table and filter, then open the chart page to draw it here.</p>'}
+      </div>
+    </section>` : `<section class="card">
+      <div class="card-head"><h2>Agent Configuration</h2><span class="badge badge-muted">${agents.length} agents</span></div>
+      <div class="card-body"><div class="table-wrap"><table class="table table-stack"><thead><tr><th>Agent</th><th>Role</th><th>Status</th><th>Model</th><th>Focus</th></tr></thead><tbody>${agents.map((agent) => `<tr><td data-label="Agent">${esc(agent.name)}</td><td data-label="Role">${esc(agent.role)}</td><td data-label="Status">${esc(agent.status)}</td><td data-label="Model">${esc(agent.model)}</td><td data-label="Focus">${esc(agent.focus)}</td></tr>`).join('')}</tbody></table></div>${agents.length ? '' : empty('No team agents are configured on this device yet.')}</div>
+    </section>`}`;
 }
 
 function settingsTabs(route) {
@@ -1138,7 +1258,7 @@ function settingsPage(route, state) {
   const storage = state.persistentStorage ?? { status: 'Unsupported' };
   const body = (() => {
     if (route.id === 'settings') {
-      return `${storagePersistCard(state)}<section class="card"><div class="card-head"><h2>AI connection</h2><span class="badge badge-${s.ai.status === 'Connected' ? 'success' : 'muted'}">${esc(s.ai.status)}</span></div><div class="card-body"><form class="form-grid" data-form="settings-ai"><div class="field"><label for="ai-key">API key</label><input id="ai-key" name="key" type="password" value="${esc(s.ai.key)}" /></div><div class="field"><label for="ai-model">Model</label><input id="ai-model" name="model" type="text" value="${esc(s.ai.model)}" /></div><div class="field"><label for="ai-timeout">Timeout (seconds)</label><input id="ai-timeout" name="timeout" type="number" value="${esc(s.ai.timeout)}" /></div><div class="row-actions"><button class="btn btn-primary" type="submit">Save changes</button><button class="btn btn-ghost" type="button" data-action="test-key">Test the key</button><button class="btn btn-ghost" type="button" data-action="fill-gaps">Fill the gaps now</button></div></form></div></section>
+      return `${backupCard(state)}${storagePersistCard(state)}<section class="card"><div class="card-head"><h2>AI connection</h2><span class="badge badge-${s.ai.status === 'Connected' ? 'success' : 'muted'}">${esc(s.ai.status)}</span></div><div class="card-body"><form class="form-grid" data-form="settings-ai"><div class="field"><label for="ai-key">API key</label><input id="ai-key" name="key" type="password" value="${esc(s.ai.key)}" /></div><div class="field"><label for="ai-model">Model</label><input id="ai-model" name="model" type="text" value="${esc(s.ai.model)}" /></div><div class="field"><label for="ai-timeout">Timeout (seconds)</label><input id="ai-timeout" name="timeout" type="number" value="${esc(s.ai.timeout)}" /></div><div class="row-actions"><button class="btn btn-primary" type="submit">Save changes</button><button class="btn btn-ghost" type="button" data-action="test-key">Test the key</button><button class="btn btn-ghost" type="button" data-action="fill-gaps">Fill the gaps now</button></div></form></div></section>
         <section class="card"><div class="card-head"><h2>Demo data</h2><span class="badge badge-accent">Test account</span></div><div class="card-body"><p>Reset the Test account to the original demo rows. Changes in this account will be replaced.</p><button class="btn btn-danger" type="button" data-action="reset-demo">Reset demo data</button></div></section>`;
     }
     if (route.id === 'settings-ai') {
@@ -1158,11 +1278,47 @@ function settingsPage(route, state) {
       return `<section class="card"><div class="card-head"><h2>Responsibility areas</h2></div><div class="card-body"><form data-form="settings-areas"><div class="field"><label for="areas-list">Area names</label><input id="areas-list" name="options" type="text" value="${esc((s.areas.options ?? []).join(', '))}" /><p class="field-help">Separate names with commas.</p></div><div class="field"><label for="areas-fallback">Unknown owner</label><input id="areas-fallback" name="fallback" type="text" value="${esc(s.areas.fallback)}" /></div><button class="btn btn-primary" type="submit">Save changes</button></form></div></section>`;
     }
     if (route.id === 'settings-appearance') {
-      return `<section class="card"><div class="card-head"><h2>Appearance & theme</h2></div><div class="card-body"><form class="form-grid" data-form="settings-appearance"><div class="field"><label for="theme-primary">Primary colour</label><input id="theme-primary" name="primary" type="color" value="${esc(s.appearance.primary)}" /></div><div class="field"><label for="theme-radius-btn">Button radius</label><input id="theme-radius-btn" name="radiusBtn" type="range" min="0" max="20" value="${esc(s.appearance.radiusBtn)}" /></div><div class="field"><label for="theme-radius-card">Card radius</label><input id="theme-radius-card" name="radiusCard" type="range" min="0" max="28" value="${esc(s.appearance.radiusCard)}" /></div><div class="field"><label for="theme-glass">Glass opacity</label><input id="theme-glass" name="glass" type="range" min="0.1" max="1" step="0.05" value="${esc(s.appearance.glass)}" /></div><label class="checkbox-row"><input name="enableGlass" type="checkbox"${s.appearance.enableGlass ? ' checked' : ''} /> Enable glass</label><div class="row-actions"><button class="btn btn-primary" type="submit">Save theme</button><button class="btn btn-ghost" type="button" data-action="reset-theme">Restore default look</button></div></form></div></section>`;
+      return `<section class="card"><div class="card-head"><h2>Appearance & theme</h2></div><div class="card-body"><form class="form-grid" data-form="settings-appearance"><div class="field"><label for="theme-primary">Primary colour</label><input id="theme-primary" name="primary" type="color" value="${esc(s.appearance.primary)}" /></div><div class="field"><label for="theme-radius-btn">Button radius</label><input id="theme-radius-btn" name="radiusBtn" type="range" min="0" max="20" value="${esc(s.appearance.radiusBtn)}" /></div><div class="field"><label for="theme-radius-card">Card radius</label><input id="theme-radius-card" name="radiusCard" type="range" min="0" max="28" value="${esc(s.appearance.radiusCard)}" /></div><div class="field"><label for="theme-glass">Glass opacity</label><input id="theme-glass" name="glass" type="range" min="0.1" max="1" step="0.05" value="${esc(s.appearance.glass)}" /></div><label class="checkbox-row"><input name="enableGlass" type="checkbox"${s.appearance.enableGlass ? ' checked' : ''} /> Enable glass</label><div class="row-actions"><button class="btn btn-primary" type="submit">Save theme</button><button class="btn btn-ghost" type="button" data-action="reset-theme">Restore default look</button></div></form></div></section><section class="card" data-install-card><div class="card-head"><h2>Install as an app</h2><span class="badge badge-muted" id="install-status">Use browser menu</span></div><div class="card-body"><p>Install My Platform on this device. It opens like an app, works offline after the first load, and keeps reading the same local data in this browser.</p><div class="row-actions"><button class="btn btn-primary" type="button" data-action="install-app" id="install-app">Install My Platform</button></div><p class="field-help" id="install-help">The button uses the browser's <code>beforeinstallprompt</code> prompt when one is offered. Otherwise use the browser menu: Install app or Add to Home Screen. No installer and no account are needed.</p></div></section>`;
     }
     return '';
   })();
   return `${pageHead(route.title, 'Settings are stored on this device with the account.', `${storageBadge(storage)}<span class="badge badge-muted">${esc(state.account.name)}</span>`)}${settingsTabs(route)}${body}`;
+}
+
+const formatBytes = (value) => {
+  const size = Number(value) || 0;
+  if (!size) return 'Size unavailable';
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+// Task and bug detail share the same local-only attachment card. The actual
+// Blob lives in the `attachments` object store; this markup only receives the
+// metadata list copied into the task/bug row.
+function attachmentCard(ownerType, ownerId, attachments = []) {
+  const rows = (Array.isArray(attachments) ? attachments : []).map((raw) => {
+    const file = typeof raw === 'string' ? { name: raw, kind: 'file' } : raw;
+    const id = String(file?.id ?? '');
+    const kind = String(file?.kind ?? file?.type ?? 'file');
+    const meta = [kind, formatBytes(file?.size)].filter(Boolean).join(' · ');
+    return `<div class="row-item" data-attachment-row="${esc(id)}">
+      <span class="badge badge-muted">${esc(kind.toUpperCase())}</span>
+      <span class="row-main"><span class="row-title">${esc(file?.name ?? 'Attachment')}</span><span class="row-meta">${esc(meta)}</span></span>
+      <span class="row-actions">${id ? `<button class="btn btn-ghost btn-sm" type="button" data-action="attachment-open" data-id="${esc(id)}">Open</button><button class="btn btn-ghost btn-sm" type="button" data-action="attachment-remove" data-id="${esc(id)}">Remove</button>` : '<span class="badge badge-muted">Metadata only</span>'}</span>
+    </div>`;
+  }).join('');
+  return `<section class="card" data-attachments data-attachment-owner="${esc(ownerType)}" data-attachment-id="${esc(ownerId)}">
+    <div class="card-head"><h2>Attachments / deliverables</h2><span class="badge badge-muted">${Array.isArray(attachments) ? attachments.length : 0} local</span></div>
+    <div class="card-body">
+      ${rows ? `<div class="row-list" data-attachment-list>${rows}</div>` : empty('No attachments yet.')}
+      <label class="dropzone" data-attachment-dropzone>
+        <input class="sr-only" type="file" multiple data-attachment-input />
+        <span class="dropzone-title">Drop files here, paste a screenshot, or choose a file</span>
+        <span class="field-help">Files are saved in this browser's IndexedDB and are never uploaded. Remove soft-detaches the local file.</span>
+      </label>
+    </div>
+  </section>`;
 }
 
 function taskDetail(state, route) {
@@ -1211,7 +1367,7 @@ function taskDetail(state, route) {
         <section class="card"><div class="card-head"><h2>Where this stands</h2></div><div class="card-body"><dl class="details"><div><dt>Next action</dt><dd>${esc(task.status === 'Waiting' ? 'Wait for the QA check.' : task.status === 'Done' ? 'No further action.' : 'Continue the current step.')}</dd></div><div><dt>QA state</dt><dd>${task.notes?.includes('[已核') ? 'Checked' : task.notes?.includes('[待核') ? 'Waiting for QA' : 'Not sent yet'}</dd></div><div><dt>Review</dt><dd>${esc(reviewLabel)}</dd></div><div><dt>Note</dt><dd>${esc(task.notes || '—')}</dd></div></dl></div></section>
         <section class="card"><div class="card-head"><h2>Progress update</h2></div><div class="card-body"><form data-form="task-comment"><input type="hidden" name="id" value="${task.id}" /><div class="field"><label for="task-progress-comment">Add a comment or progress update</label><textarea id="task-progress-comment" name="body" rows="3" placeholder="What changed?" required></textarea><p class="field-help">Ctrl+Enter saves the progress update.</p></div><div class="row-actions"><button class="btn btn-primary btn-sm" type="submit">Save progress</button><label class="checkbox-row"><input name="real" type="checkbox" value="1" /> This is a real progress update</label></div></form></div></section>
         <section class="card"><div class="card-head"><h2>Details</h2><span class="badge badge-muted">Saved to this device</span></div><div class="card-body"><form class="stack" data-form="task-details" data-history="description,repro,expected,actual"><input type="hidden" name="id" value="${task.id}" /><div class="field"><label for="task-description-${task.id}">Description</label><textarea id="task-description-${task.id}" name="description" rows="3">${esc(task.description)}</textarea></div><div class="field"><label for="task-repro-${task.id}">Steps / repro</label><textarea id="task-repro-${task.id}" name="repro" rows="3">${esc(task.repro ?? task.steps ?? '')}</textarea></div><div class="field"><label for="task-expected-${task.id}">Expected</label><textarea id="task-expected-${task.id}" name="expected" rows="2">${esc(task.expected)}</textarea></div><div class="field"><label for="task-actual-${task.id}">Actual</label><textarea id="task-actual-${task.id}" name="actual" rows="2">${esc(task.actual)}</textarea></div><div class="row-actions"><button class="btn btn-primary btn-sm" type="submit">Save details</button></div></form></div></section>
-        <section class="card"><div class="card-head"><h2>Attachments / deliverables</h2></div><div class="card-body">${attachments.length ? `<div class="row-list">${attachments.map((file) => `<div class="row-item"><span class="badge badge-muted">FILE</span><span class="row-main"><span class="row-title">${esc(file.name)}</span><span class="row-meta">${esc(file.kind)}</span></span><button class="btn btn-ghost btn-sm" type="button" data-action="fake-download">Open</button></div>`).join('')}</div>` : empty('No attachments yet.')}</div></section>
+        ${attachmentCard('task', task.id, attachments)}
         <section class="card"><div class="card-head"><h2>Subtasks</h2><div class="row-actions"><span class="badge badge-muted">${subtasks.length}</span><button class="btn btn-ghost btn-sm" type="button" data-action="new-subtask" data-id="${task.id}" data-parent-id="${task.id}">New subtask</button></div></div><div class="card-body">${subtasks.length ? `<div class="row-list">${subtasks.map((row) => `<div class="row-item" data-subtask-id="${esc(row.id)}"><span class="key-link">↳ ${esc(row.key)}</span><span class="row-main"><span class="row-title"><a href="#/task/${row.id}">${esc(row.title)}</a></span></span>${statusBadge(row.workflow)}</div>`).join('')}</div>` : empty('No subtasks.')}</div></section>
         <section class="card"><div class="card-head"><h2>Depends on</h2><div class="row-actions"><span class="badge badge-muted">${dependencies.length}</span><button class="btn btn-ghost btn-sm" type="button" data-action="focus-dependencies" data-id="${task.id}">Edit in Plan</button></div></div><div class="card-body">${dependencies.length ? `<div class="row-list">${dependencies.map(({ ref, dependency, missing }) => missing ? `<div class="row-item" data-dependency-ref="${esc(ref)}"><span class="key-link">${esc(ref)}</span><span class="row-main"><span class="row-title">Dependency not found</span><span class="row-meta">Use a task key or ID in the Plan card.</span></span><span class="badge badge-warning">Missing</span></div>` : `<div class="row-item" data-dependency-ref="${esc(ref)}"><span class="key-link">${esc(dependency.key)}</span><span class="row-main"><span class="row-title"><a href="#/task/${dependency.id}">${esc(dependency.title)}</a></span><span class="row-meta">${esc(dependency.key)} · ${esc(dependency.status)}</span></span>${statusBadge(dependency.workflow ?? dependency.status)}</div>`).join('')}</div>` : empty('No dependencies.')}<p class="field-help">Edit this list in the Plan card using task keys or IDs, separated by commas.</p></div></section>
         <section class="card"><div class="card-head"><h2>Scheduled</h2><div class="row-actions"><span class="badge badge-muted">${scheduled.length}</span><button class="btn btn-ghost btn-sm" type="button" data-action="schedule-task" data-id="${task.id}" data-task-id="${task.id}">Schedule time for this</button></div></div><div class="card-body">${scheduled.length ? `<div class="row-list">${scheduled.map((event) => `<div class="row-item" data-event-id="${esc(event.id)}"><span class="row-date">${fmt(event.date)}</span><span class="row-main"><span class="row-title">${esc(event.title)}</span><span class="row-meta">${esc(event.kind)} ${esc(event.time)}</span></span></div>`).join('')}</div>` : empty('No scheduled time.')}</div></section>
@@ -1241,6 +1397,7 @@ function bugDetail(state, route) {
     <div class="detail-grid">
       <div class="detail-main">
         <section class="card"><div class="card-head"><h2>Description</h2></div><div class="card-body"><dl class="details"><div><dt>Description</dt><dd>${esc(bug.description)}</dd></div><div><dt>Steps to reproduce</dt><dd>${esc(bug.repro)}</dd></div><div><dt>Expected</dt><dd>${esc(bug.expected)}</dd></div><div><dt>Actual</dt><dd>${esc(bug.actual)}</dd></div><div><dt>Environment</dt><dd>${esc(bug.environment)}</dd></div></dl></div></section>
+        ${attachmentCard('bug', bug.id, bug.attachments ?? [])}
         <section class="card"><div class="card-head"><h2>Comments and activity</h2></div><div class="card-body"><div class="feed">${feed.map((row) => `<div class="feed-item"><div class="feed-head">${avatar(row.who ?? 'Amara')}<strong>${esc(row.who ?? 'Amara')}</strong><span>${fmtStamp(row.at)}</span>${row.kind === 'history' ? `<span class="badge badge-muted">${esc(row.field)}</span>` : ''}</div><p>${row.kind === 'comment' ? esc(row.body) : `${esc(row.field)}: ${esc(row.old || '—')} → ${esc(row.new || '—')}`}</p></div>`).join('') || empty('No activity yet.')}</div><form class="comment-form" data-form="bug-comment"><input type="hidden" name="id" value="${bug.id}" /><textarea name="body" rows="2" placeholder="Add a comment…" required></textarea><button class="btn btn-primary btn-sm" type="submit">Comment</button></form></div></section>
       </div>
       <aside class="detail-side">
@@ -1904,7 +2061,10 @@ export function mountView(route, query, state) {
   }
   if (route.id === 'files' && query.get('run') === '1') {
     const chart = document.getElementById('files-chart');
-    if (chart) renderBarChart(chart, { labels: ['To do', 'In progress', 'Waiting', 'Done'], values: [6, 4, 3, 5], title: 'Work items by status' });
+    if (chart) {
+      const series = buildChartSeries(state, query.get('table'), query.get('filter'));
+      renderBarChart(chart, { labels: series.labels, values: series.values, title: series.title });
+    }
   }
   if (route.id === 'project-detail') {
     const project = (state.projects ?? []).find((row) => row.key === route.params.key || row.id === route.params.key);
