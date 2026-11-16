@@ -10,6 +10,7 @@ import {
   taskWorkflowTargets,
   attachmentsFingerprint,
   taskReviewFingerprint,
+  exportStatus,
 } from './data.js';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
@@ -51,6 +52,26 @@ const STATUS_TONE = {
 const statusBadge = (status) => `<span class="badge badge-${STATUS_TONE[status] ?? 'muted'}">${esc(status)}</span>`;
 const STORAGE_TONE = { Granted: 'success', Denied: 'warning', Unsupported: 'muted' };
 const storageBadge = (storage) => `<span class="badge badge-${STORAGE_TONE[storage?.status] ?? 'muted'}">${esc(storage?.status ?? 'Unsupported')}</span>`;
+
+function exportAgeText(info) {
+  if (!info.lastExportAt) return 'No JSON backup has been exported from this account yet.';
+  if (info.daysSince === null) return 'The last export date could not be read.';
+  if (info.daysSince === 0) return 'The last export was today.';
+  return `The last export was ${info.daysSince} ${info.daysSince === 1 ? 'day' : 'days'} ago.`;
+}
+
+function exportReminder(currentState) {
+  const info = exportStatus(currentState);
+  if (!info.overdue) return '';
+  return `<div class="note" data-export-reminder>${icon('download', 16)}<span><strong>Back up your data.</strong> ${esc(exportAgeText(info))} Export a fresh JSON file to keep a copy on this device. <button class="link-button" type="button" data-action="export-json">Export a file</button></span></div>`;
+}
+
+function backupCard(currentState) {
+  const info = exportStatus(currentState);
+  const lastExport = info.lastExportAt ? fmtStamp(info.lastExportAt) : 'Never';
+  const reminder = exportReminder(currentState);
+  return `<section class="card" data-export-card><div class="card-head"><h2>Backup</h2><span class="badge badge-${info.overdue ? 'warning' : 'success'}">${info.overdue ? 'Export due' : 'Current'}</span></div><div class="card-body"><p>Download one JSON file containing every store in this account. It is created in your browser and is never uploaded.</p><dl class="details"><div><dt>Last export</dt><dd>${esc(lastExport)}</dd></div><div><dt>Device ID</dt><dd>${esc(currentState.deviceId ?? '—')}</dd></div><div><dt>File</dt><dd>JSON · all stores</dd></div></dl>${reminder}<div class="row-actions"><button class="btn btn-primary" type="button" data-action="export-json">${icon('download', 16)}Export a file</button></div></div></section>`;
+}
 const priorityClass = { Highest: 'danger', High: 'danger', Medium: 'warning', Low: 'success', Lowest: 'muted' };
 const priority = (value) => `<span class="priority priority-${priorityClass[value] ?? 'muted'}"><span class="priority-dot" aria-hidden="true"></span>${esc(value)}</span>`;
 
@@ -231,6 +252,7 @@ function home(state) {
   const load = teamLoadSeries(state);
   return `
     ${pageHead(greeting, new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }))}
+    ${exportReminder(state)}
     <div class="home-layout">
       <div class="home-column">
         <section class="card"><div class="card-body">${miniCalendar(state)}</div></section>
@@ -1200,7 +1222,7 @@ function settingsPage(route, state) {
   const storage = state.persistentStorage ?? { status: 'Unsupported' };
   const body = (() => {
     if (route.id === 'settings') {
-      return `${storagePersistCard(state)}<section class="card"><div class="card-head"><h2>AI connection</h2><span class="badge badge-${s.ai.status === 'Connected' ? 'success' : 'muted'}">${esc(s.ai.status)}</span></div><div class="card-body"><form class="form-grid" data-form="settings-ai"><div class="field"><label for="ai-key">API key</label><input id="ai-key" name="key" type="password" value="${esc(s.ai.key)}" /></div><div class="field"><label for="ai-model">Model</label><input id="ai-model" name="model" type="text" value="${esc(s.ai.model)}" /></div><div class="field"><label for="ai-timeout">Timeout (seconds)</label><input id="ai-timeout" name="timeout" type="number" value="${esc(s.ai.timeout)}" /></div><div class="row-actions"><button class="btn btn-primary" type="submit">Save changes</button><button class="btn btn-ghost" type="button" data-action="test-key">Test the key</button><button class="btn btn-ghost" type="button" data-action="fill-gaps">Fill the gaps now</button></div></form></div></section>
+      return `${backupCard(state)}${storagePersistCard(state)}<section class="card"><div class="card-head"><h2>AI connection</h2><span class="badge badge-${s.ai.status === 'Connected' ? 'success' : 'muted'}">${esc(s.ai.status)}</span></div><div class="card-body"><form class="form-grid" data-form="settings-ai"><div class="field"><label for="ai-key">API key</label><input id="ai-key" name="key" type="password" value="${esc(s.ai.key)}" /></div><div class="field"><label for="ai-model">Model</label><input id="ai-model" name="model" type="text" value="${esc(s.ai.model)}" /></div><div class="field"><label for="ai-timeout">Timeout (seconds)</label><input id="ai-timeout" name="timeout" type="number" value="${esc(s.ai.timeout)}" /></div><div class="row-actions"><button class="btn btn-primary" type="submit">Save changes</button><button class="btn btn-ghost" type="button" data-action="test-key">Test the key</button><button class="btn btn-ghost" type="button" data-action="fill-gaps">Fill the gaps now</button></div></form></div></section>
         <section class="card"><div class="card-head"><h2>Demo data</h2><span class="badge badge-accent">Test account</span></div><div class="card-body"><p>Reset the Test account to the original demo rows. Changes in this account will be replaced.</p><button class="btn btn-danger" type="button" data-action="reset-demo">Reset demo data</button></div></section>`;
     }
     if (route.id === 'settings-ai') {

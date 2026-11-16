@@ -4,7 +4,7 @@ import {
   transitionTask, reviewTask,
   createBug, updateBug, addBugComment, createEvent, deleteEvent, createPage,
   updatePage, softDeletePage, createProject, updateProject, createOrder,
-  closeOrder, saveSettings, restoreQaMark,
+  closeOrder, saveSettings, restoreQaMark, buildExport,
 } from './data.js';
 import { readLocation, routeForPath, groupRoutes, SETTINGS_LINKS } from './routes.js';
 import { renderView, mountView, renderAccountScreen, renderCreateDialog, canSendToQa, qaOwnerName } from './views.js';
@@ -423,6 +423,32 @@ async function resetDemoData() {
   }
 }
 
+function backupFilename(exportedAt) {
+  const stamp = String(exportedAt).replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+  return `my-platform-backup-${stamp}.json`;
+}
+
+// Build the JSON entirely in the browser, then hand it to the browser's normal
+// download flow. Nothing is fetched or uploaded.
+async function exportJsonBackup() {
+  try {
+    const payload = await buildExport();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = backupFilename(payload.exportedAt);
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    render();
+    toast('Backup downloaded. Keep the JSON file somewhere safe.', { tone: 'success' });
+  } catch (error) {
+    toast(error.message || 'The backup could not be exported.', { tone: 'danger' });
+  }
+}
+
 function isHttpLink(value) {
   try {
     const url = new URL(String(value ?? '').trim());
@@ -537,7 +563,8 @@ document.addEventListener('click', async (event) => {
   }
   else if (action === 'reset-demo') {
     openModal({ title: 'Reset demo data?', message: 'All changes in the Test account will be replaced by the original demo rows.', confirmLabel: 'Reset', tone: 'danger', onConfirm: () => { resetDemoData(); } });
-  } else if (action === 'task-toqa') sendToQA(id);
+  } else if (action === 'export-json') exportJsonBackup();
+  else if (action === 'task-toqa') sendToQA(id);
   else if (action === 'task-restore-mark') {
     try {
       const result = await restoreQaMark(id);

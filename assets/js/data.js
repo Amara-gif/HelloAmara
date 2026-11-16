@@ -1,4 +1,6 @@
 import {
+  DB_VERSION,
+  STORES,
   openAccountDb,
   getAll,
   getOne,
@@ -21,6 +23,9 @@ const STORAGE_PERSIST_META = {
   supported: 'storagePersistSupported',
   checkedAt: 'storagePersistCheckedAt',
 };
+const DEVICE_ID_META = 'deviceId';
+const LAST_EXPORT_META = 'lastExportAt';
+export const EXPORT_REMINDER_DAYS = 7;
 
 // The task detail page exposes the eleven workflow statuses while the task row
 // still stores one of the four board statuses. Only a workflow whose class
@@ -211,9 +216,20 @@ export async function start(account) {
   currentAccount = account;
   await openAccountDb(account.id);
   if (account.test) await seedDemo(false);
+  await ensureDeviceId();
   await requestPersistentStorage();
   state = await readState();
   return state;
+}
+
+// The device id is created once per local account database and reused for every
+// export. It is not a user account or a server identifier.
+async function ensureDeviceId() {
+  const existing = await getOne('meta', DEVICE_ID_META);
+  if (existing?.value) return existing.value;
+  const deviceId = newId('device');
+  await putRecord('meta', { key: DEVICE_ID_META, value: deviceId, updatedAt: nowIso() });
+  return deviceId;
 }
 
 // Ask the browser for exempt-from-eviction storage and keep the answer per account.
@@ -253,7 +269,10 @@ async function seedDemo(force) {
 
 export async function resetDemo() {
   if (!currentAccount?.test) throw new Error('Only the Test account has demo data.');
+  const device = await getOne('meta', DEVICE_ID_META);
   await seedDemo(true);
+  if (device?.value) await putRecord('meta', device);
+  else await ensureDeviceId();
   state = await readState();
   return state;
 }
@@ -290,6 +309,8 @@ async function readState() {
     ratings: meta.ratings ?? null,
     issueCounts: meta.issueCounts ?? null,
     seeded: meta.seedVersion ?? null,
+    deviceId: meta[DEVICE_ID_META] ?? null,
+    lastExportAt: meta[LAST_EXPORT_META] ?? null,
     persistentStorage: {
       supported,
       granted,
@@ -603,6 +624,27 @@ export async function closeOrder(id) {
   if (!order) return;
   await putRecord('orders', { ...order, open: false, updatedAt: nowIso() });
   state = await readState();
+}
+
+// Build the one-file JSON backup: schema metadata plus every object store,
+// including soft-deleted rows so a later import can merge without losing them.
+export async function buildExport({ exportedAt = nowIso() } = {}) {
+  const deviceId = await ensureDeviceId();
+  await putRecord('meta', { key: LAST_EXPORT_META, value: exportedAt, updatedAt: nowIso() });
+  const stores = {};
+  for (const name of Object.keys(STORES)) stores[name] = await getAll(name);
+  state = await readState();
+  return { schemaVersion: DB_VERSION, exportedAt, deviceId, stores };
+}
+
+export const exportAllStores = buildExport;
+
+export function exportStatus(currentState = state, now = new Date()) {
+  const lastExportAt = currentState?.lastExportAt ?? null;
+  const timestamp = lastExportAt ? Date.parse(lastExportAt) : NaN;
+  if (!Number.isFinite(timestamp)) return { lastExportAt, daysSince: null, overdue: true };
+  const daysSince = Math.floor(Math.max(0, now.getTime() - timestamp) / 86400000);
+  return { lastExportAt, daysSince, overdue: now.getTime() - timestamp >= EXPORT_REMINDER_DAYS * 86400000 };
 }
 
 export async function saveSettings(settings) {
