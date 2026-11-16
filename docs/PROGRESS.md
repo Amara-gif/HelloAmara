@@ -1,122 +1,187 @@
 # My Platform — Progress
 
-Updated: 2026-11-16
+Updated: 2026-11-16 (re-assessed against current code + `docs/Screen/` references)
+
+## What this app is
+
+**My Platform** is a local-first static single-page workspace for tasks, calendar, bugs,
+events, pages and projects. It is HTML, CSS and plain JS modules only. There is no backend
+database, no installer and no third-party CDN. Business data lives in the browser
+(IndexedDB per local account; account registry in LocalStorage). Export/import JSON is the
+only way to move data between devices.
+
+Target site: <https://amara-gif.github.io/HelloAmara/> — GitHub Pages is **not enabled** yet
+(owner action in repository Settings → Pages).
+
+Standards:
+
+- [BRIEF.md](BRIEF.md) — architecture, privacy, phases, design-system rules
+- [FEATURE-INVENTORY.md](FEATURE-INVENTORY.md) — routes, fields, acceptance checklist
+- [Screen/README.md](Screen/README.md) — old WorkDesk screenshots (reference, not pixel spec)
 
 ## Conventions
 
 - `docs/FEATURE-INVENTORY.md` is the single feature standard. Checklist items are ticked in the
   same commit that completes them.
-- One commit per phase. This log records the evidence for each phase.
+- Prefer small, independently verifiable commits. Track remaining work in [TASKS.md](TASKS.md).
 - `assets/css/tokens.css` and `assets/css/components.css` are the only style files. New or
   changed components must appear on `styleguide.html` in the same commit.
-- `node scripts/check-styles.mjs` is the design-system guard and runs in CI.
+- `node scripts/check-styles.mjs` is the design-system guard.
+- Phone layout is a **fresh** responsive design (drawer sidebar, stacked cards, ≥44 px targets).
+  Narrow screenshots in `docs/Screen/` show only the broken old sidebar — do not copy them.
 
-## Phase status
+## Phase status (re-assessed)
 
 | Phase | Scope | Status |
 |---|---|---|
-| P0 | Static shell, design system, inventory navigation | Done |
-| P1 | IndexedDB wrapper, schema versioning, `meta` store, tests | Next |
-| P2 | Tasks and calendar | Not started |
-| P3 | Bugs and events | Not started |
-| P4 | Export and import | Not started |
-| P5 | PWA and offline | Not started |
-| P6 | Scraper | Blocked on owner decision |
-| P7 | Release automation and rollback proof | Not started |
+| P0 | Static shell, design system, inventory navigation | **Done** (evidence retained below) |
+| P1 | IndexedDB wrapper, schema versioning, `meta`, tests | **Partial** — wrapper + demo seed + accounts exist; no fake-IDB tests, no upgrade test, no `storage.persist()` UI |
+| P2 | Tasks, Home, My work, Calendar, Projects, Pages | **Partial** — rich shells + demo data; many inventory interactions still incomplete |
+| P3 | Bugs and events | **Partial** — list/detail/create + event CRUD; workflow gates and inline edits incomplete |
+| P4 | Export and import | **Not started** |
+| P5 | PWA and offline | **Not started** |
+| P6 | Scraper | **Blocked** on owner (BRIEF §7 / §11) |
+| P7 | Release automation and rollback proof | **Not started** (also blocked on Pages enablement) |
 
-## P0 — Static shell
+**Note:** `docs/PROGRESS.md` previously marked P1–P7 as not started after P0. Commit
+`dfc5389` ("initial changes") added `db.js`, `data.js`, `demo-data.js`, `accounts.js` and a
+much richer `views.js`/`app.js`. The table above reflects that work honestly.
+
+## Architecture snapshot (current code)
+
+```
+index.html + styleguide.html
+assets/css/tokens.css, components.css
+assets/js/
+  accounts.js   local account registry (LocalStorage); Test account + empty accounts
+  db.js         IndexedDB open/CRUD; DB name my-platform-<accountId>; version 1
+  data.js       domain ops (tasks/bugs/events/pages/projects/orders/settings)
+  demo-data.js  seed rows for the Test account
+  app.js        hash router, drawer, create FAB, form handlers
+  routes.js     inventory §1 nav + detail patterns
+  views.js      screen renderers
+  chart.js, ui.js, icons.js, styleguide.js
+```
+
+No build step. Preview: `python3 -m http.server 4173` then open `/` and `/styleguide.html`.
+
+## Per-screen progress
+
+Statuses: **done** (substantially matches inventory + useful parts of the reference),
+**partial** (shell / some layout / some data, important gaps), **missing** (no meaningful UI).
+
+Phone/tablet PNGs are listed for completeness; they are not a layout target.
+
+| Screenshot | Route | Status | Gaps / notes |
+|---|---|---|---|
+| `01-home.png` | `#/` | partial | Greeting, mini calendar, agenda, team load, rating + Pareto charts render from IndexedDB/demo. Missing: day click → calendar month, agenda row dialog (Open / Join / Delete), true team-load chart, issue Pareto (current Pareto uses bug components), “more in the calendar” truncation link. Extra “Recent AI calls” card is fine for local-first. |
+| `02-mywork.png` | `#/mywork` | partial | Three queue cards with counts, links, Show all. Queue rules are simplified (`pendingDecision` / Waiting / Done+unreviewed). Missing: inventory note-based decision rules, per-row reason/next copy matching old app, `project=` scope. |
+| `03-pages.png` | `#/pages` | partial | Search, project filter, table, New page, per-row Edit/Delete. Missing: select-all + Delete selected, Open as primary action, richer empty/select chrome. |
+| `04-projects.png` | `#/projects` | partial | Chips, table, Add form, Archive/Restore, empty daily-feed disclosure. Missing: inline Edit/Save, drag reorder, open-count deep links with status filters, delete archived, real “What got done” feed, chip active state for per-project filter. |
+| `05-tasks.png` | `#/tasks` | partial | List view, Open/All scope, filters, Send to QA, Brief, key columns. Missing: multi-value filters, parent expand/collapse, board health, Delete shown, severity/component/module filters, Progress column from real progress text. |
+| `06-tasks-all.png` | `#/tasks?scope=all` | partial | Scope=all works on the same list. Same gaps as `05`. |
+| `07-calendar.png` | `#/calendar` | partial | Month grid (≤3 + overflow), Prev/This/Next, project filter, next-seven agenda, Join/Delete, Enable reminders permission. Missing: repeat occurrence expansion, reminder polling/notifications payload, click-day detail dialog. |
+| `08-bugs.png` | `#/bugs` | partial | Open/total/QA/past-due stats, search/filters, table → detail, Report a bug. Missing: multi-select delete, full sort set, priority filter, “More fields”. |
+| `09-chat.png` | `#/chat` | partial | Summary tiles, agent cards, Send order, To-do modal, close order. Missing: lead (Amara) summary strip, Copy brief, reopen closed orders, richer per-agent counters. “Open queue file” has no static equivalent (toast). |
+| `10-files.png` | `#/files` | partial | Chart Studio + Agent Configuration tabs; stub chart when “opened”. Missing: real local chart builder UX (no OS folder), pivots/palettes, agent-file edit. Folder open correctly refused for browser. |
+| `11-settings.png` | `#/settings` | partial | AI connection fields, Save, Test/Fill toasts, demo reset for Test account. Missing: dirty-state save bar, advanced polish instructions / never-send terms, real key test (no network AI yet — keep local-only). Shared secret file path does not apply. |
+| `12-task-detail.png` | `#/task/:id` | partial | Breadcrumb, badges, stands/progress/details/attachments/subtasks/scheduled/feed, workflow + review side cards. Mostly read-only field blocks. Missing: inline edits, Plan card save, Depends on, New subtask / Schedule presets into Create, Ctrl+V attachments, 11-status transition map + QA gates, Ctrl+Enter comment, Analyze / real progress parse. |
+| `13-bug-detail.png` | `#/bug/:id` | partial | Description blocks, activity feed, workflow, details. Missing: inline edits, TRANSITIONS map + fixer≠verifier, attachments paste/drop, Ctrl+Enter. |
+| `14-project-hello-amara.png` | `#/project/TAG` | partial | Overview bars/snapshot, Work items + Pages tabs. Modules tab link falls back to Overview. Missing: Edit project, donut, 14-day actions, Coming up + Schedule, daily record, Modules page, Rule Book / xBuild tabs for TAG, tab reorder. |
+| `15-project-market-review.png` | `#/project/MR` | partial | Same overview shell as other projects. **Market Review tool tabs** (Products, Review Update, Find user voices, Daily Digest, Issue Workbench, PQA Tracker, Report Deck, Issue Review, Analysis Report) are **missing**. P6 scraper-related tabs stay blocked. |
+| `16-bugs-new.png` | `#/bugs/new` | partial | Dedicated create form with SLA due on create. Inventory expects auto-open of Create dialog Bug tab + “Open the bug form”. Prefill query params incomplete. |
+| `17-settings-ai.png` | `#/settings/ai` | partial | Flat numeric limits form. Missing: Summary/Progress/Comment/Benchmark section layout, toggles, Restore defaults. |
+| `18-settings-appearance.png` | `#/settings/appearance` | partial | Primary colour (applied), radius/glass fields, Save/Restore. Missing: palette presets, live preview strip, applying radius/glass tokens, Install-as-app (needs P5). |
+| `19-rating-trend.png` | `#/rating-trend` | partial | Full-page line chart from `meta.ratings`. Copy / Choose products / Smooth are placeholders. |
+| `20-page-editor.png` | `#/pages/new`, `#/page/:id/edit` | partial | Title/project/body save + pages rail. Missing: formatting toolbar, live preview, AI polish, attachments, revision history, print/PDF/Image. |
+| `21-tasks-board.png` | `#/tasks?view=board` | partial | Four columns, cards, Move to select. Missing: Send to QA on cards, board health disclosure, Waiting→In Review only when owner is QA (uses Delphine Roth name today). |
+| `t01-tasks-768.png` | (narrow ref) | n/a | Old app: sidebar overlay hides content. **Do not copy.** My Platform already uses a drawer ≥900 px breakpoint. |
+| `t02-home-390.png` | (narrow ref) | n/a | Same — colour/type reference only. |
+| `m01-home.png` … `m04-task-detail.png` | (phone refs) | n/a | Old phone layout unusable. Drawer + `table-stack` exist; further phone polish (stacked detail, 44 px audit) remains. |
+
+### Related routes without a dedicated screenshot
+
+| Route | Status | Notes |
+|---|---|---|
+| Account picker (pre-shell) | done | Local accounts; Test account seeds demo data; empty accounts get empty DBs. |
+| `#/page/:id` | partial | View + rail + simple markdown; no revisions/export. |
+| `#/settings/language` etc. | partial | Forms save to `meta.settings`; depth below inventory §3.15. |
+| `#/go/T-n`, `#/go/WD-n` | missing | Not routed. |
+| Tasks `view=calendar` / `timeline` | missing | Placeholder empty cards only. |
+| Export / import JSON | missing | Sidebar copy mentions export; no implementation. |
+| PWA (`manifest`, `sw.js`) | missing | |
+
+## What is already working
+
+- Design system: tokens, components, styleguide, `check-styles.mjs`, self-hosted charts/toasts/dialogs
+- Hash router + inventory §1 sidebar order; Settings sub-links expand on `/settings*`
+- Project sub-links under Projects (non-archived); In-progress badge updates on tasks routes
+- Mobile drawer (inert when closed, focus trap, Escape, backdrop)
+- Context menu disabled; Create FAB → Task/Bug/Event dialogs persist to IndexedDB
+- Per-account IndexedDB (`my-platform-<id>`) with soft deletes (`deletedAt`) and `updatedAt`
+- Demo seed for Test account (projects, tasks, bugs, events, pages, team, orders, ratings)
+- CRUD paths for tasks/bugs/events/pages/projects/orders/settings used by the shells
+- Home/My work/Tasks/Bugs/Calendar/Team/Projects/Pages/Settings screens render with live local data
+
+## Acceptance checklist
+
+- Previously checked in P0: **3 of 161** (sidebar order, settings sub-links, context menu).
+- Additional shell behaviours now present but **not yet reticked** in the inventory file:
+  create FAB, project sub-links, drawer (phone), demo Test account (not `--demo` CLI).
+- Remaining checklist items: still the large majority; tick in FEATURE-INVENTORY.md when a
+  task’s acceptance criteria land.
+
+## Known blockers / owner decisions
+
+1. **GitHub Pages not enabled** — cannot publish or complete P7 deploy verification until the
+   owner turns on Pages (branch `main`, `/`).
+2. **P6 scraper** — blocked until the owner approves Option A and/or a no-install Option B
+   method (BRIEF §7). Do not schedule scraper implementation tasks.
+3. **UI language** — Chinese, English, or both (BRIEF §11). Current UI is English.
+4. **“Stop server”** — no static equivalent; leave unchecked. Sidebar shows date + Switch account.
+5. **AI network calls** — default is no third-party receipt of user data. Settings/Test key and
+   Analyze/Polish stay local stubs until the owner decides otherwise.
+6. **OS folder open / Excel Chart Studio / CoreMail** — Windows desktop features; replace with
+   browser-safe alternatives or explicit “not available” messaging (already partly done).
+
+## P0 — Static shell (evidence retained)
 
 ### Inventory alignment
 
-- Sidebar groups and order match inventory §1 exactly:
-  - no label: Home `/`, My work `/mywork`, Pages `/pages`
-  - Projects: Projects `/projects`
-  - Work: All work items `/tasks`, Calendar `/calendar`
-  - System: Bugs `/bugs`, Team `/chat`, Tools & Files `/files`, Settings `/settings`
-- The six Settings sub-links appear under Settings on every `/settings*` page, in inventory
-  order: AI inputs & limits, Language rules, Snapshots, Dispatch rules, Responsibility areas,
-  Appearance & theme.
-- Per-project sidebar links and the In-progress task count badge are wired as empty/zero for
-  now; they start working with the IndexedDB layer (P1/P2).
-- The invented Overview, Data & backup and About pages were removed. Home now uses the §3.1
-  card set, My work uses the three §3.4 queues, Settings pages use the §3.15 shared tabs, and
-  every other page shows its inventory screen contract instead of an invented layout.
-- Old `/api/*` endpoints are treated as local IndexedDB operations with the same behaviour and
-  fields, as the owner requested.
-- Context menu is disabled on every page (inventory §7 Shell).
-- Static-app difference: "Stop server" (§7 Shell) has no equivalent and is left unchecked.
+- Sidebar groups and order match inventory §1.
+- Six Settings sub-links on every `/settings*` page.
+- Invented Overview / Data & backup / About pages were removed in P0; later commit wired real
+  inventory-shaped shells with local data.
+- Context menu disabled on every page.
+- “Stop server” left unchecked (static app).
 
 ### Design system
 
-- `assets/css/tokens.css` holds 78 variables: colour, type, spacing, radius, shadow, layout,
-  breakpoints and motion. Legacy palette values are the light-theme defaults:
-  text `--color-text`, secondary text `--color-text-secondary`, divider `--color-divider`,
-  card header `--color-card-header`, band `--color-band`.
-- `assets/css/components.css` is the only layout/component stylesheet: `.btn` variants,
-  `.card` / `.card-head` / `.card-body`, `.field`, `.table`, `.badge`, `.tabs`, `.nav`,
-  `.chart-box`, toasts, dialogs and page layout.
-- `assets/js/chart.js` is the only chart renderer (self-hosted SVG, no CDN).
-- `assets/js/ui.js` is the only toast/dialog implementation.
-- `styleguide.html` shows every token and the required components, plus working tabs, chart,
-  toast and dialog demos.
-- `scripts/check-styles.mjs` rejects inline `style=` attributes, hex/rgb/hsl literals outside
-  `tokens.css`, px font sizes, literal font families, inline `<style>` blocks and extra CSS
-  files. It also checks that the 13 required components exist in `components.css` and on the
-  style guide.
-- CSS limitation documented: `@media` cannot read custom properties, so `components.css`
-  mirrors the four `--bp-*` values literally.
+- `tokens.css` holds colour, type, spacing, radius, shadow, layout, breakpoints, motion.
+- `components.css` is the only layout/component stylesheet.
+- `chart.js` / `ui.js` are the only chart and toast/dialog modules.
+- `styleguide.html` shows tokens and required components.
+- `scripts/check-styles.mjs` rejects inline styles, colour literals outside tokens, px font
+  sizes, literal font families, extra CSS files; checks required components.
 
-### Acceptance checklist
+### Verification evidence (P0)
 
-- Checked in this phase: **3 of 161**. Remaining: **158**.
-  - [x] Every page shows the sidebar with groups and links exactly as §1, in order.
-  - [x] Opening any `/settings*` page expands the six settings sub-links under Settings.
-  - [x] Right-click context menu is disabled on every page.
-- Not yet checked in Shell: project sub-links and drag reorder, task count badge, fold/pin,
-  floating reopen, stop server, revision/build polling, create FAB, `/go/` redirects, install
-  prompt, demo mode. They need the data layer, PWA work or a static-app decision.
+- Browser: Chromium (Playwright), local static server.
+- 19 routes × 4 viewport widths (360, 390, 768, 1280) = **76 combinations** — no page-level
+  horizontal scroll; interactive targets ≥ 44 px; no console/page errors.
+- Network: same-origin only (HTML, CSS, JS, favicon). No third-party request.
+- Legacy palette computed: text `rgb(29, 29, 31)`, secondary `rgb(110, 110, 115)`,
+  divider `rgb(217, 217, 222)`, card head `rgb(74, 144, 217)`, band `rgb(251, 243, 213)`.
+- Mobile drawer: closed with `inert`, opens focusing first nav link, Escape returns focus.
+- Screenshots under `docs/evidence/p0-*.png`.
 
 ### Publishing
 
-- P0 is pushed to `main`.
-- GitHub Pages is **not enabled** on the repository yet. The available integration token can
-  read pushes but cannot create the Pages site (`403 Resource not accessible by integration`).
-- Owner action once: repository Settings → Pages → Source **Deploy from a branch** →
-  branch `main`, folder `/ (root)`. The target URL is
-  <https://amara-gif.github.io/HelloAmara/>.
-- No deploy workflow was kept: a branch deployment needs no workflow, and a workflow that
-  creates the Pages site fails until Pages is enabled. P7 adds the release pipeline after
-  Pages and the release host are available.
+- P0 was pushed to `main`. Pages still not enabled (`403` for integration token).
+- Owner action: Settings → Pages → Deploy from branch `main`, folder `/ (root)`.
 
-### Verification evidence
+## Next
 
-- Browser: Chromium (Playwright), local static server.
-- 19 routes × 4 viewport widths (360, 390, 768, 1280) = **76 combinations**.
-- Every combination: no page-level horizontal scroll, no interactive element wider than the
-  viewport, every visible link/button at least 44 px in both dimensions, no console or page
-  errors.
-- Sidebar order and labels checked programmatically on every route; settings sub-links checked
-  present and hidden outside `/settings*`.
-- Network: 11 requests, all same origin (`index.html`, 2 CSS, 7 JS modules, favicon). No
-  third-party request.
-- Legacy palette computed in the browser: text `rgb(29, 29, 31)`, secondary `rgb(110, 110, 115)`,
-  divider `rgb(217, 217, 222)`, card head `rgb(74, 144, 217)`, band `rgb(251, 243, 213)`.
-- Mobile drawer: closed with `inert`, opens with the first nav link focused, Escape returns
-  focus to the menu button.
-- Style check: passed; 11 source files scanned, 13 required components covered.
-- Style guide: colour swatches, type/space/radius/shadow/breakpoint/layout/motion tokens,
-  chart, tabs and UI demos render at 360 and 1280.
-- Screenshots:
-  - `docs/evidence/p0-home-{360,390,768,1280}.png`
-  - `docs/evidence/p0-home-1280-dark.png`
-  - `docs/evidence/p0-drawer-390.png`
-  - `docs/evidence/p0-settings-{360,1280}.png`
-  - `docs/evidence/p0-styleguide-{360,1280}.png`
-
-### Next
-
-1. P1: IndexedDB wrapper and schema, then wire the Projects nav sub-links and the In-progress
-   count badge.
-2. P2: All work items, Home, My work, Calendar, Projects and Pages screens.
-3. Decide with the owner whether the static app keeps a "Stop server" equivalent (it has no
-   server process) and confirm the UI language.
+Ordered backlog: [TASKS.md](TASKS.md). Start with P1 leftovers (tests, persist), then
+screen/feature slices that stay independently verifiable. Skip Pages enablement, deploy,
+P6 scraper, and any spend/delete-remote-data work.
