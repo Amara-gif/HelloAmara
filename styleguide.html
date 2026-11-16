@@ -732,6 +732,127 @@
         </div>
       </section>
 
+      <section class="section" aria-labelledby="sg-pills-title">
+        <div class="section-head">
+          <h2 id="sg-pills-title">Selectable pills</h2>
+          <p>
+            Tabs, chips and nav links share one selected look: the
+            <code>--color-nav-active</code> fill, <code>--color-text</code> and
+            <code>--font-weight-semibold</code>. Hover uses the surface tokens and stays separate,
+            so a hovered unselected chip never looks selected. The
+            <code>is-hover</code> and <code>is-focus-visible</code> preview classes show the
+            states without interaction; <code>aria-selected</code>,
+            <code>aria-current</code> and <code>aria-pressed</code> are the real selected hooks,
+            with <code>is-active</code> kept as an alias.
+          </p>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <div class="table-wrap">
+              <table class="table">
+                <caption class="sr-only">Default, hover, selected and focus-visible states for tabs, chips and nav links</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Control</th>
+                    <th scope="col">Default</th>
+                    <th scope="col">Hover</th>
+                    <th scope="col">Selected</th>
+                    <th scope="col">Focus-visible</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th scope="row">Tab</th>
+                    <td>
+                      <div class="tabs" role="tablist" aria-label="Tab default state">
+                        <button class="tab" type="button" role="tab" aria-selected="false">Overview</button>
+                        <button class="tab" type="button" role="tab" aria-selected="false">History</button>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="tabs" role="tablist" aria-label="Tab hover state">
+                        <button class="tab is-hover" type="button" role="tab" aria-selected="false">Overview</button>
+                        <button class="tab" type="button" role="tab" aria-selected="false">History</button>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="tabs" role="tablist" aria-label="Tab selected state">
+                        <button class="tab" type="button" role="tab" aria-selected="true">Overview</button>
+                        <button class="tab" type="button" role="tab" aria-selected="false">History</button>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="tabs" role="tablist" aria-label="Tab focus-visible state">
+                        <button class="tab is-focus-visible" type="button" role="tab" aria-selected="false">Overview</button>
+                        <button class="tab" type="button" role="tab" aria-selected="false">History</button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Chip</th>
+                    <td>
+                      <div class="chip-row">
+                        <span class="chip">Battery</span>
+                        <span class="chip">Display</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="chip-row">
+                        <span class="chip is-hover">Battery</span>
+                        <span class="chip">Display</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="chip-row">
+                        <button class="chip" type="button" aria-pressed="true">Battery</button>
+                        <span class="chip">Display</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="chip-row">
+                        <button class="chip is-focus-visible" type="button">Battery</button>
+                        <span class="chip">Display</span>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Nav link</th>
+                    <td>
+                      <a class="nav-link" href="#sg-pills">
+                        <span class="icon" aria-hidden="true">▤</span>
+                        <span>Overview</span>
+                        <span class="badge badge-accent nav-count">4</span>
+                      </a>
+                    </td>
+                    <td>
+                      <a class="nav-link is-hover" href="#sg-pills">
+                        <span class="icon" aria-hidden="true">▤</span>
+                        <span>Overview</span>
+                        <span class="badge badge-accent nav-count">4</span>
+                      </a>
+                    </td>
+                    <td>
+                      <a class="nav-link" href="#sg-pills" aria-current="page">
+                        <span class="icon" aria-hidden="true">▤</span>
+                        <span>Overview</span>
+                        <span class="badge badge-accent nav-count">4</span>
+                      </a>
+                    </td>
+                    <td>
+                      <a class="nav-link is-focus-visible" href="#sg-pills">
+                        <span class="icon" aria-hidden="true">▤</span>
+                        <span>Overview</span>
+                        <span class="badge badge-accent nav-count">4</span>
+                      </a>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="section" aria-labelledby="sg-board-title">
         <div class="section-head">
           <h2 id="sg-board-title">Board and board health</h2>

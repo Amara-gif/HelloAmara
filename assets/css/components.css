@@ -393,7 +393,7 @@ code {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  min-height: var(--tap-size);
+  min-height: var(--control-height);
   padding: 0 var(--space-3);
   border-radius: var(--radius-sm);
   color: var(--color-text-secondary);
@@ -402,22 +402,20 @@ code {
   transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
 }
 
-.nav-link:hover {
+.nav-link:hover,
+.nav-link.is-hover {
   background: var(--color-surface-muted);
   color: var(--color-text);
-}
-
-.nav-link[aria-current="page"] {
-  background: var(--color-nav-active);
-  color: var(--color-text);
-  font-weight: var(--font-weight-semibold);
 }
 
 .nav-link .icon {
   color: var(--color-text-faint);
 }
 
-.nav-link[aria-current="page"] .icon {
+.nav-link[aria-current] .icon,
+.nav-link[aria-selected="true"] .icon,
+.nav-link[aria-pressed="true"] .icon,
+.nav-link.is-active .icon {
   color: var(--color-accent-strong);
 }
 
@@ -448,7 +446,7 @@ code {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: var(--tap-size);
+  min-height: var(--control-height);
   padding: 0 var(--space-2);
   border-radius: var(--radius-sm);
   color: var(--color-text-secondary);
@@ -463,14 +461,10 @@ code {
   font-weight: var(--font-weight-semibold);
 }
 
-.nav-sublink:hover {
+.nav-sublink:hover,
+.nav-sublink.is-hover {
   background: var(--color-surface-muted);
   color: var(--color-text);
-}
-
-.nav-sublink[aria-current="page"] {
-  color: var(--color-accent-strong);
-  font-weight: var(--font-weight-semibold);
 }
 
 .sidebar-note {
@@ -1704,7 +1698,7 @@ input[type="radio"],
 }
 
 .tab {
-  min-height: var(--tap-size);
+  min-height: var(--btn-height-sm);
   padding: 0 var(--space-4);
   border: 0;
   border-radius: var(--radius-pill);
@@ -1712,20 +1706,16 @@ input[type="radio"],
   color: var(--color-text-secondary);
   font: inherit;
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
   white-space: nowrap;
+  transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
 }
 
-.tab:hover {
-  color: var(--color-text);
-}
-
-.tab[aria-selected="true"],
-.tab[aria-current="page"] {
+.tab:hover,
+.tab.is-hover {
   background: var(--color-surface);
   color: var(--color-text);
-  box-shadow: var(--shadow-sm);
 }
 
 /* ----------------------------------------------------------------- Chart */
@@ -2446,7 +2436,7 @@ input[type="radio"],
 .chip {
   display: inline-flex;
   align-items: center;
-  min-height: var(--tap-size);
+  min-height: var(--btn-height-sm);
   padding: 0 var(--space-4);
   border: var(--border-width) solid var(--color-divider);
   border-radius: var(--radius-pill);
@@ -2454,11 +2444,15 @@ input[type="radio"],
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
+  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease),
+    color var(--duration) var(--ease);
 }
 
-.chip.is-active,
-.chip:hover {
-  background: var(--color-nav-active);
+/* Hover is a separate rule from the shared selected rule below. */
+.chip:hover,
+.chip.is-hover {
+  border-color: var(--color-divider-strong);
+  background: var(--color-surface-muted);
   color: var(--color-text);
 }
 
@@ -2496,6 +2490,44 @@ input[type="radio"],
 .chip-remove:hover:not(:disabled):not([aria-disabled="true"]) {
   background: var(--color-accent-soft);
   color: var(--color-accent-strong);
+}
+
+/* ------------------------------------------------------ Selectable pills */
+/* Tabs, chips and nav links share one selected fill, text colour and weight.
+   Keep the .is-active class as an alias for older markup. Hover stays on the
+   separate per-component rules above, so a hovered chip is not "selected". */
+.tab[aria-selected="true"],
+.tab[aria-current],
+.tab[aria-pressed="true"],
+.tab.is-active,
+.chip[aria-selected="true"],
+.chip[aria-current],
+.chip[aria-pressed="true"],
+.chip.is-active,
+.nav-link[aria-selected="true"],
+.nav-link[aria-current],
+.nav-link[aria-pressed="true"],
+.nav-link.is-active,
+.nav-sublink[aria-selected="true"],
+.nav-sublink[aria-current],
+.nav-sublink[aria-pressed="true"],
+.nav-sublink.is-active {
+  border-color: var(--color-nav-active);
+  background: var(--color-nav-active);
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.tab:focus-visible,
+.tab.is-focus-visible,
+.chip:focus-visible,
+.chip.is-focus-visible,
+.nav-link:focus-visible,
+.nav-link.is-focus-visible,
+.nav-sublink:focus-visible,
+.nav-sublink.is-focus-visible {
+  outline: calc(var(--border-width) * 2) solid var(--color-focus);
+  outline-offset: var(--border-width);
 }
 
 .avatar {
@@ -2633,6 +2665,12 @@ input[type="radio"],
     min-width: var(--tap-size);
     min-height: var(--tap-size);
     padding-inline: var(--space-3);
+  }
+
+  /* Pills keep the compact height on desktop but grow to a full tap target. */
+  .tab,
+  .chip {
+    min-height: var(--tap-size);
   }
 }
 
@@ -3611,6 +3649,11 @@ details.card > summary::-webkit-details-marker {
     min-width: var(--tap-size);
     min-height: var(--tap-size);
     padding-inline: var(--space-3);
+  }
+
+  .tab,
+  .chip {
+    min-height: var(--tap-size);
   }
 
   .btn-link {
