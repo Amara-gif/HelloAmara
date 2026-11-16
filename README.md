@@ -16,6 +16,8 @@ this environment cannot enable it.
 - The server only serves static files; no server-side database and no accounts.
 - No third-party scripts, fonts or images. Everything is in this repository.
 - Phone and computer data are independent. Export/import JSON is the only sync path.
+- After the first load the app shell is cached by a service worker, so it opens offline;
+  data stays in the same IndexedDB. A new release shows “New version available, reload”.
 
 Requirements live in two documents:
 
@@ -50,8 +52,9 @@ npm test
 `npm test` runs `node --test` and creates a temporary database per test. It covers
 `put`/`get`/`getAll`/`clear` for every store in `assets/js/db.js`, the version 1 schema plus a
 version 1 → 2 upgrade, soft-delete filtering through `assets/js/data.js` (live rows only),
-Test-account boot with demo data, JSON export, validated merge/replace import, and the nav
-In-progress badge count/show/hide helper. Tests live in `tests/` and clean up their databases.
+Test-account boot with demo data, JSON export, validated merge/replace import, the nav
+In-progress badge count/show/hide helper, the PWA manifest/icon cache list, service-worker
+update detection and the install prompt. Tests live in `tests/` and clean up their databases.
 
 ## UI rules
 
@@ -79,7 +82,11 @@ assets/js/views.js       screen shells
 assets/js/icons.js       inline icon set
 assets/js/chart.js       the only chart renderer
 assets/js/ui.js          the only toast and dialog implementation
+assets/js/pwa.js         service worker + install prompt lifecycle
 assets/js/styleguide.js  token and demo rendering for the style guide
+manifest.webmanifest     installed-app name and self-hosted icons
+sw.js                    versioned offline app-shell cache
+assets/icons/            self-hosted 192/512/maskable PWA icons
 scripts/check-styles.mjs design-system guard
 tests/                   Node tests for IndexedDB CRUD, schema, soft deletes and JSON import
 package.json             test script and the fake-indexeddb dev dependency
@@ -94,4 +101,5 @@ Phase P0 (static shell) is complete. The sidebar matches inventory §1, the Sett
 expand on every `/settings*` page, and three acceptance items are checked. P1's data layer is
 complete: Node-based IndexedDB CRUD and schema-upgrade tests plus per-account persistent-storage
 request/status (`Granted` / `Denied` / `Unsupported`, shown in the sidebar and Settings).
-Phases P1–P7 are tracked in [docs/PROGRESS.md](docs/PROGRESS.md).
+P4 export/import and P5 PWA/offline are implemented; phases P1–P7 are tracked in
+[docs/PROGRESS.md](docs/PROGRESS.md).

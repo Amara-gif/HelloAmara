@@ -39,7 +39,7 @@ Standards:
 | P2 | Tasks, Home, My work, Calendar, Projects, Pages | **Partial** — rich shells + demo data; many inventory interactions still incomplete |
 | P3 | Bugs and events | **Partial** — list/detail/create + event CRUD; workflow gates and inline edits incomplete |
 | P4 | Export and import | **Done** — one-file JSON export + reminder; validated merge import with added/updated/skipped confirmation and an explicit replace-all choice (`docs/IMPORT.md`) |
-| P5 | PWA and offline | **Not started** |
+| P5 | PWA and offline | **Done (code + Node tests)** — self-hosted manifest/icons; versioned service worker precaches the app shell and falls back to it offline; update toast posts `SKIP_WAITING` then reloads; Appearance install button uses the captured `beforeinstallprompt`. Manual Chromium installability check is left for the release pass |
 | P6 | Scraper | **Blocked** on owner (BRIEF §7 / §11) |
 | P7 | Release automation and rollback proof | **Not started** (also blocked on Pages enablement) |
 
@@ -59,6 +59,7 @@ assets/js/
                 + per-account navigator.storage.persist() status in meta
   demo-data.js  seed rows for the Test account
   app.js        hash router, drawer, create FAB, form handlers
+  pwa.js        service-worker registration, update hand-off, install prompt
   nav-badge.js  In-progress task count + nav badge visibility
   routes.js     inventory §1 nav + detail patterns
   views.js      screen renderers
@@ -66,6 +67,8 @@ assets/js/
 ```
 
 No build step. Preview: `python3 -m http.server 4173` then open `/` and `/styleguide.html`.
+`manifest.webmanifest` and `sw.js` live at the site root; the service worker only handles
+same-origin GET requests and caches the local HTML/CSS/JS app shell.
 
 ## Per-screen progress
 
@@ -93,7 +96,7 @@ Phone/tablet PNGs are listed for completeness; they are not a layout target.
 | `15-project-market-review.png` | `#/project/MR` | partial | Same overview shell as other projects. **Market Review tool tabs** (Products, Review Update, Find user voices, Daily Digest, Issue Workbench, PQA Tracker, Report Deck, Issue Review, Analysis Report) are **missing**. P6 scraper-related tabs stay blocked. |
 | `16-bugs-new.png` | `#/bugs/new` | partial | Dedicated create form with SLA due on create. Inventory expects auto-open of Create dialog Bug tab + “Open the bug form”. Prefill query params incomplete. |
 | `17-settings-ai.png` | `#/settings/ai` | partial | Flat numeric limits form. Missing: Summary/Progress/Comment/Benchmark section layout, toggles, Restore defaults. |
-| `18-settings-appearance.png` | `#/settings/appearance` | partial | Primary colour (applied), radius/glass fields, Save/Restore. Missing: palette presets, live preview strip, applying radius/glass tokens, Install-as-app (needs P5). |
+| `18-settings-appearance.png` | `#/settings/appearance` | partial | Primary colour (applied), radius/glass fields, Save/Restore, Install-as-app using the captured browser prompt. Missing: palette presets, live preview strip, applying radius/glass tokens. |
 | `19-rating-trend.png` | `#/rating-trend` | partial | Full-page line chart from `meta.ratings`. Copy / Choose products / Smooth are placeholders. |
 | `20-page-editor.png` | `#/pages/new`, `#/page/:id/edit` | partial | Title/project/body save + pages rail. Missing: formatting toolbar, live preview, AI polish, attachments, revision history, print/PDF/Image. |
 | `21-tasks-board.png` | `#/tasks?view=board` | partial | Four columns, cards, Move to select. Missing: Send to QA on cards, board health disclosure, Waiting→In Review only when owner is QA (uses Delphine Roth name today). |
@@ -111,7 +114,7 @@ Phone/tablet PNGs are listed for completeness; they are not a layout target.
 | `#/go/T-n`, `#/go/WD-n` | done | Resolves case-insensitive `T-`/`WD-` keys to task/bug detail; unknown keys show Not found. |
 | Tasks `view=calendar` / `timeline` | missing | Placeholder empty cards only. |
 | Export / import JSON | done | Settings → Backup exports one JSON file and imports it with validation, merge summary and an explicit replace-all choice. See `docs/IMPORT.md`. |
-| PWA (`manifest`, `sw.js`) | missing | |
+| PWA (`manifest`, `sw.js`) | done | Manifest name/short name **My Platform**, self-hosted 192/512/maskable icons, offline app-shell cache, update toast + reload, and Appearance install prompt. Data stays in the same IndexedDB across updates. |
 
 ## What is already working
 
@@ -130,6 +133,8 @@ Phone/tablet PNGs are listed for completeness; they are not a layout target.
 - Per-account persistent storage: `navigator.storage.persist()` is called on account boot,
   its boolean result is stored in that account's `meta`, and the status appears in the
   sidebar note and Settings
+- PWA: self-hosted manifest/icons, versioned service-worker cache with offline navigation
+  fallback, "New version available, reload" toast, and a browser install prompt on Appearance
 - Demo seed for Test account (projects, tasks, bugs, events, pages, team, orders, ratings)
 - CRUD paths for tasks/bugs/events/pages/projects/orders/settings used by the shells
 - Home/My work/Tasks/Bugs/Calendar/Team/Projects/Pages/Settings screens render with live local data
@@ -137,6 +142,8 @@ Phone/tablet PNGs are listed for completeness; they are not a layout target.
 ## Acceptance checklist
 
 - Previously checked in P0: **3 of 161** (sidebar order, settings sub-links, context menu).
+- P5 install prompt is now checked in the inventory; offline navigation and the update flow are
+  exercised by Node tests plus the service-worker source checks in `tests/pwa-manifest-sw.test.js`.
 - Additional shell behaviours now present but **not yet reticked** in the inventory file:
   create FAB, project sub-links, drawer (phone), demo Test account (not `--demo` CLI).
 - Remaining checklist items: still the large majority; tick in FEATURE-INVENTORY.md when a

@@ -14,6 +14,7 @@ import { updateTaskBadge } from './nav-badge.js';
 import { openModal, toast } from './ui.js';
 import { taskFormPatch } from './task-form.js';
 import { dueReminders, notificationText } from './schedule.js';
+import { startPwa, applyUpdate, setupInstallPrompt, UPDATE_MESSAGE } from './pwa.js';
 
 const shell = document.getElementById('shell');
 const authScreen = document.getElementById('auth-screen');
@@ -40,6 +41,7 @@ let createTab = 'task';
 let createClose = null;
 let reminderTimer = null;
 const notifiedReminders = new Set();
+const installPrompt = setupInstallPrompt({ onChange: () => syncInstallUi() });
 
 // Pin always wins if an older session somehow stored a folded, pinned sidebar.
 if (sidebarPinned && sidebarFolded) {
@@ -244,6 +246,25 @@ function applyAppearance(settings) {
   }
 }
 
+function syncInstallUi() {
+  const status = document.getElementById('install-status');
+  if (!status) return;
+  const available = installPrompt.available;
+  status.textContent = available ? 'Ready to install' : 'Use browser menu';
+  status.className = `badge badge-${available ? 'success' : 'muted'}`;
+}
+
+function offerUpdate(registration) {
+  toast(UPDATE_MESSAGE, {
+    tone: 'info',
+    duration: 0,
+    action: {
+      label: 'Reload',
+      onClick: () => applyUpdate(registration, { reload: () => window.location.reload() }),
+    },
+  });
+}
+
 function render() {
   const { path, query } = readLocation();
   const state = getState();
@@ -255,6 +276,7 @@ function render() {
   updateNav(route);
   applyAppearance(state.settings);
   mountView(route, query, state);
+  syncInstallUi();
   setDrawer(false);
   if (accountButton) accountButton.textContent = state.account.name;
   if (storageStatus) storageStatus.textContent = state.persistentStorage?.status ?? 'Unsupported';
@@ -691,7 +713,16 @@ document.addEventListener('click', async (event) => {
     input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     input?.focus();
   }
-  else if (action === 'reset-demo') {
+  else if (action === 'install-app') {
+    const choice = await installPrompt.prompt();
+    if (!choice) {
+      toast('This browser has not offered an install prompt yet. Use the browser menu to install My Platform.', { tone: 'info' });
+    } else if (choice.outcome === 'accepted') {
+      toast('My Platform was installed on this device.', { tone: 'success' });
+    } else {
+      toast('Install was dismissed. You can try again from Appearance.', { tone: 'info' });
+    }
+  } else if (action === 'reset-demo') {
     openModal({ title: 'Reset demo data?', message: 'All changes in the Test account will be replaced by the original demo rows.', confirmLabel: 'Reset', tone: 'danger', onConfirm: () => { resetDemoData(); } });
   } else if (action === 'export-json') exportJsonBackup();
   else if (action === 'import-json') document.querySelector('[data-import-file]')?.click();
@@ -909,4 +940,5 @@ window.addEventListener('hashchange', render);
 accountButton?.addEventListener('click', () => { clearActiveAccount(); window.location.reload(); });
 
 applySidebarState();
+startPwa({ onUpdate: offerUpdate });
 boot();
