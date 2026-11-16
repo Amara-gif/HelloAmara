@@ -235,6 +235,7 @@ function home(state) {
   const hour = new Date().getHours();
   const greeting = `${hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'}, Amara`;
   const load = teamLoadSeries(state);
+  const ratingRows = visibleRatingSeries(state.ratings);
   return `
     ${pageHead(greeting, new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }))}
     <div class="home-layout">
@@ -258,7 +259,7 @@ function home(state) {
           <div class="card-head"><h2>Rating trend · live</h2><a class="card-link-small" href="#/rating-trend">Open big</a></div>
           <div class="card-body">
             <div class="chart-box" id="home-rating"></div>
-            <div class="chart-legend">${(state.ratings?.series ?? []).slice(0, 4).map((item, index) => `<span class="chart-legend-item"><span class="chart-dot chart-line-${index + 1}"></span>${esc(item.name)}</span>`).join('')}</div>
+            <div class="chart-legend">${ratingRows.slice(0, 4).map((item, index) => `<span class="chart-legend-item"><span class="chart-dot chart-line-${index + 1}"></span>${esc(item.name)}</span>`).join('')}</div>
           </div>
         </section>
         <section class="card">
@@ -1511,11 +1512,43 @@ function bugNew() {
     </div></div></section>`;
 }
 
+// Rating preferences live beside the chart data in meta.ratings: a hidden-name
+// list survives product renames and a lineStyle switch applies to every chart.
+export function ratingPreferences(ratings) {
+  const hidden = new Set((Array.isArray(ratings?.hidden) ? ratings.hidden : []).map((name) => String(name)));
+  return { hidden, lineStyle: ratings?.lineStyle === 'straight' ? 'straight' : 'smooth' };
+}
+
+export function visibleRatingSeries(ratings) {
+  const { hidden } = ratingPreferences(ratings);
+  return (ratings?.series ?? []).filter((item) => !hidden.has(String(item.name)));
+}
+
 function ratingPage(state) {
+  const ratings = state.ratings;
+  const all = ratings?.series ?? [];
+  const visible = visibleRatingSeries(ratings);
+  const { lineStyle } = ratingPreferences(ratings);
+  const styleButton = (value, label) => {
+    const active = lineStyle === value;
+    return `<button class="btn ${active ? 'btn-primary' : 'btn-ghost'}" type="button" data-action="rating-line-style" data-style="${value}" aria-pressed="${active}">${label}</button>`;
+  };
   return `
-    ${pageHead('Rating trend', 'Full-page product rating trend.', `<button class="btn" type="button" data-action="toast-copy">Copy image</button>`)}
-    <section class="card"><div class="card-head"><h2>Rating trend · live</h2><span class="badge badge-muted">14 days</span></div><div class="card-body"><div class="chart-box" id="rating-chart"></div><div class="chart-legend">${(state.ratings?.series ?? []).map((item, index) => `<span class="chart-legend-item"><span class="chart-dot chart-line-${index + 1}"></span>${esc(item.name)}</span>`).join('')}</div></div></section>
-    <section class="card"><div class="card-head"><h2>Choose products</h2></div><div class="card-body"><div class="row-actions">${(state.ratings?.series ?? []).map((item) => `<span class="badge badge-muted">${esc(item.name)}</span>`).join('')}<button class="btn btn-ghost btn-sm" type="button" data-action="toast-copy">Everything</button><button class="btn btn-ghost btn-sm" type="button" data-action="toast-copy">Smooth curve</button></div></div></section>`;
+    ${pageHead('Rating trend', 'Two weeks at a time — choose products, then copy the chart when you need it.', `<a class="btn btn-ghost" href="#/">${icon('arrow', 16)}Back to Home</a>`)}
+    <section class="card">
+      <div class="card-head"><h2>Rating trend · live</h2><span class="badge badge-muted">14 days</span></div>
+      <div class="card-body stack">
+        <div class="chart-box" id="rating-chart"></div>
+        ${visible.length ? `<div class="chart-legend">${visible.map((item, index) => `<span class="chart-legend-item"><span class="chart-dot chart-line-${index + 1}"></span>${esc(item.name)}</span>`).join('')}</div>` : empty('No products are selected. Choose products to show their lines.')}
+        <div class="row-actions">
+          <button class="btn" type="button" data-action="rating-copy">Copy image</button>
+          <button class="btn btn-ghost" type="button" data-action="rating-choose">Choose products</button>
+          ${styleButton('smooth', 'Smooth curve')}
+          ${styleButton('straight', 'Straight line')}
+        </div>
+        <p class="field-help" data-rating-count>${visible.length} of ${all.length} product${all.length === 1 ? '' : 's'} on the chart. The selection and line style stay in this account on this device.</p>
+      </div>
+    </section>`;
 }
 
 function notFound(path) {
@@ -1577,7 +1610,12 @@ export function renderView(route, query, state) {
 export function mountView(route, query, state) {
   if (route.id === 'home') {
     const rating = document.getElementById('home-rating');
-    if (rating && state.ratings) renderLineChart(rating, { labels: state.ratings.labels, series: state.ratings.series.slice(0, 4), title: 'Rating trend' });
+    if (rating && state.ratings) renderLineChart(rating, {
+      labels: state.ratings.labels,
+      series: visibleRatingSeries(state.ratings).slice(0, 4),
+      lineStyle: ratingPreferences(state.ratings).lineStyle,
+      title: 'Rating trend',
+    });
     const team = document.getElementById('home-team-load');
     if (team) {
       const rows = teamLoadSeries(state);
@@ -1599,7 +1637,12 @@ export function mountView(route, query, state) {
   }
   if (route.id === 'rating-trend' && state.ratings) {
     const chart = document.getElementById('rating-chart');
-    if (chart) renderLineChart(chart, { labels: state.ratings.labels, series: state.ratings.series, title: 'Rating trend' });
+    if (chart) renderLineChart(chart, {
+      labels: state.ratings.labels,
+      series: visibleRatingSeries(state.ratings),
+      lineStyle: ratingPreferences(state.ratings).lineStyle,
+      title: 'Rating trend',
+    });
   }
   if (route.id === 'files' && query.get('run') === '1') {
     const chart = document.getElementById('files-chart');

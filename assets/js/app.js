@@ -4,11 +4,12 @@ import {
   transitionTask, reviewTask,
   createBug, updateBug, transitionBug, addBugComment, softDeleteBugs, createEvent, deleteEvent, createPage,
   updatePage, softDeletePage, createProject, updateProject, createOrder,
-  closeOrder, reopenOrder, saveSettings, restoreQaMark, AI_LIMIT_DEFAULTS,
+  closeOrder, reopenOrder, saveSettings, saveMeta, restoreQaMark, AI_LIMIT_DEFAULTS,
 } from './data.js';
 import { readLocation, routeForPath, groupRoutes, SETTINGS_LINKS } from './routes.js';
-import { renderView, mountView, renderAccountScreen, renderCreateDialog, bugPrefill, canSendToQa, qaOwnerName, agentBrief, renderAgentTodo, PALETTE_PRESETS } from './views.js';
+import { renderView, mountView, renderAccountScreen, renderCreateDialog, bugPrefill, canSendToQa, qaOwnerName, agentBrief, renderAgentTodo, PALETTE_PRESETS, ratingPreferences } from './views.js';
 import { icon } from './icons.js';
+import { copyChartImage } from './chart.js';
 import { updateTaskBadge } from './nav-badge.js';
 import { openModal, toast } from './ui.js';
 import { taskFormPatch } from './task-form.js';
@@ -746,6 +747,66 @@ async function copyAgentBrief(owner) {
   }
 }
 
+function openRatingProductsDialog() {
+  const ratings = getState().ratings;
+  const all = ratings?.series ?? [];
+  if (!all.length) {
+    toast('No rating products are available in this account yet.', { tone: 'danger' });
+    return;
+  }
+  const { hidden } = ratingPreferences(ratings);
+  const body = document.createElement('div');
+  body.className = 'stack';
+  body.innerHTML = `<p class="field-help">Tick the products to show on the chart. Everything selects all products; Save keeps the choice in this account on this device.</p>
+    <div class="row-list" data-rating-product-list>${all.map((item) => `<label class="checkbox-row"><input type="checkbox" name="ratingProduct" value="${escAttr(item.name)}"${hidden.has(String(item.name)) ? '' : ' checked'} /><span>${escAttr(item.name)}</span></label>`).join('')}</div>
+    <div class="row-actions"><button class="btn btn-ghost btn-sm" type="button" data-rating-everything>Everything</button><span class="field-help" data-rating-selected aria-live="polite"></span></div>`;
+  const boxes = [...body.querySelectorAll('input[name="ratingProduct"]')];
+  const count = body.querySelector('[data-rating-selected]');
+  const sync = () => {
+    if (count) count.textContent = `${boxes.filter((box) => box.checked).length} of ${boxes.length} selected`;
+  };
+  boxes.forEach((box) => box.addEventListener('change', sync));
+  body.querySelector('[data-rating-everything]')?.addEventListener('click', () => {
+    boxes.forEach((box) => { box.checked = true; });
+    sync();
+    boxes[0]?.focus();
+  });
+  sync();
+  openModal({
+    title: 'Choose products',
+    content: body,
+    confirmLabel: 'Save',
+    cancelLabel: 'Close',
+    onConfirm: async () => {
+      const selected = new Set(boxes.filter((box) => box.checked).map((box) => box.value));
+      const nextHidden = all.map((item) => String(item.name)).filter((name) => !selected.has(name));
+      await saveMeta('ratings', { ...ratings, hidden: nextHidden });
+      render();
+      toast(`${selected.size} of ${all.length} product${all.length === 1 ? '' : 's'} on the chart.`, { tone: 'success' });
+    },
+  });
+}
+
+async function setRatingLineStyle(value) {
+  const ratings = getState().ratings;
+  if (!ratings) return;
+  const lineStyle = value === 'straight' ? 'straight' : 'smooth';
+  if (ratings.lineStyle === lineStyle) return;
+  await saveMeta('ratings', { ...ratings, lineStyle });
+  render();
+  toast(lineStyle === 'straight' ? 'Straight line style saved.' : 'Smooth curve style saved.', { tone: 'success' });
+}
+
+async function copyRatingImage() {
+  const chart = document.getElementById('rating-chart');
+  try {
+    const format = await copyChartImage(chart);
+    toast(format === 'svg' ? 'Chart SVG copied to the clipboard.' : 'Chart image copied to the clipboard.', { tone: 'success' });
+  } catch {
+    toast('Copy image is not available in this browser.', { tone: 'danger' });
+  }
+}
+
 document.addEventListener('click', async (event) => {
   const openAccount = event.target.closest('[data-open-account]');
   if (openAccount) { setActiveAccount(openAccount.dataset.openAccount); window.location.reload(); return; }
@@ -846,6 +907,9 @@ document.addEventListener('click', async (event) => {
   } else if (action === 'print') window.print();
   else if (action === 'open-folder') toast('Folder access is not available in a browser.', { tone: 'danger' });
   else if (action === 'fake-download') toast('Attachment placeholder — file storage is a later phase.');
+  else if (action === 'rating-choose') openRatingProductsDialog();
+  else if (action === 'rating-line-style') await setRatingLineStyle(actionEl.dataset.style);
+  else if (action === 'rating-copy') await copyRatingImage();
   else if (action === 'toast-copy') toast('Copied actions are placeholders in this build.');
   else if (action === 'add-dispatch-rule') addDispatchRule(actionEl.closest('form'));
   else if (action === 'remove-dispatch-rule') removeDispatchRule(actionEl);

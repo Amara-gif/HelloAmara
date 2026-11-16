@@ -505,10 +505,10 @@ Data root: `ROOT` = parent of App; production `WORK = ROOT/Data`, `DATA = WORK/d
 - [ ] Agent Configuration tab renders agent-file management (agent_config_page).
 
 ### Rating trend (/rating-trend)
-- [ ] Full-page chart loads via `/api/trend/live` with product and day-window parameters.
-- [ ] Choose products dialog saves the selection (`/api/trend/products`); Everything selects all.
-- [ ] Smooth/straight line toggle persists (`/api/trend/line-style`).
-- [ ] Copy image copies the chart.
+- [x] Full-page chart renders from local `meta.ratings` (the local replacement for `/api/trend/live`).
+- [x] Choose products dialog saves the hidden-series selection to `meta.ratings`; Everything selects all.
+- [x] Smooth/straight line toggle changes the renderer and persists in `meta.ratings`.
+- [x] Copy image copies a canvas PNG or SVG to the clipboard, with a toast when the browser refuses.
 
 ### Settings
 - [ ] /settings shows masked key, model, timeout; Test the key round-trips (`/api/settings/test`).
