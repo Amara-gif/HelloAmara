@@ -21,6 +21,7 @@ import {
 } from './data.js';
 import { BOARD_COLUMNS, columnForTask } from './board-columns.js';
 import { allTaskCount, inProgressTaskCount, openTaskCount, openTasks } from './work-counts.js';
+import { badge, priorityTone, severityTone, statusTone, storageTone } from './tones.js';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const today = () => {
@@ -52,17 +53,9 @@ const pageTags = (value) => (Array.isArray(value) ? value : String(value ?? '').
 const initials = (name) => String(name || '?').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 const avatar = (name, size = '') => `<span class="avatar ${size}" title="${esc(name)}">${esc(String(name).startsWith('Test') ? 'T' : initials(name))}</span>`;
 
-const STATUS_TONE = {
-  Done: 'success', Verified: 'success', Closed: 'success',
-  'In progress': 'accent', Fixed: 'accent',
-  Waiting: 'warning', Reopened: 'warning', Triaged: 'warning',
-  'Wont fix': 'muted', Rejected: 'danger', Duplicate: 'muted', Deferred: 'muted',
-  New: 'band', Open: 'band', 'To do': 'band', 'To Do': 'band',
-};
-const statusBadge = (status) => `<span class="badge badge-${STATUS_TONE[status] ?? 'muted'}">${esc(status)}</span>`;
+const statusBadge = (status) => badge(status, statusTone(status));
 const taskStatusBadge = (task) => statusBadge(workflowForStoredStatus(task?.status, task?.workflow));
-const STORAGE_TONE = { Granted: 'success', Denied: 'warning', Unsupported: 'muted' };
-const storageBadge = (storage) => `<span class="badge badge-${STORAGE_TONE[storage?.status] ?? 'muted'}">${esc(storage?.status ?? 'Unsupported')}</span>`;
+const storageBadge = (storage) => badge(storage?.status ?? 'Unsupported', storageTone(storage?.status));
 
 function exportAgeText(info) {
   if (!info.lastExportAt) return 'No JSON backup has been exported from this account yet.';
@@ -82,10 +75,9 @@ function backupCard(currentState) {
   const lastExport = info.lastExportAt ? fmtStamp(info.lastExportAt) : 'Never';
   const reminder = exportReminder(currentState);
   const importHelp = 'Choose a My Platform JSON backup. Nothing is written until you review the added, updated and skipped counts and confirm. Merge is the default; Replace all is a separate, explicit choice.';
-  return `<section class="card" data-export-card><div class="card-head"><h2>Backup</h2><span class="badge badge-${info.overdue ? 'warning' : 'success'}">${info.overdue ? 'Export due' : 'Current'}</span></div><div class="card-body"><p>Download one JSON file containing every store in this account, or restore one from another device. Files are read and written in your browser and are never uploaded.</p><dl class="details"><div><dt>Last export</dt><dd>${esc(lastExport)}</dd></div><div><dt>Device ID</dt><dd>${esc(currentState.deviceId ?? '—')}</dd></div><div><dt>File</dt><dd>JSON · all stores</dd></div></dl>${reminder}<div class="field"><label for="import-backup-file">Import a backup</label><input id="import-backup-file" type="file" accept="application/json,.json" data-import-file /><p class="field-help">${esc(importHelp)}</p></div><p class="field-help">Imports merge rows by id; the row with the newer <code>updatedAt</code> wins. A soft-deleted row (<code>deletedAt</code>) only hides a local row when its <code>updatedAt</code> is newer. Equal or older rows are skipped.</p><div class="row-actions"><button class="btn btn-primary" type="button" data-action="export-json">${icon('download', 16)}Export a file</button></div></div></section>`;
+  return `<section class="card" data-export-card><div class="card-head"><h2>Backup</h2>${badge(info.overdue ? 'Export due' : 'Current', info.overdue ? 'warning' : 'success')}</div><div class="card-body"><p>Download one JSON file containing every store in this account, or restore one from another device. Files are read and written in your browser and are never uploaded.</p><dl class="details"><div><dt>Last export</dt><dd>${esc(lastExport)}</dd></div><div><dt>Device ID</dt><dd>${esc(currentState.deviceId ?? '—')}</dd></div><div><dt>File</dt><dd>JSON · all stores</dd></div></dl>${reminder}<div class="field"><label for="import-backup-file">Import a backup</label><input id="import-backup-file" type="file" accept="application/json,.json" data-import-file /><p class="field-help">${esc(importHelp)}</p></div><p class="field-help">Imports merge rows by id; the row with the newer <code>updatedAt</code> wins. A soft-deleted row (<code>deletedAt</code>) only hides a local row when its <code>updatedAt</code> is newer. Equal or older rows are skipped.</p><div class="row-actions"><button class="btn btn-primary" type="button" data-action="export-json">${icon('download', 16)}Export a file</button></div></div></section>`;
 }
-const priorityClass = { Highest: 'danger', High: 'danger', Medium: 'warning', Low: 'success', Lowest: 'muted' };
-const priority = (value) => `<span class="priority priority-${priorityClass[value] ?? 'muted'}"><span class="priority-dot" aria-hidden="true"></span>${esc(value)}</span>`;
+const priority = (value) => `<span class="priority priority-${priorityTone(value)}"><span class="priority-dot" aria-hidden="true"></span>${esc(value)}</span>`;
 
 function pageHead(title, subtitle, actions = '') {
   return `<header class="page-head page-head-row"><div><h1>${esc(title)}</h1>${subtitle ? `<p class="lede">${esc(subtitle)}</p>` : ''}</div>${actions ? `<div class="page-actions">${actions}</div>` : ''}</header>`;
@@ -1828,13 +1820,6 @@ function mrIssueCategoryRows(issues) {
     .sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
 }
 
-function mrSeverityBadge(severity) {
-  const tone = String(severity ?? '').startsWith('S1') ? 'danger'
-    : String(severity ?? '').startsWith('S2') ? 'warning'
-      : String(severity ?? '').startsWith('S3') ? 'accent' : 'muted';
-  return `<span class="badge badge-${tone}">${esc(severity)}</span>`;
-}
-
 function projectProductsTab(state, project) {
   const products = mrProductRows(state);
   const issues = mrIssueRows(state);
@@ -1896,7 +1881,7 @@ function projectIssueReviewTab(state, project) {
               <td data-label="Product">${esc(issue.product)}</td>
               <td data-label="Category">${esc(issue.category)}</td>
               <td data-label="Summary"><span class="table-title">${esc(issue.summary)}</span></td>
-              <td data-label="Severity">${mrSeverityBadge(issue.severity)}</td>
+              <td data-label="Severity">${badge(issue.severity, severityTone(issue.severity))}</td>
               <td data-label="Status">${statusBadge(issue.status)}</td>
               <td data-label="Owner"><span class="assignee">${avatar(issue.owner)}${esc(issue.owner)}</span></td>
               <td data-label="Found">${fmt(issue.found)}</td>
