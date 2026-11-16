@@ -360,8 +360,8 @@ Data root: `ROOT` = parent of App; production `WORK = ROOT/Data`, `DATA = WORK/d
 - [ ] Dragging a sidebar project link reorders projects and persists via `/api/projects/reorder`.
 - [ ] `/tasks` nav link shows a badge with the count of In-progress tasks (hidden at 0).
 - [x] Opening any `/settings*` page expands the six settings sub-links under Settings.
-- [ ] Sidebar folds via the fold button, state persists across pages (localStorage); pinned sidebar refuses to fold with a toast.
-- [ ] Folded sidebar shows a floating reopen button.
+- [x] Sidebar folds via the fold button, state persists across pages (localStorage); pinned sidebar refuses to fold with a toast.
+- [x] Folded sidebar shows a floating reopen button.
 - [ ] Sidebar footer shows today's date and a **Stop server** button that POSTs `/api/quit` and stops the app.
 - [ ] Every page polls `/api/rev` (~3 s) and reloads on data change, but never while the user is typing.
 - [ ] Every page polls `/api/build` (~15 s) and reloads when the code build stamp changes.

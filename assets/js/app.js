@@ -18,15 +18,44 @@ const sidebar = document.getElementById('sidebar');
 const backdrop = document.getElementById('backdrop');
 const menuToggle = document.getElementById('menu-toggle');
 const menuLabel = menuToggle?.querySelector('.sr-only');
+const foldButton = document.getElementById('sidebar-fold');
+const pinButton = document.getElementById('sidebar-pin');
+const reopenButton = document.getElementById('sidebar-reopen');
 const main = document.getElementById('view');
 const fab = document.getElementById('fab');
 const todayEl = document.getElementById('today-date');
 const storageStatus = document.getElementById('storage-status');
 const accountButton = document.getElementById('account-name');
 const desktopQuery = window.matchMedia('(min-width: 900px)');
+const SIDEBAR_FOLD_KEY = 'my-platform.sidebar.folded';
+const SIDEBAR_PIN_KEY = 'my-platform.sidebar.pinned';
+let sidebarFolded = readPreference(SIDEBAR_FOLD_KEY);
+let sidebarPinned = readPreference(SIDEBAR_PIN_KEY);
 let lastFocused = null;
 let createTab = 'task';
 let createClose = null;
+
+// Pin always wins if an older session somehow stored a folded, pinned sidebar.
+if (sidebarPinned && sidebarFolded) {
+  sidebarFolded = false;
+  writePreference(SIDEBAR_FOLD_KEY, false);
+}
+
+function readPreference(key) {
+  try {
+    return window.localStorage.getItem(key) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function writePreference(key, value) {
+  try {
+    window.localStorage.setItem(key, String(value));
+  } catch {
+    // Storage can be unavailable in private or embedded contexts; keep the session state.
+  }
+}
 
 function settingsSublist() {
   return `<li><ul class="nav-sublist" data-settings-nav hidden>${SETTINGS_LINKS.map((route) => `<li><a class="nav-sublink" href="#${route.path}" data-route="${route.id}">${route.label}</a></li>`).join('')}</ul></li>`;
@@ -87,6 +116,61 @@ function syncSidebarMode() {
   } else if (!document.body.classList.contains('nav-open')) {
     sidebar.setAttribute('inert', '');
   }
+  applySidebarState();
+}
+
+function applySidebarState({ focus = null } = {}) {
+  const folded = sidebarFolded && !isDrawerMode();
+  document.body.classList.toggle('sidebar-folded', folded);
+  document.body.classList.toggle('sidebar-pinned', sidebarPinned);
+
+  if (foldButton) {
+    foldButton.setAttribute('aria-expanded', String(!folded));
+    const label = folded ? 'Unfold sidebar' : 'Fold sidebar';
+    foldButton.setAttribute('aria-label', label);
+    foldButton.title = label;
+  }
+
+  if (pinButton) {
+    pinButton.setAttribute('aria-pressed', String(sidebarPinned));
+    const label = sidebarPinned ? 'Unpin sidebar' : 'Pin sidebar open';
+    pinButton.setAttribute('aria-label', label);
+    pinButton.title = label;
+  }
+
+  if (reopenButton) {
+    reopenButton.hidden = !folded;
+    reopenButton.setAttribute('aria-expanded', String(!folded));
+  }
+
+  if (focus === 'reopen') reopenButton?.focus();
+  else if (focus === 'fold') foldButton?.focus();
+}
+
+function setSidebarFolded(folded) {
+  if (folded && sidebarPinned) {
+    toast('The sidebar is pinned open. Unpin it before folding.', { tone: 'danger' });
+    pinButton?.focus();
+    return false;
+  }
+  sidebarFolded = Boolean(folded);
+  writePreference(SIDEBAR_FOLD_KEY, sidebarFolded);
+  applySidebarState({ focus: sidebarFolded ? 'reopen' : 'fold' });
+  return true;
+}
+
+function toggleSidebarPin() {
+  sidebarPinned = !sidebarPinned;
+  writePreference(SIDEBAR_PIN_KEY, sidebarPinned);
+  if (sidebarPinned && sidebarFolded) {
+    sidebarFolded = false;
+    writePreference(SIDEBAR_FOLD_KEY, false);
+  }
+  applySidebarState();
+  toast(
+    sidebarPinned ? 'Sidebar pinned open. It will not fold.' : 'Sidebar unpinned. You can fold it again.',
+    { tone: sidebarPinned ? 'success' : 'info' }
+  );
 }
 
 function trapTab(event) {
@@ -438,6 +522,12 @@ document.addEventListener('submit', async (event) => {
 });
 
 menuToggle?.addEventListener('click', () => setDrawer(!document.body.classList.contains('nav-open')));
+foldButton?.addEventListener('click', () => {
+  if (isDrawerMode()) return;
+  setSidebarFolded(!sidebarFolded);
+});
+pinButton?.addEventListener('click', toggleSidebarPin);
+reopenButton?.addEventListener('click', () => setSidebarFolded(false));
 backdrop.addEventListener('click', () => setDrawer(false));
 nav.addEventListener('click', (event) => { if (event.target.closest('a')) setDrawer(false); });
 document.getElementById('skip-link')?.addEventListener('click', (event) => { event.preventDefault(); main.focus(); main.scrollIntoView(); });
@@ -452,4 +542,5 @@ window.addEventListener('hashchange', render);
 
 accountButton?.addEventListener('click', () => { clearActiveAccount(); window.location.reload(); });
 
+applySidebarState();
 boot();

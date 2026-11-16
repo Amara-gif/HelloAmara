@@ -163,6 +163,57 @@ code {
   }
 }
 
+/* Fold and pin are desktop-only; the drawer below 900 px keeps the old controls. */
+.sidebar-tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  margin-top: calc(-1 * var(--space-2));
+}
+
+.sidebar-tool {
+  color: var(--color-text-secondary);
+}
+
+.sidebar-tool[aria-pressed="true"],
+.sidebar-tool[aria-pressed="true"]:hover {
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+}
+
+.sidebar-reopen {
+  display: inline-flex;
+  box-shadow: var(--shadow-lg);
+}
+
+@media (max-width: 899px) {
+  .sidebar-tools,
+  .sidebar-reopen {
+    display: none;
+  }
+}
+
+@media (min-width: 900px) {
+  .shell > .sidebar-reopen {
+    position: fixed;
+    top: var(--space-2);
+    left: var(--space-4);
+    z-index: 60;
+  }
+
+  body.sidebar-folded .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.sidebar-folded .sidebar {
+    display: none;
+  }
+
+  body.sidebar-folded .topbar {
+    padding-inline-start: calc(var(--space-8) + var(--tap-size));
+  }
+}
+
 .backdrop {
   position: fixed;
   inset: 0;

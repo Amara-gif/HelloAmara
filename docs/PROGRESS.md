@@ -119,6 +119,8 @@ Phone/tablet PNGs are listed for completeness; they are not a layout target.
 - Hash router + inventory §1 sidebar order; Settings sub-links expand on `/settings*`
 - Project sub-links under Projects (non-archived); In-progress badge recomputed on every route
 - Mobile drawer (inert when closed, focus trap, Escape, backdrop)
+- Desktop sidebar fold/pin with LocalStorage persistence, a pinned-state toast and a floating
+  reopen control; the drawer below 900 px is unchanged
 - Context menu disabled; Create FAB → Task/Bug/Event dialogs persist to IndexedDB
 - Per-account IndexedDB (`my-platform-<id>`) with soft deletes (`deletedAt`) and `updatedAt`
 - Node tests (`npm test`, fake-indexeddb): CRUD for every store, version 1 → 2 schema upgrade,
