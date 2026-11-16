@@ -469,8 +469,31 @@ function pagesPage(state, query) {
     </div>`;
 }
 
+function projectEditRow(project, archived) {
+  const cancelHref = archived ? pageUrl('/projects', { archived: 1 }) : '#/projects';
+  const id = esc(project.id);
+  return `<tr class="project-row is-editing" data-project-row data-project-id="${id}">
+    <td colspan="7" data-label="Edit project">
+      <form class="form-grid" data-form="project-edit" data-history="name,key,description,owner,status,start,due,keywords">
+        <input type="hidden" name="id" value="${id}" />
+        <input type="hidden" name="archived" value="${archived ? 1 : 0}" />
+        <div class="field"><label for="project-edit-key-${id}">Key</label><input id="project-edit-key-${id}" name="key" type="text" maxlength="6" value="${esc(project.key)}" required /></div>
+        <div class="field"><label for="project-edit-name-${id}">Name</label><input id="project-edit-name-${id}" name="name" type="text" value="${esc(project.name)}" required /></div>
+        <div class="field"><label for="project-edit-owner-${id}">Owner</label><input id="project-edit-owner-${id}" name="owner" type="text" value="${esc(project.owner)}" /></div>
+        <div class="field"><label for="project-edit-status-${id}">Status</label><select id="project-edit-status-${id}" class="select" name="status">${['Active', 'On hold', 'Done', 'Archived'].map((value) => option(value, project.status)).join('')}</select></div>
+        <div class="field"><label for="project-edit-start-${id}">Start</label><input id="project-edit-start-${id}" name="start" type="date" value="${esc(dateOnly(project.start))}" /></div>
+        <div class="field"><label for="project-edit-due-${id}">Due</label><input id="project-edit-due-${id}" name="due" type="date" value="${esc(dateOnly(project.due))}" /></div>
+        <div class="field field-wide"><label for="project-edit-keywords-${id}">Keywords</label><input id="project-edit-keywords-${id}" name="keywords" type="text" value="${esc(project.keywords)}" placeholder="Comma-separated keywords" /></div>
+        <div class="field field-wide"><label for="project-edit-description-${id}">Description</label><textarea id="project-edit-description-${id}" name="description" rows="3">${esc(project.description)}</textarea></div>
+        <div class="field field-wide"><div class="row-actions"><button class="btn btn-primary btn-sm" type="submit">Save</button><a class="btn btn-ghost btn-sm" href="${cancelHref}">Cancel</a></div></div>
+      </form>
+    </td>
+  </tr>`;
+}
+
 function projectsPage(state, query) {
   const archived = query.get('archived') === '1';
+  const editId = query.get('edit') ?? '';
   const chips = [
     `<a class="chip${!archived ? ' is-active' : ''}" href="#/projects">All</a>`,
     ...state.projects.filter((p) => !p.archived).map((p) => `<a class="chip${!archived ? '' : ''}" href="${pageUrl('/projects', { project: p.id })}">${esc(p.key)} ${esc(p.name)}</a>`),
@@ -485,19 +508,24 @@ function projectsPage(state, query) {
         <thead><tr><th>Project</th><th>Status</th><th>Start</th><th>Due</th><th>Open work items</th><th>Pages</th><th>Actions</th></tr></thead>
         <tbody>
           ${rows.map((project) => {
+            if (project.id === editId) return projectEditRow(project, archived);
             const open = state.tasks.filter((task) => task.projectId === project.id && task.status !== 'Done').length;
             const pages = state.pages.filter((page) => page.projectId === project.id).length;
-            return `<tr>
-              <td data-label="Project"><span class="project-cell"><span class="badge badge-accent">${esc(project.key)}</span><a class="table-title" href="#/project/${esc(project.key)}">${esc(project.name)}</a></span><span class="row-meta">${esc(project.description)}</span></td>
+            const openHref = pageUrl(`/project/${project.key}`, { tab: 'work', scope: 'open' });
+            return `<tr class="project-row" data-project-row data-project-id="${esc(project.id)}" data-project-key="${esc(project.key)}"${project.archived ? '' : ' draggable="true"'}>
+              <td data-label="Project"><span class="project-cell">${project.archived ? '' : '<span class="drag-handle" title="Drag to reorder" aria-hidden="true">⠿</span>'}<span class="badge badge-accent">${esc(project.key)}</span><a class="table-title" href="#/project/${esc(project.key)}">${esc(project.name)}</a></span><span class="row-meta">${esc(project.description)}</span></td>
               <td data-label="Status">${statusBadge(project.archived ? 'Archived' : project.status)}</td>
               <td data-label="Start">${fmt(project.start)}</td>
               <td data-label="Due">${fmt(project.due)}</td>
-              <td data-label="Open work items"><a href="#/project/${esc(project.key)}?tab=work">${open} open</a></td>
+              <td data-label="Open work items"><a href="${openHref}">${open} open</a></td>
               <td data-label="Pages">${pages}</td>
               <td data-label="Actions">
-                ${project.archived
-                  ? `<button class="btn btn-ghost btn-sm" type="button" data-action="project-archive" data-id="${project.id}">Restore</button>`
-                  : `<button class="btn btn-ghost btn-sm" type="button" data-action="project-archive" data-id="${project.id}">Archive</button>`}
+                <div class="row-actions">
+                  <button class="btn btn-ghost btn-sm" type="button" data-action="project-edit" data-id="${esc(project.id)}" data-archived="${project.archived ? 1 : 0}">Edit</button>
+                  ${project.archived
+                    ? `<button class="btn btn-ghost btn-sm" type="button" data-action="project-archive" data-id="${esc(project.id)}">Restore</button><button class="btn btn-danger btn-sm" type="button" data-action="project-delete" data-id="${esc(project.id)}">Delete</button>`
+                    : `<button class="btn btn-ghost btn-sm" type="button" data-action="project-archive" data-id="${esc(project.id)}">Archive</button>`}
+                </div>
               </td>
             </tr>`;
           }).join('') || `<tr><td colspan="7">${empty('No projects here.')}</td></tr>`}

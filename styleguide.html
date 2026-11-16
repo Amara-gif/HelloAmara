@@ -245,6 +245,43 @@
         </div>
       </section>
 
+      <section class="section" aria-labelledby="sg-project-row-title">
+        <div class="section-head">
+          <h2 id="sg-project-row-title">Project rows and drag reorder</h2>
+          <p>
+            Project rows reuse the shared table. The handle marks a draggable active project;
+            the drag state classes show where the row will land.
+          </p>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Project</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="project-row" draggable="true">
+                    <td>
+                      <span class="project-cell">
+                        <span class="drag-handle" title="Drag to reorder" aria-hidden="true">⠿</span>
+                        <span class="badge badge-accent">TAG</span>
+                        <a class="table-title" href="#sg-project-row">Hello Amara</a>
+                      </span>
+                      <span class="row-meta">Drag this row to change the sidebar project order.</span>
+                    </td>
+                    <td><span class="badge badge-success">Active</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="section" aria-labelledby="sg-tabs-title">
         <div class="section-head">
           <h2 id="sg-tabs-title">Tabs</h2>

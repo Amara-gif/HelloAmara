@@ -3,8 +3,8 @@ import {
   start, getState, refresh, resetDemo, createTask, updateTask, addTaskComment,
   transitionTask, reviewTask,
   createBug, updateBug, addBugComment, createEvent, deleteEvent, createPage,
-  updatePage, softDeletePage, createProject, updateProject, createOrder,
-  closeOrder, saveSettings, restoreQaMark,
+  updatePage, softDeletePage, createProject, updateProject, softDeleteProject,
+  reorderProjects, createOrder, closeOrder, saveSettings, restoreQaMark,
 } from './data.js';
 import { readLocation, routeForPath, groupRoutes, SETTINGS_LINKS } from './routes.js';
 import { renderView, mountView, renderAccountScreen, renderCreateDialog, canSendToQa, qaOwnerName } from './views.js';
@@ -558,9 +558,39 @@ document.addEventListener('click', async (event) => {
     } catch (error) {
       toast(error.message, { tone: 'danger' });
     }
+  } else if (action === 'project-edit') {
+    navigate('/projects', { ...(actionEl.dataset.archived === '1' ? { archived: 1 } : {}), edit: id });
   } else if (action === 'project-archive') {
     const project = getState().projects.find((row) => row.id === id);
-    if (project) { await updateProject(id, { archived: project.archived ? 0 : 1, status: project.archived ? 'Active' : 'Archived' }); render(); toast(project.archived ? 'Project restored.' : 'Project archived.'); }
+    if (!project) return;
+    if (project.archived) {
+      await updateProject(id, { archived: 0, status: 'Active' });
+      render();
+      toast('Project restored.', { tone: 'success' });
+    } else {
+      openModal({
+        title: 'Archive this project?',
+        message: 'The project leaves the sidebar and the active list. You can restore it from the Archived tab at any time.',
+        confirmLabel: 'Archive',
+        onConfirm: async () => {
+          await updateProject(id, { archived: 1, status: 'Archived' });
+          render();
+          toast('Project archived.', { tone: 'success' });
+        },
+      });
+    }
+  } else if (action === 'project-delete') {
+    openModal({
+      title: 'Delete this project?',
+      message: 'Only archived projects can be deleted. The project is soft-deleted on this device and stays recoverable in the local database.',
+      confirmLabel: 'Delete',
+      tone: 'danger',
+      onConfirm: async () => {
+        await softDeleteProject(id);
+        render();
+        toast('Project deleted.', { tone: 'success' });
+      },
+    });
   } else if (action === 'delete-page') {
     openModal({ title: 'Delete this page?', message: 'The page is soft-deleted on this device. Other versions stay in the account.', confirmLabel: 'Delete', tone: 'danger', onConfirm: async () => { await softDeletePage(id); render(); toast('Page deleted.', { tone: 'success' }); } });
   } else if (action === 'delete-event') {
@@ -640,6 +670,19 @@ document.addEventListener('submit', async (event) => {
       await createProject(data);
       await rerender();
       toast('Project added.', { tone: 'success' });
+    } else if (form.dataset.form === 'project-edit') {
+      await updateProject(data.id, {
+        key: String(data.key ?? '').trim().toUpperCase(),
+        name: String(data.name ?? '').trim(),
+        description: String(data.description ?? '').trim(),
+        owner: String(data.owner ?? '').trim(),
+        status: data.status || 'Active',
+        start: data.start || '',
+        due: data.due || '',
+        keywords: String(data.keywords ?? '').trim(),
+      });
+      navigate('/projects', data.archived === '1' ? { archived: 1 } : {});
+      toast('Project saved on this device.', { tone: 'success' });
     } else if (form.dataset.form === 'task-title' || form.dataset.form === 'task-details' || form.dataset.form === 'task-fields' || form.dataset.form === 'task-plan') {
       const fields = (form.dataset.history || '').split(',').map((field) => field.trim()).filter(Boolean);
       const patch = taskFormPatch(form.dataset.form, fields, data);
@@ -707,6 +750,78 @@ document.addEventListener('submit', async (event) => {
     toast(error.message || 'Something went wrong.', { tone: 'danger' });
   }
 });
+
+let draggedProjectId = null;
+let projectDropRow = null;
+let projectDropAfter = false;
+
+function clearProjectDragState() {
+  main.querySelectorAll('.project-row.is-dragging, .project-row.is-drop-target, .project-row.is-drop-after').forEach((row) => {
+    row.classList.remove('is-dragging', 'is-drop-target', 'is-drop-after');
+  });
+  draggedProjectId = null;
+  projectDropRow = null;
+  projectDropAfter = false;
+}
+
+document.addEventListener('dragstart', (event) => {
+  const row = event.target.closest?.('[data-project-row][draggable="true"]');
+  if (!row) return;
+  draggedProjectId = row.dataset.projectId;
+  row.classList.add('is-dragging');
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    try { event.dataTransfer.setData('text/plain', draggedProjectId); } catch { /* Drag data is optional. */ }
+  }
+});
+
+document.addEventListener('dragover', (event) => {
+  if (!draggedProjectId) return;
+  const row = event.target.closest?.('[data-project-row][draggable="true"]');
+  if (!row || row.dataset.projectId === draggedProjectId) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  const rect = row.getBoundingClientRect();
+  projectDropAfter = event.clientY > rect.top + rect.height / 2;
+  if (projectDropRow && projectDropRow !== row) projectDropRow.classList.remove('is-drop-target', 'is-drop-after');
+  projectDropRow = row;
+  row.classList.toggle('is-drop-target', !projectDropAfter);
+  row.classList.toggle('is-drop-after', projectDropAfter);
+});
+
+document.addEventListener('dragleave', (event) => {
+  const row = event.target.closest?.('[data-project-row]');
+  if (!row || row !== projectDropRow) return;
+  row.classList.remove('is-drop-target', 'is-drop-after');
+  projectDropRow = null;
+});
+
+document.addEventListener('drop', async (event) => {
+  if (!draggedProjectId) return;
+  const row = event.target.closest?.('[data-project-row][draggable="true"]');
+  if (!row) return;
+  event.preventDefault();
+  const movedId = draggedProjectId;
+  const targetId = row.dataset.projectId;
+  const dropAfter = projectDropAfter;
+  const ids = [...main.querySelectorAll('[data-project-row][draggable="true"]')].map((item) => item.dataset.projectId);
+  clearProjectDragState();
+  if (movedId === targetId) return;
+  const from = ids.indexOf(movedId);
+  if (from < 0 || !ids.includes(targetId)) return;
+  ids.splice(from, 1);
+  const insertAt = ids.indexOf(targetId) + (dropAfter ? 1 : 0);
+  ids.splice(insertAt, 0, movedId);
+  try {
+    await reorderProjects(ids);
+    render();
+    toast('Project order saved on this device.', { tone: 'success' });
+  } catch (error) {
+    toast(error.message || 'Could not save the project order.', { tone: 'danger' });
+  }
+});
+
+document.addEventListener('dragend', clearProjectDragState);
 
 menuToggle?.addEventListener('click', () => setDrawer(!document.body.classList.contains('nav-open')));
 foldButton?.addEventListener('click', () => {

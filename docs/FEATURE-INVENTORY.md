@@ -434,11 +434,11 @@ Data root: `ROOT` = parent of App; production `WORK = ROOT/Data`, `DATA = WORK/d
 ### Projects
 - [ ] Chips All / per-project / Archived (n) filter the view.
 - [ ] Table shows Acronym, Project, Status, Start, Due, Open work items, Pages.
-- [ ] Open-items count links to the project's items tab pre-filtered to open board columns.
+- [x] Open-items count links to the project's items tab pre-filtered to open board columns.
 - [ ] Inline add row creates a project (`/api/project/add`).
-- [ ] Edit → Save updates name/key/description/owner/status/start/due/keywords (`/api/project/save`).
-- [ ] Archive asks confirmation; archived projects can be restored or (only then) deleted with confirmation.
-- [ ] Dragging table rows reorders projects persistently.
+- [x] Edit → Save updates name/key/description/owner/status/start/due/keywords (`/api/project/save`).
+- [x] Archive asks confirmation; archived projects can be restored or (only then) deleted with confirmation.
+- [x] Dragging table rows reorders projects persistently.
 - [ ] "What got done, day by day" feed shows ≤14 dates, filterable by project chip; file chips open local paths via `/api/open`.
 
 ### Project page

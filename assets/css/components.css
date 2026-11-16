@@ -1810,6 +1810,44 @@ code {
   margin-bottom: var(--space-1);
 }
 
+.project-row[draggable="true"] {
+  cursor: grab;
+}
+
+.project-row.is-dragging {
+  opacity: 0.55;
+}
+
+.project-row.is-drop-target td {
+  border-top: var(--border-width) solid var(--color-accent);
+}
+
+.project-row.is-drop-after td {
+  border-bottom: var(--border-width) solid var(--color-accent);
+}
+
+.drag-handle {
+  flex: none;
+  color: var(--color-text-faint);
+  cursor: grab;
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  user-select: none;
+}
+
+.project-row.is-editing td {
+  background: var(--color-surface-muted);
+}
+
+.project-row.is-editing td[colspan] {
+  display: block;
+  text-align: left;
+}
+
+.project-row.is-editing td[colspan]::before {
+  display: none;
+}
+
 .row-actions {
   display: flex;
   flex-wrap: wrap;

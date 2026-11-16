@@ -571,11 +571,12 @@ export async function softDeletePage(id) {
 
 export async function createProject(input) {
   const now = nowIso();
+  const sort = state.projects.reduce((max, project) => Math.max(max, Number(project.sort) || 0), 0) + 1;
   const project = {
     id: newId('project'), key: (input.key || 'NEW').toUpperCase(), name: input.name,
     description: input.description || '', owner: input.owner || 'Amara',
     status: input.status || 'Active', start: input.start || '', due: input.due || '',
-    keywords: input.keywords || '', archived: 0, sort: state.projects.length + 1,
+    keywords: input.keywords || '', archived: 0, sort,
     createdAt: now, updatedAt: now, deletedAt: null,
   };
   await putRecord('projects', project);
@@ -590,6 +591,41 @@ export async function updateProject(id, patch) {
   await putRecord('projects', updated);
   state = await readState();
   return updated;
+}
+
+export async function softDeleteProject(id) {
+  const project = state.projects.find((row) => row.id === id);
+  if (!project) return;
+  const now = nowIso();
+  await putRecord('projects', { ...project, deletedAt: now, updatedAt: now });
+  state = await readState();
+}
+
+// Persist the visible project order. Ids not supplied keep their relative order
+// after the supplied rows, so archived rows never shuffle into the sidebar.
+export async function reorderProjects(orderedIds) {
+  const ids = [...new Set((orderedIds ?? []).map(String).filter(Boolean))];
+  if (!ids.length) return state.projects;
+  const byId = new Map(state.projects.map((project) => [project.id, project]));
+  const seen = new Set();
+  const updates = [];
+  const now = nowIso();
+  let sort = 0;
+  for (const id of ids) {
+    const project = byId.get(id);
+    if (!project || seen.has(id)) continue;
+    seen.add(id);
+    sort += 1;
+    if (project.sort !== sort) updates.push({ ...project, sort, updatedAt: now });
+  }
+  for (const project of state.projects) {
+    if (seen.has(project.id)) continue;
+    sort += 1;
+    if (project.sort !== sort) updates.push({ ...project, sort, updatedAt: now });
+  }
+  if (updates.length) await putRecords('projects', updates);
+  state = await readState();
+  return state.projects;
 }
 
 export async function createOrder(owner, text) {
