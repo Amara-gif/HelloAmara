@@ -22,6 +22,177 @@ const STORAGE_PERSIST_META = {
   checkedAt: 'storagePersistCheckedAt',
 };
 
+// The task detail page exposes the eleven workflow statuses while the task row
+// still stores one of the four board statuses. Only a workflow whose class
+// matches the stored status is trusted; otherwise the stored status wins.
+export const TASK_WORKFLOW_STATUSES = ['New', 'Triaged', 'In progress', 'Fixed', 'Verified', 'Closed', 'Reopened', 'Deferred', 'Wont fix', 'Duplicate', 'Rejected'];
+export const TASK_WORKFLOW_CLASS = {
+  New: 'To do',
+  Triaged: 'To do',
+  Reopened: 'To do',
+  Deferred: 'To do',
+  'In progress': 'In progress',
+  Fixed: 'Waiting',
+  Verified: 'Done',
+  Closed: 'Done',
+  Duplicate: 'Done',
+  'Wont fix': 'Done',
+  Rejected: 'Done',
+};
+export const TASK_WORKFLOW_TRANSITIONS = {
+  New: ['Triaged', 'Duplicate', 'Rejected', 'Deferred'],
+  Triaged: ['In progress', 'Duplicate', 'Rejected', 'Deferred', 'Wont fix'],
+  'In progress': ['Fixed', 'Duplicate', 'Deferred', 'Wont fix'],
+  Fixed: ['Verified', 'Reopened'],
+  Verified: ['Closed', 'Reopened'],
+  Closed: ['Reopened'],
+  Reopened: ['Triaged', 'In progress', 'Fixed', 'Duplicate', 'Wont fix', 'Deferred'],
+  Duplicate: ['Reopened'],
+  'Wont fix': ['Reopened'],
+  Deferred: ['Reopened'],
+  Rejected: ['Reopened'],
+};
+export const TASK_QA_ONLY_STATUSES = ['Verified', 'Closed'];
+export const TASK_WAIVER_STATUSES = ['Duplicate', 'Wont fix', 'Rejected'];
+export const TASK_REASON_REQUIRED_STATUSES = ['Wont fix', 'Rejected', 'Deferred', 'Reopened'];
+export const TASK_WAIVER_ACTORS = ['Amara', 'QA', 'Steward'];
+
+const DEFAULT_WORKFLOW_BY_STATUS = {
+  'To do': 'New',
+  'In progress': 'In progress',
+  Waiting: 'Fixed',
+  Done: 'Closed',
+};
+const STORED_STATUS_ALIASES = {
+  'to do': 'To do',
+  todo: 'To do',
+  'to-do': 'To do',
+  'in progress': 'In progress',
+  'in-progress': 'In progress',
+  waiting: 'Waiting',
+  done: 'Done',
+};
+const WORKFLOW_ALIASES = {
+  open: 'New',
+  'to qa': 'Fixed',
+  'in review': 'Fixed',
+  resolved: 'Verified',
+  'won\'t fix': 'Wont fix',
+};
+
+function normalizeStoredStatus(status) {
+  const raw = String(status ?? '').trim();
+  if (!raw) return '';
+  if (DEFAULT_WORKFLOW_BY_STATUS[raw]) return raw;
+  return STORED_STATUS_ALIASES[raw.toLowerCase()] ?? '';
+}
+
+export function normalizeWorkflowStatus(status) {
+  const raw = String(status ?? '').trim();
+  if (!raw) return '';
+  const exact = TASK_WORKFLOW_STATUSES.find((value) => value.toLowerCase() === raw.toLowerCase());
+  if (exact) return exact;
+  const alias = WORKFLOW_ALIASES[raw.toLowerCase()];
+  if (alias) return alias;
+  const stored = normalizeStoredStatus(raw);
+  return stored ? DEFAULT_WORKFLOW_BY_STATUS[stored] : raw;
+}
+
+export function workflowForStoredStatus(status, workflow) {
+  const stored = normalizeStoredStatus(status);
+  const candidate = normalizeWorkflowStatus(workflow);
+  if (candidate && (!stored || TASK_WORKFLOW_CLASS[candidate] === stored)) return candidate;
+  return DEFAULT_WORKFLOW_BY_STATUS[stored] ?? 'New';
+}
+
+export function workflowForTask(task) {
+  return workflowForStoredStatus(task?.status, task?.workflow);
+}
+
+export function taskWorkflowTargets(taskOrWorkflow, maybeWorkflow) {
+  let current;
+  if (typeof taskOrWorkflow === 'string' && maybeWorkflow === undefined) {
+    const stored = normalizeStoredStatus(taskOrWorkflow);
+    current = stored ? workflowForStoredStatus(stored, '') : normalizeWorkflowStatus(taskOrWorkflow);
+  } else if (typeof taskOrWorkflow === 'string') {
+    current = workflowForStoredStatus(taskOrWorkflow, maybeWorkflow);
+  } else {
+    current = workflowForTask(taskOrWorkflow);
+  }
+  return [...(TASK_WORKFLOW_TRANSITIONS[current] ?? [])];
+}
+
+function actorMatches(actor, allowed) {
+  const value = String(actor ?? '').trim().toLowerCase();
+  return Boolean(value) && allowed.some((entry) => entry.toLowerCase() === value);
+}
+
+export function isQaActor(state, actor) {
+  const value = String(actor ?? '').trim();
+  if (!value) return false;
+  if (/^qa$/i.test(value)) return true;
+  return (state?.team ?? []).some((agent) => (
+    String(agent?.name ?? '').trim().toLowerCase() === value.toLowerCase()
+    && /^qa$/i.test(String(agent?.role ?? '').trim())
+  ));
+}
+
+export function isWaiverActor(state, actor) {
+  const value = String(actor ?? '').trim();
+  if (!value) return false;
+  if (actorMatches(value, TASK_WAIVER_ACTORS)) return true;
+  return (state?.team ?? []).some((agent) => (
+    String(agent?.name ?? '').trim().toLowerCase() === value.toLowerCase()
+    && TASK_WAIVER_ACTORS.some((role) => role.toLowerCase() === String(agent?.role ?? '').trim().toLowerCase())
+  ));
+}
+
+export function attachmentsFingerprint(attachments) {
+  const list = Array.isArray(attachments) ? attachments : [];
+  return JSON.stringify(list.map((file) => {
+    if (typeof file === 'string') return { name: file, kind: '', size: '' };
+    return {
+      name: String(file?.name ?? ''),
+      kind: String(file?.kind ?? file?.type ?? ''),
+      size: String(file?.size ?? ''),
+      url: String(file?.url ?? file?.href ?? ''),
+    };
+  }));
+}
+
+export function taskReviewFingerprint(task) {
+  return String(task?.reviewFingerprint ?? task?.review?.fingerprint ?? '');
+}
+
+export function checkTaskTransition(task, to, options = {}) {
+  if (!task) return { ok: false, reason: 'Task not found.' };
+  const opts = typeof options === 'string' ? { as: options } : options;
+  const target = normalizeWorkflowStatus(to);
+  const current = workflowForTask(task);
+  const allowed = taskWorkflowTargets(task);
+  if (!TASK_WORKFLOW_STATUSES.includes(target)) {
+    return { ok: false, current, target, allowed, reason: `Unknown workflow status “${String(to ?? '')}”.` };
+  }
+  if (!allowed.includes(target)) {
+    return {
+      ok: false, current, target, allowed,
+      reason: `Cannot move from ${current} to ${target}. Legal targets: ${allowed.join(', ') || 'none'}.`,
+    };
+  }
+  const actor = opts.as ?? opts.actingAs ?? opts.who ?? '';
+  if (TASK_QA_ONLY_STATUSES.includes(target) && !isQaActor(opts.state, actor)) {
+    return { ok: false, current, target, allowed, reason: `Only QA can move a work item to ${target}. Set As to QA.` };
+  }
+  if (TASK_WAIVER_STATUSES.includes(target) && !isWaiverActor(opts.state, actor)) {
+    return { ok: false, current, target, allowed, reason: `${target} needs Amara, QA or Steward acting on the move.` };
+  }
+  const reason = String(opts.reason ?? '').trim();
+  if (TASK_REASON_REQUIRED_STATUSES.includes(target) && !reason) {
+    return { ok: false, current, target, allowed, reason: `A reason is required to move to ${target}.` };
+  }
+  return { ok: true, current, target, allowed, reason, storedStatus: TASK_WORKFLOW_CLASS[target] };
+}
+
 let currentAccount = null;
 let state = null;
 
@@ -148,7 +319,9 @@ export async function createTask(input) {
     description: input.description || '', repro: input.repro || '', expected: input.expected || '',
     actual: input.actual || '', attachments: [], notes: input.notes || '', parentId: input.parentId || null,
     end: input.end || input.due || '', depends_on: input.depends_on || input.dependsOn || '', milestone: input.milestone || '',
-    reviewed: false, pendingDecision: false, createdAt: now, updatedAt: now, deletedAt: null,
+    reviewed: false, pendingDecision: false, review: null, reviewDecision: '', reviewBy: '',
+    reviewAt: '', reviewFingerprint: '', reviewStale: false, reviewComment: '',
+    createdAt: now, updatedAt: now, deletedAt: null,
   };
   await putRecord('tasks', task);
   await putRecord('task_history', { id: newId('th'), taskId: task.id, at: now, who: 'Amara', field: 'created', old: '', new: task.key, updatedAt: now, deletedAt: null });
@@ -161,6 +334,19 @@ export async function updateTask(id, patch, historyField = '') {
   if (!task) throw new Error('Task not found.');
   const now = nowIso();
   const updated = { ...task, ...patch, updatedAt: now };
+
+  // A review covers the exact deliverables it was recorded against. If the
+  // attachment list changes, keep the decision but mark the approval stale.
+  const reviewedFingerprint = taskReviewFingerprint(task);
+  const nextFingerprint = attachmentsFingerprint(updated.attachments);
+  const attachmentsChanged = attachmentsFingerprint(task.attachments) !== nextFingerprint;
+  if (reviewedFingerprint && attachmentsChanged && patch.reviewFingerprint === undefined) {
+    updated.reviewStale = reviewedFingerprint !== nextFingerprint;
+    if (task.review && typeof task.review === 'object') {
+      updated.review = { ...task.review, stale: updated.reviewStale };
+    }
+  }
+
   await putRecord('tasks', updated);
   const requested = Array.isArray(historyField) ? historyField : String(historyField || '').split(/[,;]/);
   const fields = [...new Set(requested.map((field) => field.trim()).filter(Boolean))];
@@ -177,6 +363,79 @@ export async function updateTask(id, patch, historyField = '') {
   }
   state = await readState();
   return updated;
+}
+
+export async function transitionTask(id, input = {}, maybeAs, maybeReason) {
+  const task = state.tasks.find((row) => row.id === id);
+  if (!task) throw new Error('Task not found.');
+  const payload = typeof input === 'string'
+    ? { to: input, ...(maybeAs && typeof maybeAs === 'object' ? maybeAs : { as: maybeAs, reason: maybeReason }) }
+    : input;
+  const check = checkTaskTransition(task, payload.to ?? payload.target ?? payload.workflow ?? payload.status, {
+    ...payload,
+    state,
+  });
+  if (!check.ok) throw new Error(check.reason);
+
+  const patch = { status: check.storedStatus, workflow: check.target };
+  const history = ['status', 'workflow'];
+
+  if (check.target === 'Duplicate') {
+    const duplicateOf = payload.duplicateOf ?? payload.duplicate_of ?? '';
+    if (duplicateOf) {
+      patch.duplicateOf = duplicateOf;
+      patch.duplicate_of = duplicateOf;
+      history.push('duplicateOf');
+    }
+  }
+
+  if (check.reason) {
+    patch.workflowReason = check.reason;
+    history.push('workflowReason');
+  }
+
+  if (TASK_WAIVER_STATUSES.includes(check.target)) {
+    const notes = String(task.notes ?? '').trim();
+    if (!notes.includes('[免核')) {
+      patch.notes = `${notes} [免核 ${nowIso().slice(0, 10)}]`.trim();
+      history.push('notes');
+    }
+  }
+
+  if (TASK_QA_ONLY_STATUSES.includes(check.target)) {
+    const notes = String(task.notes ?? '').trim();
+    if (!/\[(?:已核|免核)/.test(notes)) {
+      patch.notes = `${notes} [已核 ${nowIso().slice(0, 10)}]`.trim();
+      history.push('notes');
+    }
+  }
+
+  return updateTask(id, patch, history);
+}
+
+export async function reviewTask(id, decision, options = {}) {
+  const task = state.tasks.find((row) => row.id === id);
+  if (!task) throw new Error('Task not found.');
+  const normalized = String(decision ?? '').trim().toLowerCase();
+  if (!['approve', 'changes'].includes(normalized)) {
+    throw new Error('Review decision must be Approve or Request changes.');
+  }
+  const settings = typeof options === 'string' ? { comment: options } : options;
+  const by = String(settings.by ?? settings.as ?? 'Amara').trim() || 'Amara';
+  if (!/^amara$/i.test(by)) throw new Error('Only Amara can decide this review.');
+  const now = nowIso();
+  const fingerprint = attachmentsFingerprint(task.attachments);
+  const comment = String(settings.comment ?? '').trim();
+  return updateTask(id, {
+    reviewed: normalized === 'approve',
+    review: { decision: normalized, by, at: now, fingerprint, comment, stale: false },
+    reviewDecision: normalized,
+    reviewBy: by,
+    reviewAt: now,
+    reviewFingerprint: fingerprint,
+    reviewStale: false,
+    reviewComment: comment,
+  }, 'reviewDecision');
 }
 
 export async function addTaskComment(id, body) {

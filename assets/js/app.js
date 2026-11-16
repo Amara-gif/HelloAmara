@@ -1,6 +1,7 @@
 import { listAccounts, getAccount, getActiveAccountId, setActiveAccount, clearActiveAccount, createAccount } from './accounts.js';
 import {
   start, getState, refresh, resetDemo, createTask, updateTask, addTaskComment,
+  transitionTask, reviewTask,
   createBug, updateBug, addBugComment, createEvent, deleteEvent, createPage,
   updatePage, softDeletePage, createProject, updateProject, createOrder,
   closeOrder, saveSettings, restoreQaMark,
@@ -509,9 +510,14 @@ document.addEventListener('click', async (event) => {
   else if (action === 'toggle-subtasks') toggleSubtasks(actionEl);
   else if (action === 'task-review') {
     const decision = actionEl.dataset.decision;
-    await updateTask(id, { reviewed: decision === 'approve' }, 'status');
-    render();
-    toast(decision === 'approve' ? 'Work approved.' : 'Changes requested.', { tone: 'success' });
+    const comment = document.getElementById('task-review-comment')?.value ?? '';
+    try {
+      await reviewTask(id, decision, { comment });
+      render();
+      toast(decision === 'approve' ? 'Work approved.' : 'Changes requested.', { tone: 'success' });
+    } catch (error) {
+      toast(error.message, { tone: 'danger' });
+    }
   } else if (action === 'project-archive') {
     const project = getState().projects.find((row) => row.id === id);
     if (project) { await updateProject(id, { archived: project.archived ? 0 : 1, status: project.archived ? 'Active' : 'Archived' }); render(); toast(project.archived ? 'Project restored.' : 'Project archived.'); }
@@ -596,9 +602,9 @@ document.addEventListener('submit', async (event) => {
       await rerender();
       toast('Comment saved on this device.', { tone: 'success' });
     } else if (form.dataset.form === 'task-workflow') {
-      await updateTask(data.id, { status: data.to }, 'status');
+      const moved = await transitionTask(data.id, { to: data.to, as: data.as, reason: data.reason });
       await rerender();
-      toast('Workflow updated.', { tone: 'success' });
+      toast(`${moved.key} moved to ${moved.workflow}.`, { tone: 'success' });
     } else if (form.dataset.form === 'bug-workflow') {
       await updateBug(data.id, { status: data.to }, 'status');
       await rerender();
@@ -660,6 +666,13 @@ backdrop.addEventListener('click', () => setDrawer(false));
 nav.addEventListener('click', (event) => { if (event.target.closest('a')) setDrawer(false); });
 document.getElementById('skip-link')?.addEventListener('click', (event) => { event.preventDefault(); main.focus(); main.scrollIntoView(); });
 document.addEventListener('keydown', (event) => {
+  const commentBox = event.target.closest?.('#tskComment, #task-progress-comment');
+  if (commentBox && event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    if (typeof commentBox.form?.requestSubmit === 'function') commentBox.form.requestSubmit();
+    else commentBox.form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    return;
+  }
   if (!document.body.classList.contains('nav-open')) return;
   if (event.key === 'Escape') { event.preventDefault(); setDrawer(false); }
   else if (event.key === 'Tab') trapTab(event);
