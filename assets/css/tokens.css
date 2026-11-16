@@ -135,6 +135,12 @@ html {
   --control-font-size: var(--font-size-base);
   --control-font-size-sm: var(--font-size-sm);
 
+  /* Buttons alias the control scale so they share the same hit-area sizes. */
+  --btn-height: var(--control-height);
+  --btn-height-sm: var(--control-height-sm);
+  --btn-pad-x: var(--space-4);
+  --btn-font-weight: var(--font-weight-semibold);
+
   /* Special inputs keep their own small sizes instead of reusing the text box. */
   --size-checkbox: 20px;
   --size-radio: 20px;

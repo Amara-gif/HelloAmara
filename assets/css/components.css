@@ -935,20 +935,21 @@ code {
 }
 
 /* --------------------------------------------------------------- Buttons */
-.btn {
+.btn,
+.btn-md {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  min-height: var(--tap-size);
-  padding: 0 var(--space-4);
+  min-height: var(--btn-height);
+  padding: 0 var(--btn-pad-x);
   border: var(--border-width) solid var(--color-divider-strong);
   border-radius: var(--radius-btn);
   background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--btn-font-weight);
   cursor: pointer;
   text-align: center;
   transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease),
@@ -1000,9 +1001,10 @@ code {
 }
 
 .btn-icon {
-  width: var(--tap-size);
-  min-width: var(--tap-size);
+  width: var(--btn-height);
+  min-width: var(--btn-height);
   padding: 0;
+  border-radius: var(--radius-btn);
 }
 
 /* ---------------------------------------------------------------- Badges */
@@ -2334,9 +2336,19 @@ input[type="radio"],
 }
 
 .btn-sm {
-  min-height: 34px;
+  min-height: var(--btn-height-sm);
   padding-inline: var(--space-3);
+  border-radius: var(--radius-btn);
   font-size: var(--font-size-xs);
+}
+
+/* Compact buttons keep the full tap target wherever the pointer is coarse. */
+@media (pointer: coarse) {
+  .btn-sm {
+    min-width: var(--tap-size);
+    min-height: var(--tap-size);
+    padding-inline: var(--space-3);
+  }
 }
 
 .row-list {

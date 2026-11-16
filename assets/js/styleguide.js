@@ -178,7 +178,7 @@ export async function initStyleguide() {
   renderTokenList('sg-radius', pick('--radius-'));
   renderTokenList('sg-shadow', pick('--shadow-'));
   renderTokenList('sg-breakpoints', pick('--bp-'));
-  renderTokenList('sg-layout', names.filter((name) => ['--tap-size', '--sidebar-width', '--topbar-height', '--content-max', '--timeline-track-min', '--border-width', '--size-', '--control-', '--range-', '--textarea-'].some((prefix) => name.startsWith(prefix))));
+  renderTokenList('sg-layout', names.filter((name) => ['--tap-size', '--sidebar-width', '--topbar-height', '--content-max', '--timeline-track-min', '--border-width', '--size-', '--control-', '--btn-', '--range-', '--textarea-'].some((prefix) => name.startsWith(prefix))));
   renderTokenList('sg-motion', names.filter((name) => name === '--ease' || name === '--duration'));
 
   setupTabs();
