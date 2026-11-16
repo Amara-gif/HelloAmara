@@ -172,6 +172,8 @@ code {
 }
 
 .sidebar-tool {
+  min-height: var(--btn-height);
+  border-radius: var(--radius-btn);
   color: var(--color-text-secondary);
 }
 
@@ -1160,9 +1162,10 @@ code {
   align-items: center;
   justify-content: center;
   gap: var(--space-1);
+  min-height: var(--btn-height);
   padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-btn);
   background: transparent;
   color: var(--color-accent-strong);
   font: inherit;
@@ -1242,6 +1245,36 @@ code {
   min-width: var(--btn-height);
   padding: 0;
   border-radius: var(--radius-btn);
+}
+
+/* Button-like controls reuse the .btn focus ring and disabled treatment.
+   Their intentional shape and border differences stay in their own blocks. */
+.fab:focus-visible,
+.chip-remove:focus-visible,
+.palette-card:focus-visible,
+.account-row:focus-visible,
+.sidebar-tool:focus-visible,
+.link-button:focus-visible {
+  outline: calc(var(--border-width) * 2) solid var(--color-focus);
+  outline-offset: var(--border-width);
+}
+
+.fab:disabled,
+.fab[aria-disabled="true"],
+.chip-remove:disabled,
+.chip-remove[aria-disabled="true"],
+.palette-card:disabled,
+.palette-card[aria-disabled="true"],
+.account-row:disabled,
+.account-row[aria-disabled="true"],
+.sidebar-tool:disabled,
+.sidebar-tool[aria-disabled="true"],
+.link-button:disabled,
+.link-button[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 /* ---------------------------------------------------------------- Badges */
@@ -2125,10 +2158,10 @@ input[type="radio"],
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-2);
-  min-height: var(--tap-size);
+  min-height: var(--btn-height);
   padding: var(--space-3);
   border: var(--border-width) solid var(--color-divider);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-btn);
   background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
@@ -2136,13 +2169,13 @@ input[type="radio"],
   cursor: pointer;
 }
 
-.palette-card:hover {
+.palette-card:hover:not(:disabled):not([aria-disabled="true"]) {
   border-color: var(--color-divider-strong);
 }
 
 .palette-card[aria-pressed="true"] {
   border-color: var(--color-accent-strong);
-  box-shadow: 0 0 0 2px var(--color-accent-soft);
+  box-shadow: 0 0 0 calc(var(--border-width) * 2) var(--color-accent-soft);
 }
 
 .palette-dots {
@@ -2249,6 +2282,15 @@ input[type="radio"],
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
+}
+
+/* Keep the fixed Create FAB in the flow when it is shown as a sample. */
+.sg-fab-demo {
+  display: inline-flex;
+}
+
+.sg-fab-demo .fab {
+  position: static;
 }
 
 .btn-state-table th[scope="row"] {
@@ -2436,10 +2478,12 @@ input[type="radio"],
 }
 
 .chip-remove {
+  position: relative;
   display: inline-grid;
   place-items: center;
   width: var(--space-5);
   height: var(--space-5);
+  min-height: var(--space-5);
   margin-left: var(--space-1);
   padding: 0;
   border: 0;
@@ -2451,7 +2495,20 @@ input[type="radio"],
   cursor: pointer;
 }
 
-.chip-remove:hover {
+/* The glyph stays small, but the transparent pseudo-element gives touch a
+   full --tap-size hit area without growing the chip. */
+.chip-remove::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--tap-size);
+  height: var(--tap-size);
+  border-radius: var(--radius-pill);
+  transform: translate(-50%, -50%);
+}
+
+.chip-remove:hover:not(:disabled):not([aria-disabled="true"]) {
   background: var(--color-accent-soft);
   color: var(--color-accent-strong);
 }
@@ -3407,14 +3464,16 @@ input[type="radio"],
 
 /* FAB, auth, inline form */
 .fab {
+  --fab-size: calc(var(--btn-height) + var(--space-3));
   position: fixed;
   right: var(--space-4);
   bottom: max(var(--space-4), env(safe-area-inset-bottom));
   z-index: 45;
   display: grid;
   place-items: center;
-  width: 56px;
-  height: 56px;
+  width: var(--fab-size);
+  min-height: var(--fab-size);
+  height: var(--fab-size);
   border: 0;
   border-radius: var(--radius-pill);
   background: var(--color-accent-strong);
@@ -3423,7 +3482,7 @@ input[type="radio"],
   cursor: pointer;
 }
 
-.fab:hover {
+.fab:hover:not(:disabled):not([aria-disabled="true"]) {
   background: var(--color-accent-strong-hover);
 }
 
@@ -3490,16 +3549,16 @@ input[type="radio"],
   align-items: center;
   gap: var(--space-3);
   width: 100%;
-  min-height: var(--tap-size);
+  min-height: var(--btn-height);
   padding: var(--space-3);
   border: var(--border-width) solid var(--color-divider);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-btn);
   background: var(--color-surface);
   cursor: pointer;
   text-align: left;
 }
 
-.account-row:hover {
+.account-row:hover:not(:disabled):not([aria-disabled="true"]) {
   border-color: var(--color-divider-strong);
   background: var(--color-surface-muted);
 }

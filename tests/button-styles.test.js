@@ -270,3 +270,95 @@ test('styleguide.html documents all button variants and states', () => {
     );
   }
 });
+
+const buttonLikeClasses = [
+  '.fab',
+  '.chip-remove',
+  '.palette-card',
+  '.account-row',
+  '.sidebar-tool',
+  '.link-button',
+];
+
+test('every button-like class takes its height from a token', () => {
+  for (const selector of buttonLikeClasses) {
+    const rule = ruleWithSelector(selector);
+    assert.ok(rule, `components.css defines ${selector}`);
+    assert.match(
+      rule.body,
+      /(?:^|\n)\s*(?:min-)?height:\s*var\(--[a-z0-9-]+\)\s*;/,
+      `${selector} sets a token height`,
+    );
+  }
+});
+
+test('button-like classes contain no raw pixel height or hex colour', () => {
+  const matching = componentRules.filter((rule) =>
+    splitSelectors(rule.selector).some((selector) =>
+      buttonLikeClasses.some((name) =>
+        new RegExp(`^${name.replace('.', '\\.')}(?:$|[-:.[\\s])`).test(selector),
+      ),
+    ),
+  );
+  assert.ok(matching.length > 0, 'found the button-like rules');
+
+  for (const rule of matching) {
+    assert.doesNotMatch(
+      rule.body,
+      /(?:^|\n)\s*(?:min-)?height:\s*\d+(?:\.\d+)?px\s*;/,
+      `${rule.selector} has a raw pixel height`,
+    );
+    assert.doesNotMatch(rule.body, /#[0-9a-f]{3,8}\b/i, `${rule.selector} has a hex colour`);
+  }
+});
+
+test('every button-like class shares the .btn focus-visible ring', () => {
+  const btnFocus = ruleWithSelector('.btn:focus-visible');
+  assert.ok(btnFocus, 'components.css defines the .btn focus-visible ring');
+  const expected = btnFocus.body.replace(/\s+/g, ' ').trim();
+
+  for (const selector of buttonLikeClasses) {
+    const focus = ruleWithSelector(`${selector}:focus-visible`);
+    assert.ok(focus, `${selector} has a focus-visible rule`);
+    assert.equal(
+      focus.body.replace(/\s+/g, ' ').trim(),
+      expected,
+      `${selector} uses the same focus-visible ring as .btn`,
+    );
+  }
+});
+
+test('every button-like class shares the .btn disabled state', () => {
+  for (const selector of buttonLikeClasses) {
+    assert.ok(
+      hasSelectorStarting(`${selector}:disabled`),
+      `${selector} has a :disabled rule`,
+    );
+    assert.ok(
+      hasSelectorStarting(`${selector}[aria-disabled="true"]`),
+      `${selector} has an [aria-disabled="true"] rule`,
+    );
+  }
+});
+
+test('.chip-remove keeps a small glyph inside a tap-sized hit area', () => {
+  const hitArea = ruleWithSelector('.chip-remove::before');
+  assert.ok(hitArea, 'components.css gives .chip-remove a pseudo-element hit area');
+  assert.match(hitArea.body, /(?:^|\n)\s*width:\s*var\(--tap-size\)\s*;/);
+  assert.match(hitArea.body, /(?:^|\n)\s*height:\s*var\(--tap-size\)\s*;/);
+
+  const base = ruleWithSelector('.chip-remove');
+  assert.match(base.body, /(?:^|\n)\s*width:\s*var\(--space-5\)\s*;/);
+  assert.match(base.body, /(?:^|\n)\s*height:\s*var\(--space-5\)\s*;/);
+});
+
+test('styleguide.html shows every button-like class', () => {
+  for (const selector of buttonLikeClasses) {
+    const className = selector.slice(1);
+    assert.match(
+      styleguide,
+      new RegExp(`class="[^"]*\\b${className}\\b`),
+      `${className} example`,
+    );
+  }
+});
