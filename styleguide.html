@@ -256,12 +256,81 @@
               <div class="field">
                 <label for="sg-backup">Backup file</label>
                 <input id="sg-backup" type="file" accept="application/json,.json" />
-                <p class="field-help">A file input uses the same field styling. Import validates the JSON before writing anything.</p>
+                <p class="field-help">File inputs keep native browser styling; they are outside the shared text-control rule.</p>
               </div>
               <div class="field">
                 <label for="sg-colour">Primary colour</label>
                 <input id="sg-colour" type="color" />
                 <p class="field-help">A colour input is a tap-sized swatch, not a full-width bar.</p>
+              </div>
+            </div>
+            <h3 class="card-title">Control sizes, aliases and states</h3>
+            <p class="field-help">
+              The bare <code>.input</code>, bare <code>.select</code> and text-like controls inside
+              <code>.field</code> share one declaration block. Hover a control to see the hover border.
+            </p>
+            <div class="sg-split">
+              <div class="field">
+                <label for="sg-control-base">Bare .control</label>
+                <input id="sg-control-base" class="control" type="text" value="Base control" />
+              </div>
+              <div class="field">
+                <label for="sg-control-input">Bare .input</label>
+                <input id="sg-control-input" class="input" type="text" value="Same as a field control" />
+              </div>
+              <div class="field">
+                <label for="sg-control-select">Bare .select</label>
+                <select id="sg-control-select" class="select">
+                  <option>Same height as a field control</option>
+                  <option>Another option</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="sg-control-field">Field control</label>
+                <input id="sg-control-field" type="text" value="Same height, padding, radius and border" />
+                <p class="field-help">This control has no control class; the shared rule targets text-like controls inside <code>.field</code>.</p>
+              </div>
+              <div class="field">
+                <label for="sg-control-sm">Small .control</label>
+                <input id="sg-control-sm" class="control control-sm" type="text" value="Compact control" />
+              </div>
+              <div class="field">
+                <label for="sg-control-select-sm">Small .select</label>
+                <select id="sg-control-select-sm" class="select select-sm">
+                  <option>Compact select</option>
+                  <option>Another option</option>
+                </select>
+                <p class="field-help">Compact controls use <code>--control-height-sm</code> and are shorter than the 44 px base control.</p>
+              </div>
+              <div class="field">
+                <label for="sg-control-placeholder">Placeholder</label>
+                <input id="sg-control-placeholder" class="input" type="text" placeholder="Placeholder uses the faint text token" />
+                <p class="field-help">The <code>::placeholder</code> colour uses the faint text token.</p>
+              </div>
+              <div class="field">
+                <label for="sg-control-disabled">Disabled</label>
+                <input id="sg-control-disabled" class="input" type="text" value="Disabled control" disabled />
+                <p class="field-help">The <code>:disabled</code> state uses the muted surface and secondary text.</p>
+              </div>
+              <div class="field">
+                <label for="sg-control-readonly">Read-only</label>
+                <input id="sg-control-readonly" class="input" type="text" value="Read-only control" readonly />
+                <p class="field-help">The <code>:read-only</code> state also uses the muted surface.</p>
+              </div>
+              <div class="field">
+                <label for="sg-control-invalid">Invalid</label>
+                <input id="sg-control-invalid" class="input" type="text" value="Invalid control" aria-invalid="true" />
+                <p class="field-help">The danger border also comes from <code>:user-invalid</code> after a failed native validation.</p>
+              </div>
+              <div class="field">
+                <label for="sg-control-focus">Focus-visible</label>
+                <input id="sg-control-focus" class="input" type="text" value="Focused on load" autofocus />
+                <p class="field-help">This autofocused control shows the one shared <code>:focus-visible</code> outline.</p>
+              </div>
+              <div class="field">
+                <label for="sg-control-hover">Hover</label>
+                <input id="sg-control-hover" class="input" type="text" value="Hover this control" />
+                <p class="field-help">The stronger divider border appears on <code>:hover</code>.</p>
               </div>
             </div>
           </div>
