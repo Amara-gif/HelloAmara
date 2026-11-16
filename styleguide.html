@@ -266,6 +266,52 @@
         </div>
       </section>
 
+      <section class="section" aria-labelledby="sg-board-title">
+        <div class="section-head">
+          <h2 id="sg-board-title">Board and board health</h2>
+          <p>Board cards use the shared card classes. Board health is a native disclosure that only appears when something needs review.</p>
+        </div>
+        <div class="board">
+          <section class="board-column">
+            <h2>To Do<span class="badge badge-muted">1</span></h2>
+            <article class="board-card">
+              <a href="#sg-board">Example work item</a>
+              <span class="row-meta">T-1 · Amara</span>
+              <div class="board-card-foot"><span class="badge badge-band">New</span><span class="priority priority-warning"><span class="priority-dot" aria-hidden="true"></span>Medium</span></div>
+              <label class="board-move"><span>Move to…</span><select class="select select-sm" aria-label="Move example work item to"><option selected>To do</option><option>In progress</option><option>Waiting</option><option>Done</option></select></label>
+              <div class="row-actions"><button class="btn btn-ghost btn-sm" type="button">Send to QA</button></div>
+            </article>
+          </section>
+          <section class="board-column">
+            <h2>In Progress<span class="badge badge-muted">0</span></h2>
+            <p class="empty-state">No items.</p>
+          </section>
+          <section class="board-column">
+            <h2>In Review<span class="badge badge-muted">0</span></h2>
+            <p class="empty-state">No items.</p>
+          </section>
+          <section class="board-column">
+            <h2>Done<span class="badge badge-muted">0</span></h2>
+            <p class="empty-state">No items.</p>
+          </section>
+        </div>
+        <details class="card">
+          <summary class="card-head"><span class="card-title">Board health</span><span class="badge badge-warning">1 to review</span></summary>
+          <div class="card-body">
+            <div class="stack">
+              <h3 class="card-title">Lost hand-over marks</h3>
+              <p class="row-meta">These rows have evidence of a QA hand-over, but the mark is missing from the note.</p>
+              <div class="row-list">
+                <div class="row-item">
+                  <span class="row-main"><span class="row-title"><a href="#sg-board">T-2 · Example verified item</a></span><span class="row-meta">Delphine Roth · Verified</span></span>
+                  <button class="btn btn-ghost btn-sm" type="button">Restore mark</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
+      </section>
+
       <section class="section" aria-labelledby="sg-nav-title">
         <div class="section-head">
           <h2 id="sg-nav-title">Navigation</h2>

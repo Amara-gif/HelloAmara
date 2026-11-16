@@ -3,10 +3,10 @@ import {
   start, getState, refresh, resetDemo, createTask, updateTask, addTaskComment,
   createBug, updateBug, addBugComment, createEvent, deleteEvent, createPage,
   updatePage, softDeletePage, createProject, updateProject, createOrder,
-  closeOrder, saveSettings,
+  closeOrder, saveSettings, restoreQaMark,
 } from './data.js';
 import { readLocation, routeForPath, groupRoutes, SETTINGS_LINKS } from './routes.js';
-import { renderView, mountView, renderAccountScreen, renderCreateDialog } from './views.js';
+import { renderView, mountView, renderAccountScreen, renderCreateDialog, canSendToQa, qaOwnerName } from './views.js';
 import { icon } from './icons.js';
 import { updateTaskBadge } from './nav-badge.js';
 import { openModal, toast } from './ui.js';
@@ -334,10 +334,12 @@ async function submitCreate() {
 }
 
 async function sendToQA(id) {
-  const task = getState().tasks.find((row) => row.id === id);
-  if (!task) return;
-  const notes = `${task.notes} [待核 ${new Date().toISOString().slice(0, 10)}]`.trim();
-  await updateTask(id, { status: 'Waiting', workflow: 'Fixed', owner: 'Delphine Roth', notes }, 'status');
+  const current = getState();
+  const task = current.tasks.find((row) => row.id === id);
+  if (!task || !canSendToQa(current, task)) return;
+  const existing = String(task.notes ?? '').trim();
+  const notes = existing.includes('[待核') ? existing : `${existing} [待核 ${new Date().toISOString().slice(0, 10)}]`.trim();
+  await updateTask(id, { status: 'Waiting', workflow: 'Fixed', owner: qaOwnerName(current), notes }, 'status');
   render();
   toast(`${task.key} sent to QA.`, { tone: 'success' });
 }
@@ -494,7 +496,15 @@ document.addEventListener('click', async (event) => {
   else if (action === 'reset-demo') {
     openModal({ title: 'Reset demo data?', message: 'All changes in the Test account will be replaced by the original demo rows.', confirmLabel: 'Reset', tone: 'danger', onConfirm: () => { resetDemoData(); } });
   } else if (action === 'task-toqa') sendToQA(id);
-  else if (action === 'task-brief') briefTask(id);
+  else if (action === 'task-restore-mark') {
+    try {
+      const result = await restoreQaMark(id);
+      render();
+      toast(`${result.snapshot.key} QA mark restored.`, { tone: 'success' });
+    } catch (error) {
+      toast(error.message, { tone: 'danger' });
+    }
+  } else if (action === 'task-brief') briefTask(id);
   else if (action === 'toggle-subtasks') toggleSubtasks(actionEl);
   else if (action === 'task-review') {
     const decision = actionEl.dataset.decision;

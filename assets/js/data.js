@@ -178,6 +178,26 @@ export async function addTaskComment(id, body) {
   state = await readState();
 }
 
+// Board health: put a missing QA hand-over mark back on the row's note.
+export async function restoreQaMark(id) {
+  const task = state.tasks.find((row) => row.id === id);
+  if (!task) throw new Error('Task not found.');
+  const notes = String(task.notes ?? '').trim();
+  if (/\[(?:待核|已核|免核)/.test(notes)) return { ok: true, snapshot: task };
+
+  const recorded = (state.taskHistory ?? [])
+    .filter((entry) => entry.taskId === id && ['note', 'notes'].includes(String(entry.field ?? '').toLowerCase()))
+    .sort((a, b) => String(a.at ?? '').localeCompare(String(b.at ?? '')))
+    .map((entry) => String(entry.new ?? '').match(/\[待核(?:\s+(\d{4}-\d{2}-\d{2}))?/))
+    .filter(Boolean);
+
+  const historyDate = recorded[recorded.length - 1]?.[1];
+  const mark = (recorded.length || task.status === 'Waiting') ? '待核' : '已核';
+  const date = historyDate || nowIso().slice(0, 10);
+  const snapshot = await updateTask(id, { notes: `${notes} [${mark} ${date}]`.trim() }, 'notes');
+  return { ok: true, snapshot };
+}
+
 export async function createBug(input) {
   const number = nextNumber(state.bugs, 'key');
   const now = nowIso();

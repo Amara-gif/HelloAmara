@@ -274,11 +274,25 @@ function qaCheckDate(task) {
   return match ? match[1] : '';
 }
 
-function isQaOwner(state, task) {
+export function qaOwnerName(state) {
+  const owner = (state?.team ?? []).find((agent) => /^qa$/i.test(String(agent?.role ?? '').trim()));
+  return String(owner?.name ?? '').trim() || 'QA';
+}
+
+export function isQaOwner(state, task) {
   const owner = String(task?.owner ?? '').trim();
   if (!owner) return false;
   if (/^qa$/i.test(owner)) return true;
-  return (state.team ?? []).some((agent) => agent.name === owner && /^qa$/i.test(String(agent.role ?? '').trim()));
+  return (state?.team ?? []).some((agent) => (
+    String(agent?.name ?? '').trim().toLowerCase() === owner.toLowerCase()
+    && /^qa$/i.test(String(agent?.role ?? '').trim())
+  ));
+}
+
+export function canSendToQa(state, task) {
+  if (!task || task.status === 'Done') return false;
+  if (['Verified', 'Closed'].includes(String(task?.workflow ?? ''))) return false;
+  return !isQaOwner(state, task);
 }
 
 function hasQaRecord(state, task) {
@@ -568,7 +582,7 @@ function taskRow(state, task, depth, children = []) {
     <td data-label="Severity">${esc(task.severity)}</td>
     <td data-label="Component">${esc(task.component)}</td>
     <td data-label="Age">${age(task.createdAt)}</td>
-    <td data-label="Actions"><div class="row-actions">${task.status !== 'Done' && task.owner !== 'Delphine Roth' && task.status !== 'Waiting' ? `<button class="btn btn-ghost btn-sm" type="button" data-action="task-toqa" data-id="${task.id}">Send to QA</button>` : ''}<button class="btn btn-ghost btn-sm" type="button" data-action="task-brief" data-id="${task.id}">Brief</button></div></td>
+    <td data-label="Actions"><div class="row-actions">${canSendToQa(state, task) ? `<button class="btn btn-ghost btn-sm" type="button" data-action="task-toqa" data-id="${task.id}">Send to QA</button>` : ''}<button class="btn btn-ghost btn-sm" type="button" data-action="task-brief" data-id="${task.id}">Brief</button></div></td>
   </tr>`;
 }
 
@@ -598,10 +612,89 @@ function taskTable(state, rows) {
   </table></div>`;
 }
 
+const DONE_QA_MARKS = ['[已核', '[免核'];
+
+function doneWithoutQaMark(state) {
+  return (state.tasks ?? []).filter((task) => (
+    task.status === 'Done' && !DONE_QA_MARKS.some((mark) => noteHas(task, mark))
+  ));
+}
+
+function lostHandoverMarks(state) {
+  const tasks = new Map((state.tasks ?? []).map((task) => [task.id, task]));
+  const lost = new Map();
+  const hasHandover = (task) => noteHas(task, '[待核') || DONE_QA_MARKS.some((mark) => noteHas(task, mark));
+
+  // A recorded hand-over that no longer appears in the row's note.
+  for (const entry of state.taskHistory ?? []) {
+    const field = String(entry?.field ?? '').toLowerCase();
+    if (field !== 'note' && field !== 'notes') continue;
+    const task = tasks.get(entry.taskId);
+    if (!task || hasHandover(task)) continue;
+    const match = String(entry.new ?? '').match(/\[待核(?:\s+(\d{4}-\d{2}-\d{2}))?/);
+    if (!match) continue;
+    lost.set(task.id, { task, mark: '待核', date: match[1] || today() });
+  }
+
+  // Rows that were handed to QA but lost the mark before it was written.
+  for (const task of tasks.values()) {
+    if (lost.has(task.id) || task.status !== 'Waiting' || hasHandover(task)) continue;
+    lost.set(task.id, { task, mark: '待核', date: today() });
+  }
+
+  // Done rows whose workflow proves QA checked them, but whose note lost the mark.
+  for (const task of tasks.values()) {
+    if (lost.has(task.id) || task.status !== 'Done' || hasHandover(task)) continue;
+    if (!['Verified', 'Closed'].includes(String(task.workflow ?? ''))) continue;
+    lost.set(task.id, { task, mark: '已核', date: qaCheckDate(task) || today() });
+  }
+
+  return [...lost.values()].slice(0, 10);
+}
+
+function boardHealth(state) {
+  const done = doneWithoutQaMark(state);
+  const lost = lostHandoverMarks(state);
+  const dropped = (state.tasks ?? []).filter((task) => noteHas(task, '[dropped'));
+  if (!done.length && !lost.length && !dropped.length) return '';
+  const doneShown = done.slice(0, 12);
+  const healthRow = (task, kind, action = '') => `<div class="row-item" data-health-row="${esc(kind)}">
+    <span class="row-main"><span class="row-title"><a href="#/task/${task.id}">${esc(task.key)} · ${esc(task.title)}</a></span><span class="row-meta">${esc(task.owner)} · ${esc(task.workflow)}${task.notes ? ` · ${esc(task.notes)}` : ''}</span></span>
+    ${action}
+  </div>`;
+  const total = done.length + lost.length + (dropped.length ? 1 : 0);
+  return `<details class="card">
+    <summary class="card-head"><span class="card-title">Board health</span><span class="badge badge-warning">${total} to review</span></summary>
+    <div class="card-body">
+      ${done.length ? `<div class="stack" data-health-section="done"><h3 class="card-title">Done without a QA mark</h3><p class="row-meta">A Done note needs <code>[已核</code> or <code>[免核</code>. Showing ${doneShown.length} of ${done.length}.</p><div class="row-list">${doneShown.map((task) => healthRow(task, 'done')).join('')}</div></div>` : ''}
+      ${lost.length ? `<div class="stack" data-health-section="lost"><h3 class="card-title">Lost hand-over marks</h3><p class="row-meta">These rows have evidence of a QA hand-over, but the mark is missing from the note.</p><div class="row-list">${lost.map(({ task, mark, date }) => healthRow(task, 'lost', `<button class="btn btn-ghost btn-sm" type="button" data-action="task-restore-mark" data-id="${task.id}">Restore mark</button><span class="sr-only">${esc(mark)} ${esc(date)}</span>`)).join('')}</div></div>` : ''}
+      ${dropped.length ? `<p class="row-meta" data-health-section="dropped"><strong>${dropped.length} dropped ${dropped.length === 1 ? 'row stays' : 'rows stay'} in tasks.tsv.</strong> Their notes contain <code>[dropped</code>, so they are reported here instead of being deleted.</p>` : ''}
+    </div>
+  </details>`;
+}
+
 function taskBoard(state, rows) {
   const columns = ['To Do', 'In Progress', 'In Review', 'Done'];
-  const bucket = (task) => task.status === 'To do' ? 'To Do' : task.status === 'Waiting' ? (task.owner === 'Delphine Roth' ? 'In Review' : 'In Progress') : task.status === 'Done' ? 'Done' : 'In Progress';
-  return `<div class="board">${columns.map((column) => `<section class="board-column"><h2>${column}<span class="badge badge-muted">${rows.filter((task) => bucket(task) === column).length}</span></h2>${rows.filter((task) => bucket(task) === column).map((task) => `<article class="board-card"><a href="#/task/${task.id}">${esc(task.title)}</a><span class="row-meta">${esc(task.key)} · ${esc(task.owner)}</span><div class="board-card-foot">${statusBadge(task.workflow)}${priority(task.priority)}</div><label class="board-move">Move to<select class="select select-sm" data-move-task="${task.id}">${['To do', 'In progress', 'Waiting', 'Done'].map((status) => option(status, task.status)).join('')}</select></label></article>`).join('') || empty('No items.')}</section>`).join('')}</div>`;
+  const bucket = (task) => {
+    const status = String(task.status ?? '');
+    if (status === 'To do') return 'To Do';
+    if (status === 'Done') return 'Done';
+    if (status === 'In Review' || status === 'In review') return 'In Review';
+    if (status === 'Waiting') return isQaOwner(state, task) ? 'In Review' : 'In Progress';
+    return 'In Progress';
+  };
+  const cards = (column) => rows.filter((task) => bucket(task) === column).map((task) => {
+    const flagged = task.status === 'Waiting' && !isQaOwner(state, task);
+    return `<article class="board-card" data-board-task="${task.id}">
+      <a href="#/task/${task.id}">${esc(task.title)}</a>
+      <span class="row-meta">${esc(task.key)} · ${esc(task.owner)}</span>
+      ${flagged ? '<span class="badge badge-warning">Waiting · no QA owner</span>' : ''}
+      <div class="board-card-foot">${statusBadge(task.workflow)}${priority(task.priority)}</div>
+      <label class="board-move"><span>Move to…</span><select class="select select-sm" data-move-task="${task.id}" aria-label="Move ${esc(task.key)} to">${['To do', 'In progress', 'Waiting', 'Done'].map((status) => option(status, task.status)).join('')}</select></label>
+      ${canSendToQa(state, task) ? `<div class="row-actions"><button class="btn btn-ghost btn-sm" type="button" data-action="task-toqa" data-id="${task.id}">Send to QA</button></div>` : ''}
+    </article>`;
+  }).join('') || empty('No items.');
+  return `<div class="board">${columns.map((column) => `<section class="board-column" data-board-column="${esc(column)}"><h2>${column}<span class="badge badge-muted">${rows.filter((task) => bucket(task) === column).length}</span></h2>${cards(column)}</section>`).join('')}</div>${boardHealth(state)}`;
 }
 
 function tasksPage(state, query) {
@@ -830,7 +923,7 @@ function taskDetail(state, route) {
   return `
     <nav class="breadcrumb"><a href="#/tasks">← All work items</a>${project ? `<span>/</span><a href="#/project/${project.key}">${esc(project.name)}</a>` : ''}</nav>
     ${pageHead('Work item', `${task.key} · ${project?.name ?? 'No project'} · updated ${fmtStamp(task.updatedAt)}`, `<span class="badge badge-accent">${esc(task.type)}</span>`)}
-    <section class="detail-title card"><div class="card-body"><div class="detail-title-row"><span class="key-link">${esc(task.key)}</span><h2>${esc(task.title)}</h2></div><div class="detail-badges">${statusBadge(task.workflow)}${priority(task.priority)}<span class="badge badge-muted">${esc(task.severity)}</span><span class="assignee">${avatar(task.owner)}${esc(task.owner)}</span>${task.status !== 'Done' && task.owner !== 'Delphine Roth' ? `<button class="btn btn-primary btn-sm" type="button" data-action="task-toqa" data-id="${task.id}">Send to QA</button>` : ''}</div></div></section>
+    <section class="detail-title card"><div class="card-body"><div class="detail-title-row"><span class="key-link">${esc(task.key)}</span><h2>${esc(task.title)}</h2></div><div class="detail-badges">${statusBadge(task.workflow)}${priority(task.priority)}<span class="badge badge-muted">${esc(task.severity)}</span><span class="assignee">${avatar(task.owner)}${esc(task.owner)}</span>${canSendToQa(state, task) ? `<button class="btn btn-primary btn-sm" type="button" data-action="task-toqa" data-id="${task.id}">Send to QA</button>` : ''}</div></div></section>
     <div class="detail-grid">
       <div class="detail-main">
         <section class="card"><div class="card-head"><h2>Where this stands</h2></div><div class="card-body"><dl class="details"><div><dt>Next action</dt><dd>${esc(task.status === 'Waiting' ? 'Wait for the QA check.' : task.status === 'Done' ? 'No further action.' : 'Continue the current step.')}</dd></div><div><dt>QA state</dt><dd>${task.notes?.includes('[已核') ? 'Checked' : task.notes?.includes('[待核') ? 'Waiting for QA' : 'Not sent yet'}</dd></div><div><dt>Review</dt><dd>${task.reviewed ? 'Reviewed' : 'Not reviewed'}</dd></div><div><dt>Note</dt><dd>${esc(task.notes || '—')}</dd></div></dl></div></section>
