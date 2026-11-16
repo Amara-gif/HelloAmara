@@ -2,7 +2,7 @@ import { listAccounts, getAccount, getActiveAccountId, setActiveAccount, clearAc
 import {
   start, getState, refresh, resetDemo, createTask, updateTask, addTaskComment,
   transitionTask, reviewTask,
-  createBug, updateBug, addBugComment, softDeleteBugs, createEvent, deleteEvent, createPage,
+  createBug, updateBug, transitionBug, addBugComment, softDeleteBugs, createEvent, deleteEvent, createPage,
   updatePage, softDeletePage, createProject, updateProject, createOrder,
   closeOrder, saveSettings, restoreQaMark,
 } from './data.js';
@@ -707,6 +707,13 @@ document.addEventListener('submit', async (event) => {
       await addTaskComment(data.id, data.body);
       await rerender();
       toast('Comment saved on this device.', { tone: 'success' });
+    } else if (form.dataset.form === 'bug-title' || form.dataset.form === 'bug-details' || form.dataset.form === 'bug-fields') {
+      const fields = (form.dataset.history || '').split(',').map((field) => field.trim()).filter(Boolean);
+      const patch = {};
+      for (const field of fields) patch[field] = data[field] ?? '';
+      await updateBug(data.id, patch, fields);
+      await rerender();
+      toast('Bug saved on this device.', { tone: 'success' });
     } else if (form.dataset.form === 'bug-comment') {
       await addBugComment(data.id, data.body);
       await rerender();
@@ -716,9 +723,14 @@ document.addEventListener('submit', async (event) => {
       await rerender();
       toast(`${moved.key} moved to ${moved.workflow}.`, { tone: 'success' });
     } else if (form.dataset.form === 'bug-workflow') {
-      await updateBug(data.id, { status: data.to }, 'status');
+      const moved = await transitionBug(data.id, {
+        to: data.to,
+        as: data.as,
+        reason: data.reason,
+        duplicate_of: data.duplicate_of,
+      });
       await rerender();
-      toast('Bug moved.', { tone: 'success' });
+      toast(`${moved.key} moved to ${moved.status}.`, { tone: 'success' });
     } else if (form.dataset.form === 'order') {
       await createOrder(data.owner, data.text);
       await rerender();
@@ -776,7 +788,7 @@ backdrop.addEventListener('click', () => setDrawer(false));
 nav.addEventListener('click', (event) => { if (event.target.closest('a')) setDrawer(false); });
 document.getElementById('skip-link')?.addEventListener('click', (event) => { event.preventDefault(); main.focus(); main.scrollIntoView(); });
 document.addEventListener('keydown', (event) => {
-  const commentBox = event.target.closest?.('#tskComment, #task-progress-comment');
+  const commentBox = event.target.closest?.('#tskComment, #task-progress-comment, #bgComment');
   if (commentBox && event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
     event.preventDefault();
     if (typeof commentBox.form?.requestSubmit === 'function') commentBox.form.requestSubmit();

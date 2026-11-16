@@ -13,6 +13,111 @@ import { buildDemoData, demoSettings, DEMO_VERSION } from './demo-data.js';
 export const BUG_SEVERITIES = ['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'];
 const BUG_SLA_DAYS = { 'S1 Blocker': 0, 'S2 Critical': 2, 'S3 Major': 5, 'S4 Minor': null };
 
+// Bug detail uses the eleven workflow statuses directly on the bug row. The
+// transition map is the inventory's TRANSITIONS table, shared by the bug and
+// task detail workflows.
+export const BUG_STATUSES = ['New', 'Triaged', 'In progress', 'Fixed', 'Verified', 'Closed', 'Reopened', 'Duplicate', 'Wont fix', 'Deferred', 'Rejected'];
+export const BUG_TRANSITIONS = {
+  New: ['Triaged', 'Duplicate', 'Rejected', 'Deferred'],
+  Triaged: ['In progress', 'Duplicate', 'Rejected', 'Deferred', 'Wont fix'],
+  'In progress': ['Fixed', 'Duplicate', 'Deferred', 'Wont fix'],
+  Fixed: ['Verified', 'Reopened'],
+  Verified: ['Closed', 'Reopened'],
+  Closed: ['Reopened'],
+  Reopened: ['Triaged', 'In progress', 'Fixed', 'Duplicate', 'Wont fix', 'Deferred'],
+  Duplicate: ['Reopened'],
+  'Wont fix': ['Reopened'],
+  Deferred: ['Reopened'],
+  Rejected: ['Reopened'],
+};
+export const BUG_WORKFLOW_TRANSITIONS = BUG_TRANSITIONS;
+export const TRANSITIONS = BUG_TRANSITIONS;
+export const BUG_WORKFLOW_STATUSES = BUG_STATUSES;
+export const BUG_QA_ONLY_STATUSES = ['Verified', 'Closed'];
+export const BUG_WAIVER_STATUSES = ['Duplicate', 'Wont fix', 'Rejected'];
+export const BUG_REASON_REQUIRED_STATUSES = ['Wont fix', 'Rejected', 'Deferred', 'Reopened'];
+
+const BUG_STATUS_ALIASES = {
+  open: 'New',
+  'to do': 'New',
+  todo: 'New',
+  'to-do': 'New',
+  'in progress': 'In progress',
+  'in-progress': 'In progress',
+  'in review': 'Fixed',
+  'to qa': 'Fixed',
+  waiting: 'Fixed',
+  resolved: 'Verified',
+  done: 'Closed',
+  'won\'t fix': 'Wont fix',
+  'won’t fix': 'Wont fix',
+  'wont fix': 'Wont fix',
+  wontfix: 'Wont fix',
+};
+
+export function normalizeBugStatus(status) {
+  const raw = String(status ?? '').trim();
+  if (!raw) return '';
+  const exact = BUG_STATUSES.find((value) => value.toLowerCase() === raw.toLowerCase());
+  return exact ?? BUG_STATUS_ALIASES[raw.toLowerCase()] ?? raw;
+}
+
+export function bugWorkflowTargets(bugOrStatus) {
+  const current = typeof bugOrStatus === 'string'
+    ? normalizeBugStatus(bugOrStatus)
+    : normalizeBugStatus(bugOrStatus?.status);
+  return [...(BUG_TRANSITIONS[current] ?? [])];
+}
+
+export const bugTransitionTargets = bugWorkflowTargets;
+export const bugTransitionsFor = bugWorkflowTargets;
+
+function bugFixer(bug, state) {
+  const explicit = String(bug?.fixer ?? bug?.fixedBy ?? bug?.fixed_by ?? '').trim();
+  if (explicit) return explicit;
+  const history = state?.bugHistory ?? state?.bug_history ?? [];
+  const fixedMoves = history
+    .filter((row) => row.bugId === bug?.id && normalizeBugStatus(row.new) === 'Fixed')
+    .sort((a, b) => String(a.at ?? '').localeCompare(String(b.at ?? '')));
+  return String(fixedMoves[fixedMoves.length - 1]?.who ?? bug?.assignee ?? '').trim();
+}
+
+export function checkBugTransition(bug, to, options = {}) {
+  if (!bug) return { ok: false, reason: 'Bug not found.' };
+  const opts = typeof options === 'string' ? { as: options } : options;
+  const target = normalizeBugStatus(to);
+  const current = normalizeBugStatus(bug.status);
+  const allowed = bugWorkflowTargets(bug);
+  if (!BUG_STATUSES.includes(target)) {
+    return { ok: false, current, target, allowed, reason: `Unknown bug status “${String(to ?? '')}”.` };
+  }
+  if (!allowed.includes(target)) {
+    return {
+      ok: false, current, target, allowed,
+      reason: `Cannot move from ${current} to ${target}. Legal targets: ${allowed.join(', ') || 'none'}.`,
+    };
+  }
+  const actor = String(opts.as ?? opts.actingAs ?? opts.who ?? '').trim();
+  const fixer = bugFixer(bug, opts.state);
+  if (target === 'Verified' && actor && fixer && actorMatches(actor, [fixer])) {
+    return {
+      ok: false, current, target, allowed, actor, fixer,
+      reason: 'A fixer cannot Verify their own fix; only QA can set Verified. Ask another QA to verify it.',
+    };
+  }
+  if (BUG_QA_ONLY_STATUSES.includes(target) && !isQaActor(opts.state, actor)) {
+    return { ok: false, current, target, allowed, actor, reason: `Only QA can move a bug to ${target}. Set As to QA.` };
+  }
+  if (BUG_WAIVER_STATUSES.includes(target) && !isWaiverActor(opts.state, actor)) {
+    return { ok: false, current, target, allowed, actor, reason: `${target} needs Amara, QA or Steward acting on the move.` };
+  }
+  const reason = String(opts.reason ?? '').trim();
+  if (BUG_REASON_REQUIRED_STATUSES.includes(target) && !reason) {
+    return { ok: false, current, target, allowed, actor, reason: `A reason is required to move to ${target}.` };
+  }
+  return { ok: true, current, target, allowed, actor, reason, storedStatus: target };
+}
+
 // Accept both the stored label ("S2 Critical") and the short form ("S2") that
 // report-a-bug links use. Unknown values fall back to the S3 default.
 export function normalizeBugSeverity(value) {
@@ -495,10 +600,11 @@ export async function createBug(input) {
     severity, priority: input.priority || 'Medium',
     assignee: input.assignee || 'Dispatcher', component: input.component || 'other',
     due: bugSlaDue(severity),
-    type: 'Bug', reporter: 'Amara', description: input.description || '',
+    type: input.type || 'Bug', reporter: input.reporter || 'Amara', description: input.description || '',
     repro: input.repro || '', expected: input.expected || '', actual: input.actual || '',
-    labels: input.labels || '', found_in: input.found_in || '', fix_in: '',
-    environment: input.environment || '', links: '', linked_task: '', resolution: '',
+    labels: input.labels || '', found_in: input.found_in || '', fix_in: input.fix_in || '',
+    environment: input.environment || '', links: input.links || '', linked_task: input.linked_task || '',
+    resolution: input.resolution || '', note: input.note || '', workflowReason: '',
     attachments: [], createdAt: now, updatedAt: now, deletedAt: null,
   };
   await putRecord('bugs', bug);
@@ -507,16 +613,25 @@ export async function createBug(input) {
   return bug;
 }
 
-export async function updateBug(id, patch, historyField = '') {
+// A bug save can touch many fields at once. Each changed field gets its own
+// history row, the same contract the task detail uses.
+export async function updateBug(id, patch, historyField = '', options = {}) {
   const bug = state.bugs.find((row) => row.id === id);
   if (!bug) throw new Error('Bug not found.');
   const now = nowIso();
   const updated = { ...bug, ...patch, updatedAt: now };
   await putRecord('bugs', updated);
-  if (historyField && patch[historyField] !== undefined && patch[historyField] !== bug[historyField]) {
+  const requested = Array.isArray(historyField) ? historyField : String(historyField || '').split(/[,;]/);
+  const fields = [...new Set(requested.map((field) => field.trim()).filter(Boolean))];
+  const who = String(options?.who ?? options?.as ?? 'Amara').trim() || 'Amara';
+  for (const field of fields) {
+    if (patch[field] === undefined) continue;
+    const previous = bug[field] ?? '';
+    const next = patch[field] ?? '';
+    if (String(previous) === String(next)) continue;
     await putRecord('bug_history', {
-      id: newId('bh'), bugId: id, at: now, who: 'Amara', field: historyField,
-      old: String(bug[historyField] ?? ''), new: String(patch[historyField] ?? ''),
+      id: newId('bh'), bugId: id, at: now, who, field,
+      old: String(previous), new: String(next),
       updatedAt: now, deletedAt: null,
     });
   }
@@ -524,9 +639,40 @@ export async function updateBug(id, patch, historyField = '') {
   return updated;
 }
 
-export async function addBugComment(id, body) {
+// Apply a bug workflow move only after every gate passes. On a refused move
+// nothing is written: the caller shows the returned reason as a toast.
+export async function transitionBug(id, input = {}, maybeAs, maybeReason) {
+  const bug = state.bugs.find((row) => row.id === id);
+  if (!bug) throw new Error('Bug not found.');
+  const payload = typeof input === 'string'
+    ? { to: input, ...(maybeAs && typeof maybeAs === 'object' ? maybeAs : { as: maybeAs, reason: maybeReason }) }
+    : input;
+  const check = checkBugTransition(bug, payload.to ?? payload.target ?? payload.status, {
+    ...payload,
+    state,
+  });
+  if (!check.ok) throw new Error(check.reason);
+
+  const patch = { status: check.target };
+  const history = ['status'];
+  if (check.target === 'Duplicate') {
+    const duplicateOf = String(payload.duplicateOf ?? payload.duplicate_of ?? '').trim();
+    if (duplicateOf) {
+      patch.duplicateOf = duplicateOf;
+      patch.duplicate_of = duplicateOf;
+      history.push('duplicateOf');
+    }
+  }
+  if (check.reason) {
+    patch.workflowReason = check.reason;
+    history.push('workflowReason');
+  }
+  return updateBug(id, patch, history, { who: payload.as ?? payload.actingAs ?? payload.who ?? 'Amara' });
+}
+
+export async function addBugComment(id, body, who = 'Amara') {
   const now = nowIso();
-  await putRecord('bug_comments', { id: newId('bc'), bugId: id, at: now, author: 'Amara', body, updatedAt: now, deletedAt: null });
+  await putRecord('bug_comments', { id: newId('bc'), bugId: id, at: now, author: who, body, updatedAt: now, deletedAt: null });
   state = await readState();
 }
 
