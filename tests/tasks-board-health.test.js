@@ -41,6 +41,38 @@ test('board cards expose Move to and conditional Send to QA', () => {
   assert.doesNotMatch(html, /data-action="task-toqa" data-id="t3"/);
 });
 
+const boardColumn = (html, name) => html.match(new RegExp(`data-board-column="${name}"[\\s\\S]*?</section>`))?.[0] ?? '';
+
+test('board defaults to all statuses so the Done column shows the demo Done tasks', () => {
+  const state = demoState();
+  const html = renderView(route, new URLSearchParams('view=board'), state);
+  const done = boardColumn(html, 'Done');
+
+  for (const key of ['T-4', 'T-7', 'T-12', 'T-14', 'T-18']) {
+    assert.match(done, new RegExp(`>${key} ·`), `${key} is missing from the default Done column`);
+  }
+  assert.match(done, /<span class="badge badge-muted">5<\/span>/);
+  assert.match(html, /<a class="chip is-active" href="[^"]*scope=all">All \d+<\/a>/);
+
+  assert.match(boardColumn(html, 'In Review'), />T-3 ·/);
+  const progress = boardColumn(html, 'In Progress');
+  assert.match(progress, />T-9 ·/);
+  assert.match(progress, /Waiting · no QA owner/);
+});
+
+test('board scope=open hides Done and makes the Open chip active', () => {
+  const state = demoState();
+  const html = renderView(route, new URLSearchParams('view=board&scope=open'), state);
+  const done = boardColumn(html, 'Done');
+
+  assert.match(done, /<span class="badge badge-muted">0<\/span>/);
+  assert.match(done, /No items\./);
+  for (const key of ['T-4', 'T-7', 'T-12', 'T-14', 'T-18']) {
+    assert.doesNotMatch(done, new RegExp(`>${key} ·`));
+  }
+  assert.match(html, /<a class="chip is-active" href="[^"]*scope=open">Open \d+<\/a>/);
+});
+
 test('board health caps Done rows, reports lost marks and dropped rows', () => {
   const state = demoState();
   const html = renderView(route, new URLSearchParams('view=board'), state);

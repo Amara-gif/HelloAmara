@@ -606,9 +606,12 @@ function progressOf(task) {
 
 export function filterTasks(state, query, options = {}) {
   const forcedProject = options.projectId ?? '';
+  const requestedDefault = options.defaultScope ?? (query.get('view') === 'board' ? 'all' : 'open');
+  const defaultScope = requestedDefault === 'all' ? 'all' : 'open';
   const reset = query.get('reset') === '1';
-  const scopeParam = query.get('scope');
-  const scope = !reset && ['all', 'everything', '1', 'true', 'yes'].includes(scopeParam) ? 'all' : 'open';
+  const scopeParam = reset ? '' : query.get('scope');
+  // An explicit scope always wins; otherwise the view that called us supplies the default.
+  const scope = ['all', 'everything', '1', 'true', 'yes'].includes(scopeParam) ? 'all' : scopeParam === 'open' ? 'open' : defaultScope;
   const q = reset ? '' : (query.get('q') ?? '').trim();
   const status = reset ? '' : queryValues(query, 'status').join(',');
   const owner = reset ? '' : queryValues(query, 'owner').join(',');
@@ -973,8 +976,9 @@ function workItemsBody(state, query, options = {}) {
   const allTasks = state.tasks ?? [];
   const tasks = projectId ? allTasks.filter((task) => task.projectId === projectId) : allTasks;
   const scopedState = tasks === allTasks ? state : { ...state, tasks };
-  const { rows, scope, q, status, owner, priorityFilter, severity, component, module, projectFilter, sort } = filterTasks(scopedState, query, { projectId });
   const view = ['list', 'board', 'calendar', 'timeline'].includes(query.get('view')) ? query.get('view') : 'list';
+  // The board shows every status by default; list, calendar and timeline stay open-first.
+  const { rows, scope, q, status, owner, priorityFilter, severity, component, module, projectFilter, sort } = filterTasks(scopedState, query, { projectId, defaultScope: view === 'board' ? 'all' : 'open' });
   const openCount = tasks.filter((task) => task.status !== 'Done').length;
   const allCount = tasks.length;
   const overdue = tasks.filter((task) => task.due && task.due < today() && task.status !== 'Done').length;
