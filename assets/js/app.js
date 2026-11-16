@@ -3,11 +3,11 @@ import {
   start, getState, refresh, resetDemo, createTask, updateTask, addTaskComment,
   transitionTask, reviewTask,
   createBug, updateBug, addBugComment, createEvent, deleteEvent, createPage,
-  updatePage, softDeletePage, createProject, updateProject, createOrder,
-  closeOrder, saveSettings, restoreQaMark,
+  updatePage, softDeletePage, softDeletePages, createProject, updateProject, softDeleteProject,
+  reorderProjects, createOrder, closeOrder, saveSettings, restoreQaMark,
 } from './data.js';
 import { readLocation, routeForPath, groupRoutes, SETTINGS_LINKS } from './routes.js';
-import { renderView, mountView, renderAccountScreen, renderCreateDialog, canSendToQa, qaOwnerName } from './views.js';
+import { renderView, mountView, renderAccountScreen, renderCreateDialog, canSendToQa, qaOwnerName, markdown } from './views.js';
 import { icon } from './icons.js';
 import { updateTaskBadge } from './nav-badge.js';
 import { openModal, toast } from './ui.js';
@@ -307,6 +307,20 @@ function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
 
+function syncPageSelection() {
+  const boxes = [...main.querySelectorAll('[data-page-select]')];
+  const selected = boxes.filter((box) => box.checked).length;
+  const selectAll = main.querySelector('[data-select-all-pages]');
+  if (selectAll) {
+    selectAll.checked = boxes.length > 0 && selected === boxes.length;
+    selectAll.indeterminate = selected > 0 && selected < boxes.length;
+  }
+  const button = main.querySelector('[data-action="delete-selected-pages"]');
+  if (button) button.disabled = selected === 0;
+  const count = main.querySelector('[data-page-selection-count]');
+  if (count) count.textContent = `${selected} selected`;
+}
+
 function openCreateDialog(preset = {}) {
   const options = typeof preset === 'string' ? { tab: preset } : (preset ?? {});
   const state = getState();
@@ -558,11 +572,62 @@ document.addEventListener('click', async (event) => {
     } catch (error) {
       toast(error.message, { tone: 'danger' });
     }
+  } else if (action === 'project-edit') {
+    navigate('/projects', { ...(actionEl.dataset.archived === '1' ? { archived: 1 } : {}), edit: id });
+  } else if (action === 'project-schedule') {
+    const project = getState().projects.find((row) => row.id === id);
+    openCreateDialog({ tab: 'event', projectId: project?.id ?? '' });
   } else if (action === 'project-archive') {
     const project = getState().projects.find((row) => row.id === id);
-    if (project) { await updateProject(id, { archived: project.archived ? 0 : 1, status: project.archived ? 'Active' : 'Archived' }); render(); toast(project.archived ? 'Project restored.' : 'Project archived.'); }
+    if (!project) return;
+    if (project.archived) {
+      await updateProject(id, { archived: 0, status: 'Active' });
+      render();
+      toast('Project restored.', { tone: 'success' });
+    } else {
+      openModal({
+        title: 'Archive this project?',
+        message: 'The project leaves the sidebar and the active list. You can restore it from the Archived tab at any time.',
+        confirmLabel: 'Archive',
+        onConfirm: async () => {
+          await updateProject(id, { archived: 1, status: 'Archived' });
+          render();
+          toast('Project archived.', { tone: 'success' });
+        },
+      });
+    }
+  } else if (action === 'project-delete') {
+    openModal({
+      title: 'Delete this project?',
+      message: 'Only archived projects can be deleted. The project is soft-deleted on this device and stays recoverable in the local database.',
+      confirmLabel: 'Delete',
+      tone: 'danger',
+      onConfirm: async () => {
+        await softDeleteProject(id);
+        render();
+        toast('Project deleted.', { tone: 'success' });
+      },
+    });
   } else if (action === 'delete-page') {
     openModal({ title: 'Delete this page?', message: 'The page is soft-deleted on this device. Other versions stay in the account.', confirmLabel: 'Delete', tone: 'danger', onConfirm: async () => { await softDeletePage(id); render(); toast('Page deleted.', { tone: 'success' }); } });
+  } else if (action === 'delete-selected-pages') {
+    const ids = [...main.querySelectorAll('[data-page-select]:checked')].map((box) => box.value);
+    if (!ids.length) {
+      syncPageSelection();
+      toast('Select at least one page first.', { tone: 'danger' });
+      return;
+    }
+    openModal({
+      title: `Delete ${ids.length} page${ids.length === 1 ? '' : 's'}?`,
+      message: 'The selected pages are soft-deleted on this device. Their rows stay recoverable in the local database.',
+      confirmLabel: `Delete ${ids.length}`,
+      tone: 'danger',
+      onConfirm: async () => {
+        await softDeletePages(ids);
+        render();
+        toast(`${ids.length} page${ids.length === 1 ? '' : 's'} deleted.`, { tone: 'success' });
+      },
+    });
   } else if (action === 'delete-event') {
     openModal({ title: 'Delete this event?', message: 'This removes the event from this device.', confirmLabel: 'Delete', tone: 'danger', onConfirm: async () => { await deleteEvent(id); render(); toast('Event deleted.', { tone: 'success' }); } });
   } else if (action === 'enable-reminders') {
@@ -583,7 +648,8 @@ document.addEventListener('click', async (event) => {
         toast('Notification permission was not granted.', { tone: 'danger' });
       }
     } else toast('This browser does not support notifications.', { tone: 'danger' });
-  } else if (action === 'print') window.print();
+  } else if (action === 'ai-polish') toast('AI Polish is not connected in this build. No external AI was called.', { tone: 'danger' });
+  else if (action === 'print') window.print();
   else if (action === 'open-folder') toast('Folder access is not available in a browser.', { tone: 'danger' });
   else if (action === 'fake-download') toast('Attachment placeholder — file storage is a later phase.');
   else if (action === 'toast-copy') toast('Copied actions are placeholders in this build.');
@@ -602,7 +668,23 @@ document.addEventListener('click', async (event) => {
   }
 });
 
+document.addEventListener('input', (event) => {
+  const source = event.target.closest?.('[data-page-preview-source]');
+  if (!source) return;
+  const preview = main.querySelector('[data-page-preview]');
+  if (preview) preview.innerHTML = markdown(source.value);
+});
+
 document.addEventListener('change', async (event) => {
+  if (event.target.closest('[data-select-all-pages]')) {
+    for (const box of main.querySelectorAll('[data-page-select]')) box.checked = event.target.checked;
+    syncPageSelection();
+    return;
+  }
+  if (event.target.closest('[data-page-select]')) {
+    syncPageSelection();
+    return;
+  }
   const move = event.target.closest('[data-move-task]');
   if (move) {
     const status = move.value;
@@ -640,6 +722,20 @@ document.addEventListener('submit', async (event) => {
       await createProject(data);
       await rerender();
       toast('Project added.', { tone: 'success' });
+    } else if (form.dataset.form === 'project-edit') {
+      const updated = await updateProject(data.id, {
+        key: String(data.key ?? '').trim().toUpperCase(),
+        name: String(data.name ?? '').trim(),
+        description: String(data.description ?? '').trim(),
+        owner: String(data.owner ?? '').trim(),
+        status: data.status || 'Active',
+        start: data.start || '',
+        due: data.due || '',
+        keywords: String(data.keywords ?? '').trim(),
+      });
+      if (data.from === 'detail') navigate(`/project/${updated.key}`);
+      else navigate('/projects', data.archived === '1' ? { archived: 1 } : {});
+      toast('Project saved on this device.', { tone: 'success' });
     } else if (form.dataset.form === 'task-title' || form.dataset.form === 'task-details' || form.dataset.form === 'task-fields' || form.dataset.form === 'task-plan') {
       const fields = (form.dataset.history || '').split(',').map((field) => field.trim()).filter(Boolean);
       const patch = taskFormPatch(form.dataset.form, fields, data);
@@ -693,9 +789,16 @@ document.addEventListener('submit', async (event) => {
       settings.appearance = { primary: data.primary, radiusBtn: Number(data.radiusBtn), radiusCard: Number(data.radiusCard), glass: Number(data.glass), enableGlass: Boolean(data.enableGlass) };
       await saveSettings(settings); applyAppearance(settings); await rerender(); toast('Theme saved.', { tone: 'success' });
     } else if (form.dataset.form === 'page-save') {
-      const page = data.id ? await updatePage(data.id, { title: data.title, projectId: data.projectId, body: data.body }) : await createPage(data);
+      const title = String(data.title ?? '').trim();
+      if (!title) {
+        toast('A page title is required.', { tone: 'danger' });
+        form.elements.title?.focus();
+        return;
+      }
+      data.title = title;
+      const page = data.id ? await updatePage(data.id, { title, projectId: data.projectId, tags: data.tags, body: data.body }) : await createPage(data);
       navigate(`/page/${page.id}`);
-      toast('Page saved.', { tone: 'success' });
+      toast('Page saved. The previous version is in the revision history.', { tone: 'success' });
     } else if (form.dataset.form === 'bug-create') {
       const bug = await createBug(data);
       navigate(`/bug/${bug.id}`);
@@ -707,6 +810,78 @@ document.addEventListener('submit', async (event) => {
     toast(error.message || 'Something went wrong.', { tone: 'danger' });
   }
 });
+
+let draggedProjectId = null;
+let projectDropRow = null;
+let projectDropAfter = false;
+
+function clearProjectDragState() {
+  main.querySelectorAll('.project-row.is-dragging, .project-row.is-drop-target, .project-row.is-drop-after').forEach((row) => {
+    row.classList.remove('is-dragging', 'is-drop-target', 'is-drop-after');
+  });
+  draggedProjectId = null;
+  projectDropRow = null;
+  projectDropAfter = false;
+}
+
+document.addEventListener('dragstart', (event) => {
+  const row = event.target.closest?.('[data-project-row][draggable="true"]');
+  if (!row) return;
+  draggedProjectId = row.dataset.projectId;
+  row.classList.add('is-dragging');
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    try { event.dataTransfer.setData('text/plain', draggedProjectId); } catch { /* Drag data is optional. */ }
+  }
+});
+
+document.addEventListener('dragover', (event) => {
+  if (!draggedProjectId) return;
+  const row = event.target.closest?.('[data-project-row][draggable="true"]');
+  if (!row || row.dataset.projectId === draggedProjectId) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  const rect = row.getBoundingClientRect();
+  projectDropAfter = event.clientY > rect.top + rect.height / 2;
+  if (projectDropRow && projectDropRow !== row) projectDropRow.classList.remove('is-drop-target', 'is-drop-after');
+  projectDropRow = row;
+  row.classList.toggle('is-drop-target', !projectDropAfter);
+  row.classList.toggle('is-drop-after', projectDropAfter);
+});
+
+document.addEventListener('dragleave', (event) => {
+  const row = event.target.closest?.('[data-project-row]');
+  if (!row || row !== projectDropRow) return;
+  row.classList.remove('is-drop-target', 'is-drop-after');
+  projectDropRow = null;
+});
+
+document.addEventListener('drop', async (event) => {
+  if (!draggedProjectId) return;
+  const row = event.target.closest?.('[data-project-row][draggable="true"]');
+  if (!row) return;
+  event.preventDefault();
+  const movedId = draggedProjectId;
+  const targetId = row.dataset.projectId;
+  const dropAfter = projectDropAfter;
+  const ids = [...main.querySelectorAll('[data-project-row][draggable="true"]')].map((item) => item.dataset.projectId);
+  clearProjectDragState();
+  if (movedId === targetId) return;
+  const from = ids.indexOf(movedId);
+  if (from < 0 || !ids.includes(targetId)) return;
+  ids.splice(from, 1);
+  const insertAt = ids.indexOf(targetId) + (dropAfter ? 1 : 0);
+  ids.splice(insertAt, 0, movedId);
+  try {
+    await reorderProjects(ids);
+    render();
+    toast('Project order saved on this device.', { tone: 'success' });
+  } catch (error) {
+    toast(error.message || 'Could not save the project order.', { tone: 'danger' });
+  }
+});
+
+document.addEventListener('dragend', clearProjectDragState);
 
 menuToggle?.addEventListener('click', () => setDrawer(!document.body.classList.contains('nav-open')));
 foldButton?.addEventListener('click', () => {

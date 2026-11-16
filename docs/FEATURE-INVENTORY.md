@@ -434,18 +434,18 @@ Data root: `ROOT` = parent of App; production `WORK = ROOT/Data`, `DATA = WORK/d
 ### Projects
 - [ ] Chips All / per-project / Archived (n) filter the view.
 - [ ] Table shows Acronym, Project, Status, Start, Due, Open work items, Pages.
-- [ ] Open-items count links to the project's items tab pre-filtered to open board columns.
+- [x] Open-items count links to the project's items tab pre-filtered to open board columns.
 - [ ] Inline add row creates a project (`/api/project/add`).
-- [ ] Edit → Save updates name/key/description/owner/status/start/due/keywords (`/api/project/save`).
-- [ ] Archive asks confirmation; archived projects can be restored or (only then) deleted with confirmation.
-- [ ] Dragging table rows reorders projects persistently.
+- [x] Edit → Save updates name/key/description/owner/status/start/due/keywords (`/api/project/save`).
+- [x] Archive asks confirmation; archived projects can be restored or (only then) deleted with confirmation.
+- [x] Dragging table rows reorders projects persistently.
 - [ ] "What got done, day by day" feed shows ≤14 dates, filterable by project chip; file chips open local paths via `/api/open`.
 
 ### Project page
 - [ ] Route accepts project id or case-insensitive name; unknown → 404 "No such project."
 - [ ] Every project shows Overview, Work items, Modules, Pages tabs; unknown tab falls back to Overview.
 - [ ] Market Review project additionally shows Issue Review, Analysis Report, Products, Review Update, Find user voices, Daily Digest, Issue Workbench, PQA Tracker, Report Deck.
-- [ ] Projects with key TAG additionally show Rule Book and xBuild Report tabs.
+- [x] Projects with key TAG additionally show Rule Book and xBuild Report tabs (local-only placeholders; no xBuild API, scraper or Outlook automation).
 - [ ] Tabs can be reordered (double-click arm + drag, or Alt+arrows) and the order persists per project (`/api/project/tabs`).
 - [ ] Edit-project disclosure saves fields via `/api/project/save`.
 - [ ] Overview shows status donut, module bars, 14-day action chart, Coming up (≤8 items / 30 days) with Schedule button, pages list, daily record.

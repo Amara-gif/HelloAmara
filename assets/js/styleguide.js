@@ -1,4 +1,4 @@
-import { renderBarChart, renderParetoChart } from './chart.js';
+import { renderBarChart, renderParetoChart, renderDonutChart } from './chart.js';
 import { toast, openModal } from './ui.js';
 
 const rootStyle = getComputedStyle(document.documentElement);
@@ -119,6 +119,7 @@ function setupDemos() {
   document.querySelector('[data-demo="toast"]')?.addEventListener('click', () => {
     toast('Saved on this device. Nothing was uploaded.', { tone: 'success' });
   });
+  document.querySelector('[data-demo="print"]')?.addEventListener('click', () => window.print());
 
   document.querySelector('[data-demo="dialog"]')?.addEventListener('click', () => {
     openModal({
@@ -155,6 +156,14 @@ function drawChart() {
       labels: ['Display', 'Battery', 'BFT', 'Supplier'],
       values: [18, 11, 8, 6],
       title: 'Sample issue Pareto with cumulative share',
+    });
+  }
+  const donut = document.getElementById('sg-donut');
+  if (donut) {
+    renderDonutChart(donut, {
+      labels: ['To do', 'In progress', 'Waiting', 'Done'],
+      values: [7, 5, 3, 4],
+      title: 'Sample work items by status',
     });
   }
 }

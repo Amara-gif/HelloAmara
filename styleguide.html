@@ -245,6 +245,43 @@
         </div>
       </section>
 
+      <section class="section" aria-labelledby="sg-project-row-title">
+        <div class="section-head">
+          <h2 id="sg-project-row-title">Project rows and drag reorder</h2>
+          <p>
+            Project rows reuse the shared table. The handle marks a draggable active project;
+            the drag state classes show where the row will land.
+          </p>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Project</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="project-row" draggable="true">
+                    <td>
+                      <span class="project-cell">
+                        <span class="drag-handle" title="Drag to reorder" aria-hidden="true">⠿</span>
+                        <span class="badge badge-accent">TAG</span>
+                        <a class="table-title" href="#sg-project-row">Hello Amara</a>
+                      </span>
+                      <span class="row-meta">Drag this row to change the sidebar project order.</span>
+                    </td>
+                    <td><span class="badge badge-success">Active</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="section" aria-labelledby="sg-tabs-title">
         <div class="section-head">
           <h2 id="sg-tabs-title">Tabs</h2>
@@ -476,6 +513,7 @@
             <div class="sg-stack">
               <div class="chart-box" id="sg-chart"></div>
               <div class="chart-box" id="sg-pareto"></div>
+              <div class="chart-box" id="sg-donut"></div>
               <div class="chart-legend">
                 <span class="chart-legend-item"><span class="chart-dot chart-line-1" aria-hidden="true"></span>Bars</span>
                 <span class="chart-legend-item"><span class="chart-dot chart-line-2" aria-hidden="true"></span>Cumulative share</span>
@@ -483,6 +521,85 @@
             </div>
           </div>
         </div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-page-editor-title">
+        <div class="section-head">
+          <h2 id="sg-page-editor-title">Page editor and revision history</h2>
+          <p>
+            The page editor pairs the markdown textarea with a live preview. Saving appends the
+            previous row to <code>revision history</code>; older revisions open read-only at
+            <code>?rev=</code>. The AI Polish button only toasts that the service is not connected.
+          </p>
+        </div>
+        <section class="card">
+          <div class="card-body">
+            <div class="page-editor-body">
+              <div class="field page-editor-source">
+                <label for="sg-page-body">Body</label>
+                <textarea id="sg-page-body" rows="8">## What changed
+
+- Live preview beside the textarea.
+- **Bold** and list markdown render immediately.</textarea>
+                <p class="field-help">Markdown: ## heading, - list and **bold**.</p>
+              </div>
+              <section class="page-editor-preview" aria-label="Markdown preview">
+                <div class="page-editor-preview-head">
+                  <span class="card-title">Preview</span>
+                  <span class="badge badge-muted">Live</span>
+                </div>
+                <div class="prose">
+                  <h2>What changed</h2>
+                  <ul>
+                    <li>Live preview beside the textarea.</li>
+                    <li><strong>Bold</strong> and list markdown render immediately.</li>
+                  </ul>
+                </div>
+              </section>
+            </div>
+            <div class="row-actions">
+              <button class="btn btn-primary" type="button">Save page</button>
+              <button class="btn btn-ghost" type="button">AI Polish</button>
+            </div>
+            <section class="revision-history">
+              <h2 class="card-title">Revision history</h2>
+              <ol class="revision-list">
+                <li class="revision-item"><a class="revision-link" href="#/pages">Revision 2 · Nov 16, 4:00 PM</a><span class="badge badge-success">Current</span></li>
+                <li class="revision-item"><a class="revision-link" href="#/pages">Revision 1 · Nov 15, 9:00 AM</a><span class="badge badge-muted">Read-only</span></li>
+              </ol>
+              <p class="field-help">A save snapshots the previous version. Older revisions open read-only.</p>
+            </section>
+            <p class="revision-note">You are viewing an older revision. It is read-only.</p>
+          </div>
+        </section>
+      </section>
+
+      <section class="section" aria-labelledby="sg-print-title">
+        <div class="section-head">
+          <h2 id="sg-print-title">Printable page</h2>
+          <p>
+            Page view marks its body with <code>.print-friendly</code>. Under
+            <code>@media print</code> the app chrome and page rail are hidden, and the page body
+            prints without its card border or shadow.
+          </p>
+        </div>
+        <article class="card print-friendly">
+          <div class="card-body">
+            <dl class="details compact page-meta">
+              <div><dt>Author</dt><dd>Amara</dd></div>
+              <div><dt>Date</dt><dd>Nov 16, 4:00 PM</dd></div>
+              <div><dt>Project</dt><dd>TAG Hello Amara</dd></div>
+              <div><dt>Tags</dt><dd><span class="badge badge-muted">Example</span> <span class="badge badge-muted">Print</span></dd></div>
+            </dl>
+            <div class="prose">
+              <h2>Example printable body</h2>
+              <p>Markdown content stays readable when the page is sent to the printer.</p>
+            </div>
+            <div class="row-actions">
+              <button class="btn btn-ghost" type="button" data-demo="print">Print</button>
+            </div>
+          </div>
+        </article>
       </section>
 
       <section class="section" aria-labelledby="sg-feedback-title">

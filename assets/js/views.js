@@ -1,7 +1,8 @@
 import { SETTINGS_LINKS } from './routes.js';
 import { icon } from './icons.js';
-import { renderBarChart, renderLineChart, renderParetoChart } from './chart.js';
+import { renderBarChart, renderLineChart, renderParetoChart, renderDonutChart } from './chart.js';
 import { occurrences, occursOn } from './schedule.js';
+import { MARKET_REVIEW_DEMO } from './demo-data.js';
 import {
   TASK_WORKFLOW_STATUSES,
   TASK_WAIVER_STATUSES,
@@ -38,6 +39,7 @@ const pageUrl = (path, params = {}) => {
   return `#${path}${search.toString() ? `?${search}` : ''}`;
 };
 const option = (value, current, label) => `<option value="${esc(value)}"${String(value) === String(current) ? ' selected' : ''}>${esc(label ?? value)}</option>`;
+const pageTags = (value) => (Array.isArray(value) ? value : String(value ?? '').split(',')).map((tag) => String(tag).trim()).filter(Boolean);
 const initials = (name) => String(name || '?').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 const avatar = (name, size = '') => `<span class="avatar ${size}" title="${esc(name)}">${esc(String(name).startsWith('Test') ? 'T' : initials(name))}</span>`;
 
@@ -46,7 +48,7 @@ const STATUS_TONE = {
   'In progress': 'accent', Fixed: 'accent',
   Waiting: 'warning', Reopened: 'warning', Triaged: 'warning',
   'Wont fix': 'muted', Rejected: 'danger', Duplicate: 'muted', Deferred: 'muted',
-  New: 'band', 'To do': 'band', 'To Do': 'band',
+  New: 'band', Open: 'band', 'To do': 'band', 'To Do': 'band',
 };
 const statusBadge = (status) => `<span class="badge badge-${STATUS_TONE[status] ?? 'muted'}">${esc(status)}</span>`;
 const STORAGE_TONE = { Granted: 'success', Denied: 'warning', Unsupported: 'muted' };
@@ -436,7 +438,7 @@ function pagesPage(state, query) {
   const projectFilter = query.get('project') ?? '';
   const rows = state.pages.filter((page) => {
     const project = projectOf(state, page.projectId);
-    const haystack = `${page.title} ${page.body} ${project?.name ?? ''}`.toLowerCase();
+    const haystack = `${page.title} ${page.body} ${pageTags(page.tags).join(' ')} ${project?.name ?? ''}`.toLowerCase();
     return (!q || haystack.includes(q)) && (!projectFilter || page.projectId === projectFilter);
   });
   const projectOptions = state.projects.map((p) => option(p.id, projectFilter, `${p.key} ${p.name}`)).join('');
@@ -448,14 +450,19 @@ function pagesPage(state, query) {
       <button class="btn btn-sm" type="submit">Search</button>
       <span class="toolbar-count">${rows.length} Pages</span>
     </form>
+    <div class="row-actions" data-page-selection>
+      <button class="btn btn-danger btn-sm" type="button" data-action="delete-selected-pages" disabled>Delete selected</button>
+      <span class="text-muted text-sm" data-page-selection-count>0 selected</span>
+    </div>
     <div class="table-wrap">
       <table class="table table-stack">
-        <thead><tr><th>Page</th><th>Type</th><th>Linked to</th><th>Project</th><th>Updated</th><th>Actions</th></tr></thead>
+        <thead><tr><th><input type="checkbox" data-select-all-pages aria-label="Select all pages" /></th><th>Page</th><th>Type</th><th>Linked to</th><th>Project</th><th>Updated</th><th>Actions</th></tr></thead>
         <tbody>
           ${rows.map((page) => {
             const task = state.tasks.find((row) => row.id === page.taskId);
             const project = projectOf(state, page.projectId);
             return `<tr>
+              <td data-label="Select"><input type="checkbox" data-page-select value="${esc(page.id)}" aria-label="Select ${esc(page.title)}" /></td>
               <td data-label="Page"><a class="table-title" href="#/page/${page.id}">${esc(page.title)}</a></td>
               <td data-label="Type"><span class="badge badge-${page.type === 'Snapshot' ? 'accent' : 'muted'}">${esc(page.type)}</span></td>
               <td data-label="Linked to">${task ? `<a class="mono-link" href="#/task/${task.id}">${esc(task.title)}</a>` : '—'}</td>
@@ -463,14 +470,37 @@ function pagesPage(state, query) {
               <td data-label="Updated">${fmtStamp(page.updatedAt)}</td>
               <td data-label="Actions"><a class="btn btn-ghost btn-sm" href="#/page/${page.id}/edit">Edit</a> <button class="btn btn-ghost btn-sm" type="button" data-action="delete-page" data-id="${page.id}">Delete</button></td>
             </tr>`;
-          }).join('') || `<tr><td colspan="6">${empty('No Page matches. Start a new one.')}</td></tr>`}
+          }).join('') || `<tr><td colspan="7">${empty('No Page matches. Start a new one.')}</td></tr>`}
         </tbody>
       </table>
     </div>`;
 }
 
+function projectEditRow(project, archived) {
+  const cancelHref = archived ? pageUrl('/projects', { archived: 1 }) : '#/projects';
+  const id = esc(project.id);
+  return `<tr class="project-row is-editing" data-project-row data-project-id="${id}">
+    <td colspan="7" data-label="Edit project">
+      <form class="form-grid" data-form="project-edit" data-history="name,key,description,owner,status,start,due,keywords">
+        <input type="hidden" name="id" value="${id}" />
+        <input type="hidden" name="archived" value="${archived ? 1 : 0}" />
+        <div class="field"><label for="project-edit-key-${id}">Key</label><input id="project-edit-key-${id}" name="key" type="text" maxlength="6" value="${esc(project.key)}" required /></div>
+        <div class="field"><label for="project-edit-name-${id}">Name</label><input id="project-edit-name-${id}" name="name" type="text" value="${esc(project.name)}" required /></div>
+        <div class="field"><label for="project-edit-owner-${id}">Owner</label><input id="project-edit-owner-${id}" name="owner" type="text" value="${esc(project.owner)}" /></div>
+        <div class="field"><label for="project-edit-status-${id}">Status</label><select id="project-edit-status-${id}" class="select" name="status">${['Active', 'On hold', 'Done', 'Archived'].map((value) => option(value, project.status)).join('')}</select></div>
+        <div class="field"><label for="project-edit-start-${id}">Start</label><input id="project-edit-start-${id}" name="start" type="date" value="${esc(dateOnly(project.start))}" /></div>
+        <div class="field"><label for="project-edit-due-${id}">Due</label><input id="project-edit-due-${id}" name="due" type="date" value="${esc(dateOnly(project.due))}" /></div>
+        <div class="field field-wide"><label for="project-edit-keywords-${id}">Keywords</label><input id="project-edit-keywords-${id}" name="keywords" type="text" value="${esc(project.keywords)}" placeholder="Comma-separated keywords" /></div>
+        <div class="field field-wide"><label for="project-edit-description-${id}">Description</label><textarea id="project-edit-description-${id}" name="description" rows="3">${esc(project.description)}</textarea></div>
+        <div class="field field-wide"><div class="row-actions"><button class="btn btn-primary btn-sm" type="submit">Save</button><a class="btn btn-ghost btn-sm" href="${cancelHref}">Cancel</a></div></div>
+      </form>
+    </td>
+  </tr>`;
+}
+
 function projectsPage(state, query) {
   const archived = query.get('archived') === '1';
+  const editId = query.get('edit') ?? '';
   const chips = [
     `<a class="chip${!archived ? ' is-active' : ''}" href="#/projects">All</a>`,
     ...state.projects.filter((p) => !p.archived).map((p) => `<a class="chip${!archived ? '' : ''}" href="${pageUrl('/projects', { project: p.id })}">${esc(p.key)} ${esc(p.name)}</a>`),
@@ -485,19 +515,24 @@ function projectsPage(state, query) {
         <thead><tr><th>Project</th><th>Status</th><th>Start</th><th>Due</th><th>Open work items</th><th>Pages</th><th>Actions</th></tr></thead>
         <tbody>
           ${rows.map((project) => {
+            if (project.id === editId) return projectEditRow(project, archived);
             const open = state.tasks.filter((task) => task.projectId === project.id && task.status !== 'Done').length;
             const pages = state.pages.filter((page) => page.projectId === project.id).length;
-            return `<tr>
-              <td data-label="Project"><span class="project-cell"><span class="badge badge-accent">${esc(project.key)}</span><a class="table-title" href="#/project/${esc(project.key)}">${esc(project.name)}</a></span><span class="row-meta">${esc(project.description)}</span></td>
+            const openHref = pageUrl(`/project/${project.key}`, { tab: 'work', scope: 'open' });
+            return `<tr class="project-row" data-project-row data-project-id="${esc(project.id)}" data-project-key="${esc(project.key)}"${project.archived ? '' : ' draggable="true"'}>
+              <td data-label="Project"><span class="project-cell">${project.archived ? '' : '<span class="drag-handle" title="Drag to reorder" aria-hidden="true">⠿</span>'}<span class="badge badge-accent">${esc(project.key)}</span><a class="table-title" href="#/project/${esc(project.key)}">${esc(project.name)}</a></span><span class="row-meta">${esc(project.description)}</span></td>
               <td data-label="Status">${statusBadge(project.archived ? 'Archived' : project.status)}</td>
               <td data-label="Start">${fmt(project.start)}</td>
               <td data-label="Due">${fmt(project.due)}</td>
-              <td data-label="Open work items"><a href="#/project/${esc(project.key)}?tab=work">${open} open</a></td>
+              <td data-label="Open work items"><a href="${openHref}">${open} open</a></td>
               <td data-label="Pages">${pages}</td>
               <td data-label="Actions">
-                ${project.archived
-                  ? `<button class="btn btn-ghost btn-sm" type="button" data-action="project-archive" data-id="${project.id}">Restore</button>`
-                  : `<button class="btn btn-ghost btn-sm" type="button" data-action="project-archive" data-id="${project.id}">Archive</button>`}
+                <div class="row-actions">
+                  <button class="btn btn-ghost btn-sm" type="button" data-action="project-edit" data-id="${esc(project.id)}" data-archived="${project.archived ? 1 : 0}">Edit</button>
+                  ${project.archived
+                    ? `<button class="btn btn-ghost btn-sm" type="button" data-action="project-archive" data-id="${esc(project.id)}">Restore</button><button class="btn btn-danger btn-sm" type="button" data-action="project-delete" data-id="${esc(project.id)}">Delete</button>`
+                    : `<button class="btn btn-ghost btn-sm" type="button" data-action="project-archive" data-id="${esc(project.id)}">Archive</button>`}
+                </div>
               </td>
             </tr>`;
           }).join('') || `<tr><td colspan="7">${empty('No projects here.')}</td></tr>`}
@@ -1215,46 +1250,560 @@ function bugDetail(state, route) {
     </div>`;
 }
 
+export function projectModuleRows(tasks = []) {
+  const groups = new Map();
+  for (const task of tasks) {
+    const name = String(task.module ?? '').trim() || 'General';
+    const row = groups.get(name) ?? { name, total: 0, done: 0 };
+    row.total += 1;
+    if (task.status === 'Done') row.done += 1;
+    groups.set(name, row);
+  }
+  return [...groups.values()]
+    .map((row) => ({ ...row, open: row.total - row.done, percent: row.total ? Math.round((row.done / row.total) * 100) : 0 }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function projectStatusRows(tasks = []) {
+  const preferred = ['To do', 'In progress', 'Waiting', 'Done'];
+  const counts = new Map();
+  for (const task of tasks) {
+    const status = String(task.status ?? '').trim() || 'Unknown';
+    counts.set(status, (counts.get(status) ?? 0) + 1);
+  }
+  const order = [...preferred.filter((status) => counts.has(status)), ...[...counts.keys()].filter((status) => !preferred.includes(status)).sort((a, b) => a.localeCompare(b))];
+  return order.map((status) => ({ status, count: counts.get(status) ?? 0 })).filter((row) => row.count > 0);
+}
+
+function projectComingUp(state, project, tasks) {
+  const from = today();
+  const to = addDays(from, 30);
+  const rows = [];
+  for (const task of tasks) {
+    const due = dateOnly(task.due);
+    if (task.status === 'Done' || !due || due < from || due > to) continue;
+    rows.push({ date: due, time: '', kind: 'Work item', title: task.title, href: `#/task/${task.id}`, taskId: task.id });
+  }
+  for (const event of occurrences(state.events ?? [], from, to)) {
+    if (event.projectId !== project.id) continue;
+    rows.push({
+      date: dateOnly(event.date), time: event.time ?? '', kind: event.kind || 'Event', title: event.title,
+      href: event.taskId ? `#/task/${event.taskId}` : `#/calendar?m=${dateOnly(event.date).slice(0, 7)}`,
+    });
+  }
+  const projectDue = dateOnly(project.due);
+  if (project.status !== 'Done' && projectDue && projectDue >= from && projectDue <= to) {
+    rows.push({ date: projectDue, time: '', kind: 'Project due', title: project.name, href: `#/project/${project.key}` });
+  }
+  rows.sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`) || a.title.localeCompare(b.title));
+  return rows.slice(0, 8);
+}
+
+function projectDailyRecord(state, tasks) {
+  const taskIds = new Set(tasks.map((task) => task.id));
+  const rows = [];
+  for (const row of state.taskHistory ?? state.task_history ?? []) {
+    if (!taskIds.has(row.taskId) || !row.at) continue;
+    rows.push({ at: row.at, who: row.who ?? 'Amara', kind: 'History', text: `${row.field}: ${row.old || '—'} → ${row.new || '—'}` });
+  }
+  for (const row of state.taskComments ?? state.task_comments ?? []) {
+    if (!taskIds.has(row.taskId) || !row.at) continue;
+    rows.push({ at: row.at, who: row.who ?? row.author ?? 'Amara', kind: 'Comment', text: row.body ?? '' });
+  }
+  rows.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  const groups = [];
+  for (const row of rows) {
+    const date = String(row.at).slice(0, 10);
+    let group = groups.find((item) => item.date === date);
+    if (!group) {
+      group = { date, entries: [] };
+      groups.push(group);
+    }
+    if (group.entries.length < 3) group.entries.push(row);
+  }
+  return groups.slice(0, 5);
+}
+
+function projectEditPanel(project) {
+  const id = esc(project.id);
+  return `<details class="card" id="project-edit">
+    <summary class="card-head"><h2>Edit project</h2><span class="badge badge-muted">Saves on this device</span></summary>
+    <div class="card-body">
+      <form class="form-grid" data-form="project-edit">
+        <input type="hidden" name="id" value="${id}" />
+        <input type="hidden" name="from" value="detail" />
+        <div class="field"><label for="project-detail-edit-key-${id}">Key</label><input id="project-detail-edit-key-${id}" name="key" type="text" maxlength="6" value="${esc(project.key)}" required /></div>
+        <div class="field"><label for="project-detail-edit-name-${id}">Name</label><input id="project-detail-edit-name-${id}" name="name" type="text" value="${esc(project.name)}" required /></div>
+        <div class="field"><label for="project-detail-edit-owner-${id}">Owner</label><input id="project-detail-edit-owner-${id}" name="owner" type="text" value="${esc(project.owner)}" /></div>
+        <div class="field"><label for="project-detail-edit-status-${id}">Status</label><select id="project-detail-edit-status-${id}" class="select" name="status">${['Active', 'On hold', 'Done', 'Archived'].map((value) => option(value, project.status)).join('')}</select></div>
+        <div class="field"><label for="project-detail-edit-start-${id}">Start</label><input id="project-detail-edit-start-${id}" name="start" type="date" value="${esc(dateOnly(project.start))}" /></div>
+        <div class="field"><label for="project-detail-edit-due-${id}">Due</label><input id="project-detail-edit-due-${id}" name="due" type="date" value="${esc(dateOnly(project.due))}" /></div>
+        <div class="field field-wide"><label for="project-detail-edit-keywords-${id}">Keywords</label><input id="project-detail-edit-keywords-${id}" name="keywords" type="text" value="${esc(project.keywords)}" placeholder="Comma-separated keywords" /></div>
+        <div class="field field-wide"><label for="project-detail-edit-description-${id}">Description</label><textarea id="project-detail-edit-description-${id}" name="description" rows="3">${esc(project.description)}</textarea></div>
+        <div class="field field-wide"><div class="row-actions"><button class="btn btn-primary btn-sm" type="submit">Save project</button></div></div>
+      </form>
+    </div>
+  </details>`;
+}
+
+function projectNotFound(key) {
+  return `${pageHead('Project not found', `There is no project with the key “${key}” on this device.`)}
+    <p><a class="btn btn-primary" href="#/projects">${icon('arrow', 16)}Back to Projects</a></p>`;
+}
+
+function projectModulesTab(project, tasks) {
+  const modules = projectModuleRows(tasks);
+  return `<section class="card">
+    <div class="card-head"><h2>Modules</h2><span class="badge badge-muted">${modules.length}</span></div>
+    <div class="card-body">
+      <p class="field-help">Done / total work items in each module. Choose a module to open its filtered Work items.</p>
+      <div class="bar-list">${modules.map((row) => {
+        const href = pageUrl(`/project/${project.key}`, { tab: 'work', module: row.name, scope: 'all' });
+        return `<a class="bar-row" href="${esc(href)}" data-module="${esc(row.name)}" aria-label="${esc(`${row.name}: ${row.done} of ${row.total} done`)}"><span>${esc(row.name)}</span><span class="bar-track" aria-hidden="true"><span class="bar-fill" data-bar="${row.done}" data-total="${row.total}"></span></span><strong>${row.done}/${row.total}</strong></a>`;
+      }).join('') || empty('No modules yet. Add a module to a work item to group it here.')}</div>
+    </div>
+  </section>`;
+}
+
+function projectPagesTab(pages) {
+  return `<section class="card">
+    <div class="card-head"><h2>Pages</h2><span class="badge badge-muted">${pages.length}</span></div>
+    <div class="card-body"><div class="row-list">${pages.map((page) => `<a class="row-item" href="#/page/${page.id}"><span class="row-main"><span class="row-title">${esc(page.title)}</span><span class="row-meta">${esc(page.type)} · ${fmtStamp(page.updatedAt)}</span></span>${icon('arrow', 16)}</a>`).join('') || empty('No pages.')}</div></div>
+  </section>`;
+}
+
+// Market Review tool tabs. The list is local demo data saved with the demo meta;
+// no product API, scraper, CoreMail or Mega Database call is made from these tabs.
+const MR_PROJECT_TABS = [
+  { id: 'products', label: 'Products' },
+  { id: 'review-update', label: 'Review Update' },
+  { id: 'find-user-voices', label: 'Find user voices' },
+  { id: 'daily-digest', label: 'Daily Digest' },
+  { id: 'issue-workbench', label: 'Issue Workbench' },
+  { id: 'pqa-tracker', label: 'PQA Tracker' },
+  { id: 'report-deck', label: 'Report Deck' },
+  { id: 'issue-review', label: 'Issue Review' },
+  { id: 'analysis-report', label: 'Analysis Report' },
+];
+const MR_UNAVAILABLE_TAB_IDS = new Set(['find-user-voices', 'daily-digest', 'issue-workbench', 'pqa-tracker', 'report-deck']);
+
+function mrProductRows(state) {
+  const rows = state.marketReview?.products;
+  return Array.isArray(rows) && rows.length ? rows : MARKET_REVIEW_DEMO.products;
+}
+
+function mrIssueRows(state) {
+  const rows = state.marketReview?.issues;
+  return Array.isArray(rows) && rows.length ? rows : MARKET_REVIEW_DEMO.issues;
+}
+
+function mrIssueCategoryRows(issues) {
+  const counts = new Map();
+  for (const issue of issues) {
+    const category = String(issue.category ?? '').trim() || 'Other';
+    counts.set(category, (counts.get(category) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
+}
+
+function mrSeverityBadge(severity) {
+  const tone = String(severity ?? '').startsWith('S1') ? 'danger'
+    : String(severity ?? '').startsWith('S2') ? 'warning'
+      : String(severity ?? '').startsWith('S3') ? 'accent' : 'muted';
+  return `<span class="badge badge-${tone}">${esc(severity)}</span>`;
+}
+
+function projectProductsTab(state, project) {
+  const products = mrProductRows(state);
+  const issues = mrIssueRows(state);
+  const open = issues.filter((issue) => issue.status !== 'Closed').length;
+  const average = products.length
+    ? (products.reduce((sum, row) => sum + (Number(row.rating) || 0), 0) / products.length).toFixed(1)
+    : '—';
+  return `<div class="stack">
+    <section class="card">
+      <div class="card-head"><h2>Products</h2><span class="badge badge-muted">Local demo catalogue</span></div>
+      <div class="card-body">
+        <p class="lede">Local demo products for ${esc(project.name)}. The catalogue is read from this device only; this tab makes no product API or scraper request.</p>
+        <div class="stat-grid">
+          <div class="stat"><strong>${products.length}</strong><span>Products tracked</span></div>
+          <div class="stat"><strong>${average}</strong><span>Average rating</span></div>
+          <div class="stat"><strong>${issues.length}</strong><span>Review issues</span></div>
+          <div class="stat"><strong>${open}</strong><span>Open issues</span></div>
+        </div>
+        <div class="table-wrap"><table class="table table-stack">
+          <thead><tr><th>Product</th><th>Category</th><th>Rating</th><th>Reviews</th><th>Open issues</th><th>Status</th><th>Updated</th></tr></thead>
+          <tbody>${products.map((product) => {
+            const rating = Number(product.rating);
+            return `<tr data-mr-product="${esc(product.id ?? product.name)}">
+            <td data-label="Product"><span class="table-title">${esc(product.name)}</span><span class="row-meta">${esc(product.asin ?? '')}</span></td>
+            <td data-label="Category">${esc(product.category ?? '—')}</td>
+            <td data-label="Rating"><span class="badge badge-success">${Number.isFinite(rating) ? rating.toFixed(1) : '—'}</span></td>
+            <td data-label="Reviews">${esc(product.reviews ?? '—')}</td>
+            <td data-label="Open issues">${esc(product.openIssues ?? 0)}</td>
+            <td data-label="Status"><span class="badge badge-${product.status === 'Paused' ? 'muted' : 'accent'}">${esc(product.status ?? 'Tracking')}</span></td>
+            <td data-label="Updated">${fmtStamp(product.updatedAt)}</td>
+          </tr>`;
+          }).join('') || `<tr><td colspan="7">${empty('No local products yet.')}</td></tr>`}</tbody>
+        </table></div>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Local-only behaviour</h2><span class="badge badge-muted">No network</span></div>
+      <div class="card-body"><p class="field-help">Products come from the demo meta stored with this account's IndexedDB. Nothing is fetched, and saving a product is not part of this local shell.</p></div>
+    </section>
+  </div>`;
+}
+
+function projectIssueReviewTab(state, project) {
+  const issues = mrIssueRows(state);
+  const categories = mrIssueCategoryRows(issues);
+  const open = issues.filter((issue) => issue.status !== 'Closed').length;
+  const critical = issues.filter((issue) => String(issue.severity ?? '').startsWith('S1') || String(issue.severity ?? '').startsWith('S2')).length;
+  const products = new Set(issues.map((issue) => issue.product)).size;
+  return `<div class="detail-grid">
+    <div class="detail-main">
+      <section class="card">
+        <div class="card-head"><h2>Issue Review</h2><span class="badge badge-muted">${issues.length} local demo issues</span></div>
+        <div class="card-body">
+          <p class="lede">Issue rows saved with the ${esc(project.name)} demo. Filtering and review actions stay local; there is no issue API call.</p>
+          <div class="table-wrap"><table class="table table-stack">
+            <thead><tr><th>Key</th><th>Product</th><th>Category</th><th>Summary</th><th>Severity</th><th>Status</th><th>Owner</th><th>Found</th></tr></thead>
+            <tbody>${issues.map((issue) => `<tr data-mr-issue="${esc(issue.key ?? issue.id)}">
+              <td data-label="Key"><span class="key-link">${esc(issue.key ?? issue.id)}</span></td>
+              <td data-label="Product">${esc(issue.product)}</td>
+              <td data-label="Category">${esc(issue.category)}</td>
+              <td data-label="Summary"><span class="table-title">${esc(issue.summary)}</span></td>
+              <td data-label="Severity">${mrSeverityBadge(issue.severity)}</td>
+              <td data-label="Status">${statusBadge(issue.status)}</td>
+              <td data-label="Owner"><span class="assignee">${avatar(issue.owner)}${esc(issue.owner)}</span></td>
+              <td data-label="Found">${fmt(issue.found)}</td>
+            </tr>`).join('') || `<tr><td colspan="8">${empty('No local issues yet.')}</td></tr>`}</tbody>
+          </table></div>
+        </div>
+      </section>
+    </div>
+    <aside class="detail-side">
+      <section class="card">
+        <div class="card-head"><h2>Issue snapshot</h2></div>
+        <div class="card-body"><div class="stat-grid">
+          <div class="stat"><strong>${open}</strong><span>Open</span></div>
+          <div class="stat"><strong>${critical}</strong><span>S1/S2</span></div>
+          <div class="stat"><strong>${products}</strong><span>Products</span></div>
+          <div class="stat"><strong>${categories.length}</strong><span>Categories</span></div>
+        </div></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Issues by category</h2><span class="badge badge-muted">Local</span></div>
+        <div class="card-body">
+          <div class="chart-box" id="mr-issue-chart"></div>
+          <div class="bar-list">${categories.map((row) => `<div class="bar-row"><span>${esc(row.category)}</span><span class="bar-track" aria-hidden="true"><span class="bar-fill" data-bar="${row.count}" data-total="${issues.length}"></span></span><strong>${row.count}</strong></div>`).join('') || empty('No categories yet.')}</div>
+        </div>
+      </section>
+    </aside>
+  </div>`;
+}
+
+function projectAnalysisReportTab(state, project) {
+  const rows = paretoSeries(state);
+  const issues = mrIssueRows(state);
+  const categories = mrIssueCategoryRows(issues);
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
+  let cumulative = 0;
+  return `<div class="detail-grid">
+    <div class="detail-main">
+      <section class="card">
+        <div class="card-head"><h2>Issue Pareto</h2><span class="badge badge-muted">Local demo chart</span></div>
+        <div class="card-body">
+          <p class="lede">The ${esc(project.name)} analysis grid uses saved demo counts and local work-item modules. No analysis endpoint, PDF or PPTX export is called.</p>
+          <div class="chart-box" id="mr-analysis-pareto"></div>
+          <p class="row-meta">Ordered high to low; the line is cumulative share. Total ${total} issues.</p>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Issue mix</h2><span class="badge badge-muted">${rows.length} categories</span></div>
+        <div class="card-body"><div class="table-wrap"><table class="table table-stack">
+          <thead><tr><th>Category</th><th>Issues</th><th>Share</th><th>Cumulative</th></tr></thead>
+          <tbody>${rows.map((row) => {
+            cumulative += row.value;
+            return `<tr><td data-label="Category"><span class="table-title">${esc(row.label)}</span></td><td data-label="Issues">${row.value}</td><td data-label="Share">${total ? Math.round((row.value / total) * 100) : 0}%</td><td data-label="Cumulative">${total ? Math.round((cumulative / total) * 100) : 0}%</td></tr>`;
+          }).join('') || `<tr><td colspan="4">${empty('No analysis rows yet.')}</td></tr>`}</tbody>
+        </table></div></div>
+      </section>
+    </div>
+    <aside class="detail-side">
+      <section class="card">
+        <div class="card-head"><h2>Snapshot</h2></div>
+        <div class="card-body"><dl class="details compact">
+          <div><dt>Analysis issues</dt><dd>${total}</dd></div>
+          <div><dt>Local issue rows</dt><dd>${issues.length}</dd></div>
+          <div><dt>Categories</dt><dd>${categories.length}</dd></div>
+          <div><dt>Source</dt><dd>IndexedDB demo meta</dd></div>
+        </dl></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>What is local</h2><span class="badge badge-muted">No fetch</span></div>
+        <div class="card-body"><p class="field-help">Pareto counts, the issue table and the product list all read from this device. Summary save, snapshot save and PDF/PPTX export are not ported.</p></div>
+      </section>
+    </aside>
+  </div>`;
+}
+
+function projectReviewUpdateTab(project) {
+  return `<div class="detail-grid">
+    <div class="detail-main">
+      <section class="card" data-mr-tab="review-update">
+        <div class="card-head"><h2>Review Update</h2><span class="badge badge-warning">Blocked on owner decision</span></div>
+        <div class="card-body">
+          <p class="lede">The Amazon scraper is blocked on the owner's decision. My Platform does not run a review scrape, start a job or make a network request from this tab.</p>
+          <p class="field-help">The build brief leaves the scraping method open. There is no fake run and no live job log here until the owner approves a specific no-install method.</p>
+          <dl class="details compact">
+            <div><dt>Scraper</dt><dd>Blocked on owner decision</dd></div>
+            <div><dt>Network requests</dt><dd>None</dd></div>
+            <div><dt>Local alternative</dt><dd>Products and Issue Review demo rows</dd></div>
+            <div><dt>Project</dt><dd>${esc(project.name)}</dd></div>
+          </dl>
+          <div class="row-actions">
+            <a class="btn btn-ghost btn-sm" href="#/project/${esc(project.key)}?tab=products">Open local Products</a>
+            <a class="btn btn-ghost btn-sm" href="#/project/${esc(project.key)}?tab=issue-review">Open local Issue Review</a>
+          </div>
+        </div>
+      </section>
+    </div>
+    <aside class="detail-side">
+      <section class="card">
+        <div class="card-head"><h2>Out of scope</h2></div>
+        <div class="card-body"><p class="field-help">Scraper, Mega Database and CoreMail stay out of this task. Their controls are not shown here so the shell cannot look like a working run.</p></div>
+      </section>
+    </aside>
+  </div>`;
+}
+
+function projectUnavailableTab(project, tabId) {
+  const tab = MR_PROJECT_TABS.find((item) => item.id === tabId);
+  const label = tab?.label ?? 'This tool';
+  return `<section class="card" data-mr-tab="${esc(tabId)}">
+    <div class="card-head"><h2>${esc(label)}</h2><span class="badge badge-muted">Not available in My Platform yet</span></div>
+    <div class="card-body">
+      <p class="lede">${esc(label)} is not available in My Platform yet. This local shell makes no network request and has no fake data or run action.</p>
+      <p class="field-help">Use Products, Issue Review and Analysis Report for the local demo data on ${esc(project.key)} ${esc(project.name)}.</p>
+    </div>
+  </section>`;
+}
+
+// The old WorkDesk showed the xBuild Rule Book and report for TAG only. They stay
+// local placeholders here: no scraper, file fetch or /api/tools/xbuild call.
+const TAG_PROJECT_TABS = [
+  { id: 'xbuild-standard', label: 'Rule Book' },
+  { id: 'xbuild-report', label: 'xBuild Report' },
+];
+const PROJECT_TAB_ALIASES = {
+  'rule-book': 'xbuild-standard',
+  rulebook: 'xbuild-standard',
+  xbuild: 'xbuild-report',
+  product: 'products',
+  products: 'products',
+  'review': 'review-update',
+  'review-update': 'review-update',
+  review_update: 'review-update',
+  'voices': 'find-user-voices',
+  'user-voices': 'find-user-voices',
+  find_user_voices: 'find-user-voices',
+  'analysis': 'analysis-report',
+  'analysis-report': 'analysis-report',
+  analysis_report: 'analysis-report',
+  'report': 'analysis-report',
+  'issues': 'issue-review',
+  issue_review: 'issue-review',
+  daily_digest: 'daily-digest',
+  issue_workbench: 'issue-workbench',
+  pqa_tracker: 'pqa-tracker',
+  report_deck: 'report-deck',
+};
+
+function projectTabItems(project) {
+  const items = [
+    { id: 'overview', label: 'Overview', href: `#/project/${project.key}` },
+    { id: 'work', label: 'Work items', href: `#/project/${project.key}?tab=work` },
+    { id: 'modules', label: 'Modules', href: `#/project/${project.key}?tab=modules` },
+    { id: 'pages', label: 'Pages', href: `#/project/${project.key}?tab=pages` },
+  ];
+  if (project.key === 'TAG') {
+    items.push(...TAG_PROJECT_TABS.map((tab) => ({ ...tab, href: `#/project/${project.key}?tab=${tab.id}` })));
+  }
+  if (project.key === 'MR') {
+    items.push(...MR_PROJECT_TABS.map((tab) => ({ ...tab, href: `#/project/${project.key}?tab=${tab.id}` })));
+  }
+  return items;
+}
+
+function projectTabStrip(project, active) {
+  const tabs = projectTabItems(project);
+  return `<div class="tabs">${tabs.map((tab) => `<a class="tab" href="${tab.href}"${active === tab.id ? ' aria-current="page"' : ''}>${tab.label}</a>`).join('')}</div>`;
+}
+
+function projectTabId(project, requested) {
+  const tab = PROJECT_TAB_ALIASES[requested] ?? requested;
+  return projectTabItems(project).some((item) => item.id === tab) ? tab : 'overview';
+}
+
+function projectRuleBookTab(project, pages) {
+  return `<section class="card">
+    <div class="card-head"><h2>Rule Book</h2><span class="badge badge-muted">Local placeholder</span></div>
+    <div class="card-body">
+      <p class="lede">The xBuild Rule Book is not ported to My Platform yet. This tab reads only local markdown pages and makes no xBuild API call.</p>
+      <p class="field-help">Write a rule note as a page for ${esc(project.key)}; saved pages appear below and stay on this device.</p>
+      <h3 class="card-title">Local markdown pages</h3>
+      <div class="row-list">${pages.map((page) => `<a class="row-item" href="#/page/${page.id}"><span class="row-main"><span class="row-title">${esc(page.title)}</span><span class="row-meta">${esc(page.type)} · ${fmtStamp(page.updatedAt)}</span></span>${icon('arrow', 16)}</a>`).join('') || empty('No local pages for this project yet.')}</div>
+    </div>
+  </section>`;
+}
+
+function projectXbuildReportTab(project) {
+  return `<section class="card">
+    <div class="card-head"><h2>xBuild Report</h2><span class="badge badge-muted">Not ported</span></div>
+    <div class="card-body">
+      <p class="lede">The xBuild Report tool is not ported to My Platform yet. Report generation, polish/check previews and Outlook/email actions are unavailable, and this tab makes no API calls.</p>
+      <p class="field-help">Build-phase work items remain in the local Work items tab for this project.</p>
+      <div class="row-actions"><a class="btn btn-ghost btn-sm" href="#/project/${esc(project.key)}?tab=work">Open Work items</a></div>
+    </div>
+  </section>`;
+}
+
+function projectOverview(state, project, tasks, pages, open) {
+  const statusRows = projectStatusRows(tasks);
+  const comingUp = projectComingUp(state, project, tasks);
+  const record = projectDailyRecord(state, tasks);
+  const legend = statusRows.map((row, index) => `<span class="chart-legend-item"><span class="chart-dot chart-line-${(index % 6) + 1}" aria-hidden="true"></span>${esc(row.status)} ${row.count}</span>`).join('');
+  return `<div class="detail-grid">
+    <div class="detail-main">
+      <section class="card">
+        <div class="card-head"><h2>Work by status</h2><span class="badge badge-muted">${tasks.length} items</span></div>
+        <div class="card-body">
+          <div class="chart-box" id="project-status-chart"></div>
+          <div class="chart-legend">${legend || '<span class="chart-legend-item">No work items yet.</span>'}</div>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Coming up</h2><div class="row-actions"><span class="badge badge-muted">${comingUp.length} in 30 days</span><button class="btn btn-ghost btn-sm" type="button" data-action="project-schedule" data-id="${esc(project.id)}">Schedule</button></div></div>
+        <div class="card-body">${comingUp.length ? `<div class="row-list">${comingUp.map((row) => `<a class="row-item" href="${esc(row.href)}"><span class="row-date">${fmt(row.date)}</span><span class="row-main"><span class="row-title">${esc(row.title)}</span><span class="row-meta">${esc(row.kind)}${row.time ? ` · ${esc(row.time)}` : ''}</span></span><span class="badge badge-muted">${esc(row.kind)}</span></a>`).join('')}</div>` : empty('No project schedule in the next 30 days.')}</div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Daily record</h2><span class="badge badge-muted">History and comments</span></div>
+        <div class="card-body">${record.length ? `<div class="stack">${record.map((group) => `<div><h3 class="card-title">${fmt(group.date)}</h3><div class="feed">${group.entries.map((row) => `<div class="feed-item"><div class="feed-head"><strong>${esc(row.who)}</strong><span>${fmtStamp(row.at)}</span><span class="badge badge-muted">${esc(row.kind)}</span></div><p>${esc(row.text)}</p></div>`).join('')}</div></div>`).join('')}</div>` : empty('No daily record yet. History and comments will appear here.')}</div>
+      </section>
+    </div>
+    <aside class="detail-side">
+      <section class="card">
+        <div class="card-head"><h2>Snapshot</h2></div>
+        <div class="card-body"><dl class="details compact"><div><dt>Open items</dt><dd>${open.length}</dd></div><div><dt>All items</dt><dd>${tasks.length}</dd></div><div><dt>Modules</dt><dd>${projectModuleRows(tasks).length}</dd></div><div><dt>Pages</dt><dd>${pages.length}</dd></div><div><dt>Status</dt><dd>${esc(project.status)}</dd></div></dl></div>
+      </section>
+      ${projectEditPanel(project)}
+      <section class="card">
+        <div class="card-head"><h2>Pages</h2><span class="badge badge-muted">${pages.length}</span></div>
+        <div class="card-body"><div class="row-list">${pages.map((page) => `<a class="row-item" href="#/page/${page.id}"><span class="row-main"><span class="row-title">${esc(page.title)}</span><span class="row-meta">${esc(page.type)}</span></span></a>`).join('') || empty('No pages.')}</div></div>
+      </section>
+    </aside>
+  </div>`;
+}
+
 function projectPage(state, route, query) {
   const project = state.projects.find((row) => row.key === route.params.key || row.id === route.params.key);
-  if (!project) return notFound(`/project/${route.params.key}`);
-  const tab = ['overview', 'work', 'pages'].includes(query.get('tab')) ? query.get('tab') : 'overview';
+  if (!project) return projectNotFound(route.params.key);
+  const tab = projectTabId(project, query.get('tab'));
   const tasks = state.tasks.filter((task) => task.projectId === project.id);
   const pages = state.pages.filter((page) => page.projectId === project.id);
   const open = tasks.filter((task) => task.status !== 'Done');
-  const statuses = ['To do', 'In progress', 'Waiting', 'Done'];
+  const body = tab === 'work' ? workItemsBody(state, query, { path: `/project/${project.key}`, projectId: project.id, tab: 'work' })
+    : tab === 'modules' ? projectModulesTab(project, tasks)
+      : tab === 'pages' ? projectPagesTab(pages)
+        : tab === 'products' ? projectProductsTab(state, project)
+          : tab === 'review-update' ? projectReviewUpdateTab(project)
+            : tab === 'issue-review' ? projectIssueReviewTab(state, project)
+              : tab === 'analysis-report' ? projectAnalysisReportTab(state, project)
+                : MR_UNAVAILABLE_TAB_IDS.has(tab) ? projectUnavailableTab(project, tab)
+                  : tab === 'xbuild-standard' ? projectRuleBookTab(project, pages)
+                    : tab === 'xbuild-report' ? projectXbuildReportTab(project)
+                      : projectOverview(state, project, tasks, pages, open);
   return `
     <nav class="breadcrumb"><a href="#/projects">← Projects</a></nav>
     ${pageHead(project.name, project.description, `<span class="badge badge-${project.archived ? 'muted' : 'accent'}">${esc(project.archived ? 'Archived' : project.status)}</span>`)}
     <div class="project-meta"><span class="badge badge-accent">${esc(project.key)}</span><span>Owner ${esc(project.owner)}</span><span>${fmt(project.start)} → ${fmt(project.due)}</span><span>${esc(project.keywords)}</span></div>
-    <div class="tabs"><a class="tab" href="#/project/${project.key}"${tab === 'overview' ? ' aria-current="page"' : ''}>Overview</a><a class="tab" href="#/project/${project.key}?tab=work"${tab === 'work' ? ' aria-current="page"' : ''}>Work items</a><a class="tab" href="#/project/${project.key}?tab=modules"${tab === 'modules' ? ' aria-current="page"' : ''}>Modules</a><a class="tab" href="#/project/${project.key}?tab=pages"${tab === 'pages' ? ' aria-current="page"' : ''}>Pages</a></div>
-    ${tab === 'work' ? workItemsBody(state, query, { path: `/project/${project.key}`, projectId: project.id, tab: 'work' }) : tab === 'pages' ? `<section class="card"><div class="card-head"><h2>Pages</h2><span class="badge badge-muted">${pages.length}</span></div><div class="card-body"><div class="row-list">${pages.map((page) => `<a class="row-item" href="#/page/${page.id}"><span class="row-main"><span class="row-title">${esc(page.title)}</span><span class="row-meta">${esc(page.type)} · ${fmtStamp(page.updatedAt)}</span></span>${icon('arrow', 16)}</a>`).join('') || empty('No pages.')}</div></div></section>` : `<div class="detail-grid"><div class="detail-main"><section class="card"><div class="card-head"><h2>Work by status</h2></div><div class="card-body"><div class="bar-list">${statuses.map((status) => `<div class="bar-row"><span>${status}</span><span class="bar-track"><span class="bar-fill" data-bar="${tasks.filter((task) => task.status === status).length}"></span></span><strong>${tasks.filter((task) => task.status === status).length}</strong></div>`).join('')}</div></div></section><section class="card"><div class="card-head"><h2>Coming up</h2></div><div class="card-body">${empty('No project schedule in the next 30 days.')}</div></section></div><aside class="detail-side"><section class="card"><div class="card-head"><h2>Snapshot</h2></div><div class="card-body"><dl class="details compact"><div><dt>Open items</dt><dd>${open.length}</dd></div><div><dt>All items</dt><dd>${tasks.length}</dd></div><div><dt>Pages</dt><dd>${pages.length}</dd></div><div><dt>Status</dt><dd>${esc(project.status)}</dd></div></dl></div></section><section class="card"><div class="card-head"><h2>Pages</h2></div><div class="card-body"><div class="row-list">${pages.slice(0, 4).map((page) => `<a class="row-item" href="#/page/${page.id}"><span class="row-main"><span class="row-title">${esc(page.title)}</span><span class="row-meta">${esc(page.type)}</span></span></a>`).join('') || empty('No pages.')}</div></div></section></aside></div>`}`;
+    ${projectTabStrip(project, tab)}
+    ${body}`;
 }
 
-function pageView(state, route) {
+function pageRevision(page, raw) {
+  const key = String(raw ?? '').trim();
+  if (!key) return null;
+  const revisions = Array.isArray(page.revisions) ? page.revisions : [];
+  return revisions.find((revision) => String(revision.id) === key || String(revision.rev) === key) ?? null;
+}
+
+function revisionHistory(page, readOnly) {
+  const revisions = [...(Array.isArray(page.revisions) ? page.revisions : [])].sort((a, b) => (Number(b.rev) || 0) - (Number(a.rev) || 0));
+  const rows = [
+    `<li class="revision-item"><a class="revision-link" href="#/page/${page.id}">Revision ${Number(page.rev) || 1} · ${fmtStamp(page.updatedAt)}</a><span class="badge badge-${readOnly ? 'muted' : 'success'}">${readOnly ? 'Latest' : 'Current'}</span></li>`,
+    ...revisions.map((revision) => `<li class="revision-item"><a class="revision-link" href="#/page/${page.id}?rev=${encodeURIComponent(revision.rev)}" data-revision="${esc(revision.rev)}">Revision ${esc(revision.rev)} · ${fmtStamp(revision.updatedAt)}</a><span class="badge badge-muted">Older</span></li>`),
+  ];
+  return `<section class="revision-history" data-revision-history><h2 class="card-title">Revision history</h2><ol class="revision-list">${rows.join('')}</ol><p class="field-help">A save snapshots the previous version. Choose a revision to view it.</p></section>`;
+}
+
+function pageView(state, route, query) {
   const page = state.pages.find((row) => row.id === route.params.id);
   if (!page) return notFound(`/page/${route.params.id}`);
-  const project = projectOf(state, page.projectId);
-  const task = state.tasks.find((row) => row.id === page.taskId);
+  const requestedRev = query?.get?.('rev') ?? '';
+  const revision = pageRevision(page, requestedRev);
+  const readOnly = Boolean(revision);
+  const shown = revision ?? page;
+  const project = projectOf(state, shown.projectId);
+  const task = state.tasks.find((row) => row.id === shown.taskId);
+  const tags = pageTags(shown.tags);
+  const actions = readOnly
+    ? `<div class="row-actions"><a class="btn btn-ghost btn-sm" href="#/page/${page.id}">Current version</a><button class="btn btn-ghost btn-sm" type="button" data-action="print">Print</button></div>`
+    : `<div class="row-actions"><a class="btn btn-ghost btn-sm" href="#/page/${page.id}/edit">Edit</a><button class="btn btn-ghost btn-sm" type="button" data-action="print">Print</button></div>`;
+  const subtitle = readOnly
+    ? `${shown.type} · Revision ${shown.rev} of ${page.rev} · read-only`
+    : `${shown.type}${task ? ` · ${task.key}` : ''}`;
+  const revisionNotice = readOnly
+    ? `<p class="revision-note" role="status">You are viewing an older revision. It is read-only; restore it by copying the text into the current version.</p>`
+    : requestedRev
+      ? `<p class="revision-note" role="status">Revision “${esc(requestedRev)}” was not found. Showing the current version.</p>`
+      : '';
   return `
     <nav class="breadcrumb"><a href="#/pages">← Pages</a></nav>
-    ${pageHead(page.title, `${page.type} · ${page.author} · ${fmtStamp(page.updatedAt)}${project ? ` · ${project.key} ${project.name}` : ''}${task ? ` · ${task.key}` : ''}`, `<div class="row-actions"><a class="btn btn-ghost btn-sm" href="#/page/${page.id}/edit">Edit</a><button class="btn btn-ghost btn-sm" type="button" data-action="print">Print</button></div>`)}
+    ${pageHead(shown.title, subtitle, actions)}
+    ${revisionNotice}
+    <dl class="details compact page-meta">
+      <div><dt>Author</dt><dd>${esc(shown.author || 'Unknown author')}</dd></div>
+      <div><dt>Date</dt><dd>${fmtStamp(shown.updatedAt)}</dd></div>
+      <div><dt>Project</dt><dd>${project ? `<a class="mono-link" href="#/project/${encodeURIComponent(project.key)}?tab=pages">${esc(project.key)} ${esc(project.name)}</a>` : 'No project'}</dd></div>
+      ${tags.length ? `<div><dt>Tags</dt><dd>${tags.map((tag) => `<span class="badge badge-muted">${esc(tag)}</span>`).join(' ')}</dd></div>` : ''}
+    </dl>
     <div class="page-workspace">
-      <aside class="page-rail card"><div class="card-head"><h2>Pages</h2></div><div class="card-body"><div class="row-list">${state.pages.map((item) => `<a class="row-item${item.id === page.id ? ' is-active' : ''}" href="#/page/${item.id}"><span class="row-main"><span class="row-title">${esc(item.title)}</span><span class="row-meta">${esc(item.type)} · ${fmt(item.updatedAt)}</span></span></a>`).join('')}</div></div></aside>
-      <article class="card"><div class="card-body"><div class="prose">${markdown(page.body)}</div></div></article>
+      <aside class="page-rail card"><div class="card-head"><h2>Pages</h2></div><div class="card-body"><div class="row-list">${state.pages.map((item) => `<a class="row-item${item.id === page.id ? ' is-active' : ''}" href="#/page/${item.id}"><span class="row-main"><span class="row-title">${esc(item.title)}</span><span class="row-meta">${esc(item.type)} · ${fmt(item.updatedAt)}</span></span></a>`).join('')}</div>${revisionHistory(page, readOnly)}</div></aside>
+      <article class="card print-friendly" data-print-region><div class="card-body"><div class="prose" data-page-body>${markdown(shown.body)}</div></div></article>
     </div>`;
 }
 
-function pageEditor(state, route) {
+function pageEditor(state, route, query) {
   const isNew = route.id === 'page-new';
   const page = isNew ? null : state.pages.find((row) => row.id === route.params.id);
   if (!isNew && !page) return notFound(`/page/${route.params.id}/edit`);
+  // An old revision is never editable, even through the edit URL.
+  if (page && query?.get?.('rev')) {
+    const revision = pageRevision(page, query.get('rev'));
+    if (revision) return pageView(state, route, query);
+  }
+  const projectId = page?.projectId ?? query?.get?.('project') ?? '';
   return `
     <nav class="breadcrumb"><a href="#/pages">← Pages</a></nav>
-    ${pageHead(isNew ? 'New page' : 'Edit page', 'Stored in this account only. Blank titles are rejected.')}
+    ${pageHead(isNew ? 'New page' : 'Edit page', 'Stored in this account only. Blank titles are rejected. The preview updates as you type.')}
     <div class="page-workspace">
       <aside class="page-rail card"><div class="card-head"><h2>Pages</h2></div><div class="card-body"><div class="row-list">${state.pages.map((item) => `<a class="row-item${item.id === page?.id ? ' is-active' : ''}" href="#/page/${item.id}"><span class="row-main"><span class="row-title">${esc(item.title)}</span><span class="row-meta">${esc(item.type)}</span></span></a>`).join('')}</div></div></aside>
-      <section class="card"><div class="card-body"><form class="stack" data-form="page-save"><input type="hidden" name="id" value="${esc(page?.id ?? '')}" /><div class="field"><label for="page-title">Title</label><input id="page-title" name="title" type="text" value="${esc(page?.title ?? '')}" required /></div><div class="field"><label for="page-project">Project</label><select id="page-project" class="select" name="projectId"><option value="">No project</option>${state.projects.map((p) => option(p.id, page?.projectId ?? '', `${p.key} ${p.name}`)).join('')}</select></div><div class="field"><label for="page-body">Body</label><textarea id="page-body" name="body" rows="16" placeholder="Write markdown…">${esc(page?.body ?? '')}</textarea></div><div class="row-actions"><button class="btn btn-primary" type="submit">${isNew ? 'Create page' : 'Save page'}</button><a class="btn btn-ghost" href="${page ? `#/page/${page.id}` : '#/pages'}">Cancel</a></div></form></div></section>
+      <section class="card"><div class="card-body"><form class="stack" data-form="page-save" data-page-editor><input type="hidden" name="id" value="${esc(page?.id ?? '')}" /><div class="field"><label for="page-title">Title</label><input id="page-title" name="title" type="text" value="${esc(page?.title ?? '')}" required aria-required="true" /><p class="field-help">Required. Leading and trailing spaces are trimmed.</p></div><div class="field"><label for="page-project">Project</label><select id="page-project" class="select" name="projectId"><option value="">No project</option>${state.projects.map((p) => option(p.id, projectId, `${p.key} ${p.name}`)).join('')}</select></div><div class="field"><label for="page-tags">Tags</label><input id="page-tags" name="tags" type="text" value="${esc(page?.tags ?? '')}" placeholder="Comma-separated, optional" /><p class="field-help">Optional. Separate tags with commas.</p></div><div class="page-editor-body"><div class="field page-editor-source"><label for="page-body">Body</label><textarea id="page-body" name="body" rows="18" placeholder="Write markdown…" data-page-preview-source>${esc(page?.body ?? '')}</textarea><p class="field-help">Markdown: ## heading, - list and **bold**.</p></div><section class="page-editor-preview" aria-label="Markdown preview"><div class="page-editor-preview-head"><span class="card-title">Preview</span><span class="badge badge-muted">Live</span></div><div class="prose" data-page-preview aria-live="polite">${markdown(page?.body ?? '')}</div></section></div><div class="row-actions"><button class="btn btn-primary" type="submit">${isNew ? 'Create page' : 'Save page'}</button><button class="btn btn-ghost" type="button" data-action="ai-polish">AI Polish</button><a class="btn btn-ghost" href="${page ? `#/page/${page.id}` : '#/pages'}">Cancel</a></div></form></div></section>
     </div>`;
 }
 
@@ -1274,7 +1823,7 @@ function notFound(path) {
   return `${pageHead('Page not found', `There is no screen at ${path}.`)}<p><a class="btn btn-primary" href="#/">${icon('arrow', 16)}Back to Home</a></p>`;
 }
 
-function markdown(body) {
+export function markdown(body) {
   const lines = esc(body || '').split('\n');
   const out = [];
   let inList = false;
@@ -1316,9 +1865,9 @@ export function renderView(route, query, state) {
     case 'task-detail': return taskDetail(state, route);
     case 'bug-detail': return bugDetail(state, route);
     case 'project-detail': return projectPage(state, route, query);
-    case 'page-view': return pageView(state, route);
+    case 'page-view': return pageView(state, route, query);
     case 'page-edit':
-    case 'page-new': return pageEditor(state, route);
+    case 'page-new': return pageEditor(state, route, query);
     case 'bug-new': return bugNew(state);
     case 'rating-trend': return ratingPage(state);
     case 'go': return notFound(route.path);
@@ -1358,9 +1907,44 @@ export function mountView(route, query, state) {
     if (chart) renderBarChart(chart, { labels: ['To do', 'In progress', 'Waiting', 'Done'], values: [6, 4, 3, 5], title: 'Work items by status' });
   }
   if (route.id === 'project-detail') {
-    document.querySelectorAll('[data-bar]').forEach((bar) => {
-      const max = Math.max(...[...document.querySelectorAll('[data-bar]')].map((item) => Number(item.dataset.bar)), 1);
-      bar.style.setProperty('--bar-width', `${(Number(bar.dataset.bar) / max) * 100}%`);
+    const project = (state.projects ?? []).find((row) => row.key === route.params.key || row.id === route.params.key);
+    const statusChart = document.getElementById('project-status-chart');
+    if (project && statusChart) {
+      const tasks = (state.tasks ?? []).filter((task) => task.projectId === project.id);
+      const rows = projectStatusRows(tasks);
+      renderDonutChart(statusChart, {
+        labels: rows.map((row) => row.status),
+        values: rows.map((row) => row.count),
+        title: 'Project work items by status',
+      });
+    }
+    if (project && project.key === 'MR') {
+      const mrIssueChart = document.getElementById('mr-issue-chart');
+      if (mrIssueChart) {
+        const categories = mrIssueCategoryRows(mrIssueRows(state));
+        renderBarChart(mrIssueChart, {
+          labels: categories.map((row) => row.category),
+          values: categories.map((row) => row.count),
+          title: 'Market Review demo issues by category',
+        });
+      }
+      const mrParetoChart = document.getElementById('mr-analysis-pareto');
+      if (mrParetoChart) {
+        const series = paretoSeries(state);
+        renderParetoChart(mrParetoChart, {
+          labels: series.map((row) => row.label),
+          values: series.map((row) => row.value),
+          title: 'Market Review issue Pareto from local demo data',
+        });
+      }
+    }
+    const bars = [...document.querySelectorAll('[data-bar]')];
+    const max = Math.max(...bars.map((bar) => Number(bar.dataset.bar)), 1);
+    bars.forEach((bar) => {
+      const value = Number(bar.dataset.bar) || 0;
+      const total = Number(bar.dataset.total) || 0;
+      const width = total > 0 ? (value / total) * 100 : (value / max) * 100;
+      bar.style.setProperty('--bar-width', `${Math.max(0, Math.min(100, width))}%`);
     });
   }
   if ((route.id === 'tasks' || (route.id === 'project-detail' && query.get('tab') === 'work')) && query.get('view') === 'timeline') {

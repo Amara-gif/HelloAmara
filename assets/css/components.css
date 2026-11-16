@@ -1209,6 +1209,33 @@ code {
   font-weight: var(--font-weight-semibold);
 }
 
+.chart-donut-track {
+  fill: none;
+  stroke: var(--color-chart-grid);
+}
+
+.chart-donut-segment {
+  fill: none;
+}
+
+.chart-donut-1 { stroke: var(--color-chart-series-1); }
+.chart-donut-2 { stroke: var(--color-chart-series-2); }
+.chart-donut-3 { stroke: var(--color-chart-series-3); }
+.chart-donut-4 { stroke: var(--color-chart-series-4); }
+.chart-donut-5 { stroke: var(--color-chart-series-5); }
+.chart-donut-6 { stroke: var(--color-chart-series-6); }
+
+.chart-donut-total {
+  fill: var(--color-text);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.chart-donut-caption {
+  fill: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
 /* ---------------------------------------------------------- Notices/lists */
 .note {
   display: flex;
@@ -1810,6 +1837,44 @@ code {
   margin-bottom: var(--space-1);
 }
 
+.project-row[draggable="true"] {
+  cursor: grab;
+}
+
+.project-row.is-dragging {
+  opacity: 0.55;
+}
+
+.project-row.is-drop-target td {
+  border-top: var(--border-width) solid var(--color-accent);
+}
+
+.project-row.is-drop-after td {
+  border-bottom: var(--border-width) solid var(--color-accent);
+}
+
+.drag-handle {
+  flex: none;
+  color: var(--color-text-faint);
+  cursor: grab;
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  user-select: none;
+}
+
+.project-row.is-editing td {
+  background: var(--color-surface-muted);
+}
+
+.project-row.is-editing td[colspan] {
+  display: block;
+  text-align: left;
+}
+
+.project-row.is-editing td[colspan]::before {
+  display: none;
+}
+
 .row-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2396,7 +2461,7 @@ code {
 
 .bar-row {
   display: grid;
-  grid-template-columns: 90px minmax(0, 1fr) 32px;
+  grid-template-columns: 90px minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-2);
   color: var(--color-text-secondary);
@@ -2457,6 +2522,89 @@ code {
 .prose ul {
   padding-left: var(--space-4);
   list-style: disc;
+}
+
+.page-editor-body {
+  display: grid;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+@media (min-width: 1100px) {
+  .page-editor-body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.page-editor-source textarea {
+  min-height: 24rem;
+  resize: vertical;
+}
+
+.page-editor-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 16rem;
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.page-editor-preview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.page-editor-preview .prose {
+  min-width: 0;
+}
+
+.revision-history {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: var(--border-width) solid var(--color-divider);
+}
+
+.revision-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.revision-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: var(--border-width) solid var(--color-divider);
+}
+
+.revision-item:last-child {
+  border-bottom: 0;
+}
+
+.revision-link {
+  color: var(--color-accent-strong);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.revision-note {
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-band);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
 }
 
 /* Team */
@@ -2705,5 +2853,56 @@ details.card > summary::-webkit-details-marker {
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ------------------------------------------------------------ Print view */
+@media print {
+  .sidebar,
+  .backdrop,
+  .sidebar-reopen,
+  .topbar,
+  .footer,
+  .fab,
+  .breadcrumb,
+  .page-actions,
+  .page-rail,
+  .toolbar,
+  .row-actions {
+    display: none !important;
+  }
+
+  .shell {
+    display: block;
+  }
+
+  .content {
+    min-height: 0;
+  }
+
+  .view,
+  .page {
+    max-width: none;
+    padding: 0;
+  }
+
+  .page-workspace {
+    display: block;
+  }
+
+  .print-friendly {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: var(--color-surface);
+  }
+
+  .print-friendly .card-body {
+    padding: 0;
+  }
+
+  .print-friendly a {
+    color: inherit;
+    text-decoration: none;
   }
 }

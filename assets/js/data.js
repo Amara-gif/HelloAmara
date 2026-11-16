@@ -289,6 +289,7 @@ async function readState() {
     settings: meta.settings ?? structuredClone(DEFAULT_SETTINGS),
     ratings: meta.ratings ?? null,
     issueCounts: meta.issueCounts ?? null,
+    marketReview: meta.marketReview ?? null,
     seeded: meta.seedVersion ?? null,
     persistentStorage: {
       supported,
@@ -541,12 +542,44 @@ export async function deleteEvent(id) {
   state = await readState();
 }
 
+export function normalizePageTags(value) {
+  const list = Array.isArray(value) ? value : String(value ?? '').split(',');
+  return list.map((tag) => String(tag).trim()).filter(Boolean).join(', ');
+}
+
+function pageTitle(value) {
+  const title = String(value ?? '').trim();
+  if (!title) throw new Error('A page title is required.');
+  return title;
+}
+
+// A revision keeps the full row that was current before a save, so the view can
+// render it with ?rev= without a second store or a second read.
+function revisionSnapshot(page, savedAt) {
+  return {
+    id: newId('rev'),
+    rev: Number(page.rev) || 1,
+    title: page.title,
+    type: page.type || 'Page',
+    projectId: page.projectId || '',
+    taskId: page.taskId || '',
+    author: page.author || '',
+    tags: page.tags || '',
+    body: page.body || '',
+    createdAt: page.createdAt || page.updatedAt || savedAt,
+    updatedAt: page.updatedAt || savedAt,
+    savedAt,
+  };
+}
+
 export async function createPage(input) {
   const now = nowIso();
   const page = {
-    id: newId('page'), title: input.title, type: input.type || 'Page',
-    projectId: input.projectId || '', taskId: input.taskId || '', author: 'Amara',
-    body: input.body || '', createdAt: now, updatedAt: now, deletedAt: null,
+    id: newId('page'), title: pageTitle(input.title), type: input.type || 'Page',
+    projectId: input.projectId || '', taskId: input.taskId || '', author: input.author || 'Amara',
+    tags: normalizePageTags(input.tags),
+    body: input.body || '', rev: 1, revisions: [],
+    createdAt: now, updatedAt: now, deletedAt: null,
   };
   await putRecord('pages', page);
   state = await readState();
@@ -556,26 +589,46 @@ export async function createPage(input) {
 export async function updatePage(id, input) {
   const page = state.pages.find((row) => row.id === id);
   if (!page) throw new Error('Page not found.');
-  const updated = { ...page, ...input, updatedAt: nowIso() };
+  const patch = 'tags' in input ? { ...input, tags: normalizePageTags(input.tags) } : { ...input };
+  if ('title' in patch) patch.title = pageTitle(patch.title);
+  const now = nowIso();
+  const rev = (Number(page.rev) || 1) + 1;
+  const updated = {
+    ...page,
+    ...patch,
+    rev,
+    revisions: [...(Array.isArray(page.revisions) ? page.revisions : []), revisionSnapshot(page, now)],
+    updatedAt: now,
+  };
   await putRecord('pages', updated);
   state = await readState();
   return updated;
 }
 
-export async function softDeletePage(id) {
-  const page = state.pages.find((row) => row.id === id);
-  if (!page) return;
-  await putRecord('pages', { ...page, deletedAt: nowIso(), updatedAt: nowIso() });
+// Batch soft delete keeps one readState pass for a multi-row selection.
+export async function softDeletePages(ids) {
+  const wanted = new Set((Array.isArray(ids) ? ids : [ids]).map((id) => String(id ?? '')).filter(Boolean));
+  if (!wanted.size) return [];
+  const rows = state.pages.filter((page) => wanted.has(page.id));
+  if (!rows.length) return [];
+  const now = nowIso();
+  await putRecords('pages', rows.map((page) => ({ ...page, deletedAt: now, updatedAt: now })));
   state = await readState();
+  return rows.map((page) => page.id);
+}
+
+export async function softDeletePage(id) {
+  await softDeletePages([id]);
 }
 
 export async function createProject(input) {
   const now = nowIso();
+  const sort = state.projects.reduce((max, project) => Math.max(max, Number(project.sort) || 0), 0) + 1;
   const project = {
     id: newId('project'), key: (input.key || 'NEW').toUpperCase(), name: input.name,
     description: input.description || '', owner: input.owner || 'Amara',
     status: input.status || 'Active', start: input.start || '', due: input.due || '',
-    keywords: input.keywords || '', archived: 0, sort: state.projects.length + 1,
+    keywords: input.keywords || '', archived: 0, sort,
     createdAt: now, updatedAt: now, deletedAt: null,
   };
   await putRecord('projects', project);
@@ -590,6 +643,41 @@ export async function updateProject(id, patch) {
   await putRecord('projects', updated);
   state = await readState();
   return updated;
+}
+
+export async function softDeleteProject(id) {
+  const project = state.projects.find((row) => row.id === id);
+  if (!project) return;
+  const now = nowIso();
+  await putRecord('projects', { ...project, deletedAt: now, updatedAt: now });
+  state = await readState();
+}
+
+// Persist the visible project order. Ids not supplied keep their relative order
+// after the supplied rows, so archived rows never shuffle into the sidebar.
+export async function reorderProjects(orderedIds) {
+  const ids = [...new Set((orderedIds ?? []).map(String).filter(Boolean))];
+  if (!ids.length) return state.projects;
+  const byId = new Map(state.projects.map((project) => [project.id, project]));
+  const seen = new Set();
+  const updates = [];
+  const now = nowIso();
+  let sort = 0;
+  for (const id of ids) {
+    const project = byId.get(id);
+    if (!project || seen.has(id)) continue;
+    seen.add(id);
+    sort += 1;
+    if (project.sort !== sort) updates.push({ ...project, sort, updatedAt: now });
+  }
+  for (const project of state.projects) {
+    if (seen.has(project.id)) continue;
+    sort += 1;
+    if (project.sort !== sort) updates.push({ ...project, sort, updatedAt: now });
+  }
+  if (updates.length) await putRecords('projects', updates);
+  state = await readState();
+  return state.projects;
 }
 
 export async function createOrder(owner, text) {
