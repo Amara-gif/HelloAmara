@@ -4,7 +4,7 @@ import {
   transitionTask, reviewTask,
   createBug, updateBug, transitionBug, addBugComment, softDeleteBugs, createEvent, deleteEvent, createPage,
   updatePage, softDeletePage, createProject, updateProject, createOrder,
-  closeOrder, reopenOrder, saveSettings, restoreQaMark,
+  closeOrder, reopenOrder, saveSettings, restoreQaMark, AI_LIMIT_DEFAULTS,
 } from './data.js';
 import { readLocation, routeForPath, groupRoutes, SETTINGS_LINKS } from './routes.js';
 import { renderView, mountView, renderAccountScreen, renderCreateDialog, bugPrefill, canSendToQa, qaOwnerName, agentBrief, renderAgentTodo } from './views.js';
@@ -317,6 +317,114 @@ function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
 
+function numericSetting(value, fallback) {
+  if (value === undefined || value === null || String(value).trim() === '') return fallback;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function setSettingsFormState(form, dirty) {
+  const status = form?.querySelector('[data-save-state]');
+  if (!status) return;
+  status.textContent = dirty
+    ? (status.dataset.dirtyText || 'Unsaved changes. Save before leaving.')
+    : (status.dataset.savedText || 'All changes saved.');
+  status.classList.toggle('is-dirty', dirty);
+}
+
+function markSettingsDirty(form) {
+  setSettingsFormState(form, true);
+}
+
+async function commitSettings(settings, message, { appearance = false } = {}) {
+  await saveSettings(settings);
+  if (appearance) applyAppearance(settings);
+  await rerender();
+  toast(message, { tone: 'success' });
+}
+
+function addDispatchRule(form) {
+  if (!form) return;
+  const list = form.querySelector('[data-dispatch-rules]');
+  const template = form.querySelector('template[data-dispatch-rule-template]');
+  if (!list || !template) return;
+  const index = `new-${Date.now()}-${list.querySelectorAll('[data-dispatch-rule]').length}`;
+  const fragment = template.content.cloneNode(true);
+  for (const node of fragment.querySelectorAll('[name], [id], [for]')) {
+    for (const attribute of ['name', 'id', 'for']) {
+      const value = node.getAttribute(attribute);
+      if (value) node.setAttribute(attribute, value.split('__index__').join(index));
+    }
+  }
+  list.append(fragment);
+  const empty = form.querySelector('[data-dispatch-empty]');
+  if (empty) empty.hidden = true;
+  markSettingsDirty(form);
+  list.querySelector('[data-dispatch-rule]:last-child input[name^="rule-key-"]')?.focus();
+}
+
+function removeDispatchRule(button) {
+  const row = button.closest('[data-dispatch-rule]');
+  const form = button.closest('form');
+  if (!row) return;
+  row.remove();
+  const empty = form?.querySelector('[data-dispatch-empty]');
+  if (empty) empty.hidden = Boolean(form.querySelector('[data-dispatch-rule]'));
+  markSettingsDirty(form);
+}
+
+function syncAreaField(form) {
+  const field = form?.querySelector('[data-areas-value]');
+  if (!field) return;
+  field.value = [...form.querySelectorAll('[data-area-chip]')].map((chip) => chip.dataset.areaChip).filter(Boolean).join(', ');
+  const empty = form.querySelector('[data-area-empty]');
+  if (empty) empty.hidden = Boolean(form.querySelector('[data-area-chip]'));
+}
+
+function addAreaChip(form) {
+  if (!form) return;
+  const input = form.querySelector('#areas-new');
+  const name = input?.value.trim() ?? '';
+  if (!name) {
+    toast('Type an area name first.', { tone: 'danger' });
+    input?.focus();
+    return;
+  }
+  const existing = [...form.querySelectorAll('[data-area-chip]')].some((chip) => String(chip.dataset.areaChip).toLowerCase() === name.toLowerCase());
+  if (existing) {
+    toast('That area is already on the list.', { tone: 'danger' });
+    return;
+  }
+  const chip = document.createElement('span');
+  chip.className = 'chip';
+  chip.dataset.areaChip = name;
+  chip.append(document.createTextNode(name));
+  const remove = document.createElement('button');
+  remove.className = 'chip-remove';
+  remove.type = 'button';
+  remove.dataset.action = 'remove-area';
+  remove.dataset.area = name;
+  remove.setAttribute('aria-label', `Remove ${name}`);
+  remove.textContent = '×';
+  chip.append(remove);
+  form.querySelector('[data-area-chips]')?.append(chip);
+  input.value = '';
+  syncAreaField(form);
+  markSettingsDirty(form);
+  input.focus();
+}
+
+function removeAreaChip(button) {
+  const form = button.closest('form');
+  button.closest('[data-area-chip]')?.remove();
+  syncAreaField(form);
+  markSettingsDirty(form);
+}
+
+function parseAreaNames(value) {
+  return String(value ?? '').split(',').map((name) => name.trim()).filter(Boolean);
+}
+
 function selectedBugIds() {
   return [...document.querySelectorAll('[data-bug-select]:checked')].map((input) => input.value);
 }
@@ -595,7 +703,16 @@ document.addEventListener('click', async (event) => {
     const project = getState().projects.find((row) => row.id === id);
     if (project) { await updateProject(id, { archived: project.archived ? 0 : 1, status: project.archived ? 'Active' : 'Archived' }); render(); toast(project.archived ? 'Project restored.' : 'Project archived.'); }
   } else if (action === 'delete-page') {
-    openModal({ title: 'Delete this page?', message: 'The page is soft-deleted on this device. Other versions stay in the account.', confirmLabel: 'Delete', tone: 'danger', onConfirm: async () => { await softDeletePage(id); render(); toast('Page deleted.', { tone: 'success' }); } });
+    const isSnapshot = actionEl.dataset.snapshot === '1';
+    openModal({
+      title: isSnapshot ? 'Delete this snapshot?' : 'Delete this page?',
+      message: isSnapshot
+        ? 'The snapshot page is soft-deleted on this device. Other versions stay in the account. Nothing is deleted automatically.'
+        : 'The page is soft-deleted on this device. Other versions stay in the account.',
+      confirmLabel: isSnapshot ? 'Delete snapshot' : 'Delete',
+      tone: 'danger',
+      onConfirm: async () => { await softDeletePage(id); render(); toast(isSnapshot ? 'Snapshot deleted.' : 'Page deleted.', { tone: 'success' }); },
+    });
   } else if (action === 'delete-event') {
     openModal({ title: 'Delete this event?', message: 'This removes the event from this device.', confirmLabel: 'Delete', tone: 'danger', onConfirm: async () => { await deleteEvent(id); render(); toast('Event deleted.', { tone: 'success' }); } });
   } else if (action === 'delete-selected-bugs') {
@@ -638,8 +755,16 @@ document.addEventListener('click', async (event) => {
   else if (action === 'open-folder') toast('Folder access is not available in a browser.', { tone: 'danger' });
   else if (action === 'fake-download') toast('Attachment placeholder — file storage is a later phase.');
   else if (action === 'toast-copy') toast('Copied actions are placeholders in this build.');
-  else if (action === 'test-key') toast('Demo key is valid for preview.', { tone: 'success' });
-  else if (action === 'fill-gaps') toast('Backfill is not connected to an AI service yet.');
+  else if (action === 'add-dispatch-rule') addDispatchRule(actionEl.closest('form'));
+  else if (action === 'remove-dispatch-rule') removeDispatchRule(actionEl);
+  else if (action === 'add-area') addAreaChip(actionEl.closest('form'));
+  else if (action === 'remove-area') removeAreaChip(actionEl);
+  else if (action === 'restore-ai-defaults') {
+    const settings = structuredClone(getState().settings);
+    settings.aiLimits = { ...AI_LIMIT_DEFAULTS };
+    await commitSettings(settings, 'AI limits restored to defaults.');
+  } else if (action === 'test-key') toast('Key test is local in this build. No network AI is connected.', { tone: 'success' });
+  else if (action === 'fill-gaps') toast('Fill gaps is a local preview. No network AI is connected.');
   else if (action === 'agent-todo') openAgentTodo(actionEl.dataset.owner);
   else if (action === 'close-order') { await closeOrder(id); render(); document.querySelector('.modal-backdrop')?.remove(); toast('Order closed. Reopen it from the agent to-do list.', { tone: 'success' }); }
   else if (action === 'reopen-order') { await reopenOrder(id); render(); document.querySelector('.modal-backdrop')?.remove(); toast('Order reopened and back on the agent To-do list.', { tone: 'success' }); }
@@ -656,7 +781,14 @@ document.addEventListener('click', async (event) => {
   }
 });
 
+document.addEventListener('input', (event) => {
+  const form = event.target.closest('form[data-settings-form]');
+  if (form) markSettingsDirty(form);
+});
+
 document.addEventListener('change', async (event) => {
+  const settingsForm = event.target.closest('form[data-settings-form]');
+  if (settingsForm) markSettingsDirty(settingsForm);
   const selectAllBugs = event.target.closest('[data-select-all-bugs]');
   if (selectAllBugs) {
     document.querySelectorAll('[data-bug-select]').forEach((box) => { box.checked = selectAllBugs.checked; });
@@ -741,30 +873,38 @@ document.addEventListener('submit', async (event) => {
       toast('Order sent.', { tone: 'success' });
     } else if (form.dataset.form === 'settings-ai') {
       const settings = structuredClone(getState().settings);
-      settings.ai = { ...settings.ai, key: data.key, model: data.model, timeout: Number(data.timeout), status: 'Connected' };
-      await saveSettings(settings); applyAppearance(settings); await rerender(); toast('Settings saved.', { tone: 'success' });
+      settings.ai = { ...settings.ai, key: data.key, model: data.model, timeout: numericSetting(data.timeout, 90), status: 'Connected' };
+      setSettingsFormState(form, false);
+      await commitSettings(settings, 'AI settings saved on this device.');
     } else if (form.dataset.form === 'settings-limits') {
       const settings = structuredClone(getState().settings);
-      settings.aiLimits = { summary: Number(data.summary), progress: Number(data.progress), comment: Number(data.comment), issue: Number(data.issue), benchmark: Number(data.benchmark) };
-      await saveSettings(settings); await rerender(); toast('AI limits saved.', { tone: 'success' });
+      settings.aiLimits = Object.fromEntries(Object.keys(AI_LIMIT_DEFAULTS).map((key) => [key, numericSetting(data[key], AI_LIMIT_DEFAULTS[key])]));
+      setSettingsFormState(form, false);
+      await commitSettings(settings, 'AI limits saved on this device.');
     } else if (form.dataset.form === 'settings-language') {
       const settings = structuredClone(getState().settings);
       settings.language = { primary: data.primary, secondary: data.secondary, rule: data.rule };
-      await saveSettings(settings); await rerender(); toast('Language rules saved.', { tone: 'success' });
+      setSettingsFormState(form, false);
+      await commitSettings(settings, 'Language rules saved on this device.');
     } else if (form.dataset.form === 'settings-dispatch') {
       const settings = structuredClone(getState().settings);
-      const rules = [];
-      for (let i = 0; i < 2; i += 1) if (data[`rule-key-${i}`]) rules.push({ keyword: data[`rule-key-${i}`], owner: data[`rule-owner-${i}`] });
+      const rules = [...form.querySelectorAll('[data-dispatch-rule]')].map((row) => ({
+        keyword: (row.querySelector('input[name^="rule-key-"]')?.value ?? '').trim(),
+        owner: row.querySelector('select[name^="rule-owner-"]')?.value || data.defaultOwner,
+      })).filter((rule) => rule.keyword);
       settings.dispatch = { defaultOwner: data.defaultOwner, rules };
-      await saveSettings(settings); await rerender(); toast('Dispatch rules saved.', { tone: 'success' });
+      setSettingsFormState(form, false);
+      await commitSettings(settings, 'Dispatch rules saved on this device.');
     } else if (form.dataset.form === 'settings-areas') {
       const settings = structuredClone(getState().settings);
-      settings.areas = { options: data.options.split(',').map((value) => value.trim()).filter(Boolean), fallback: data.fallback };
-      await saveSettings(settings); await rerender(); toast('Areas saved.', { tone: 'success' });
+      settings.areas = { options: parseAreaNames(data.options), fallback: String(data.fallback ?? '').trim() || 'NA' };
+      setSettingsFormState(form, false);
+      await commitSettings(settings, 'Areas saved on this device.');
     } else if (form.dataset.form === 'settings-appearance') {
       const settings = structuredClone(getState().settings);
-      settings.appearance = { primary: data.primary, radiusBtn: Number(data.radiusBtn), radiusCard: Number(data.radiusCard), glass: Number(data.glass), enableGlass: Boolean(data.enableGlass) };
-      await saveSettings(settings); applyAppearance(settings); await rerender(); toast('Theme saved.', { tone: 'success' });
+      settings.appearance = { primary: data.primary, radiusBtn: numericSetting(data.radiusBtn, 8), radiusCard: numericSetting(data.radiusCard, 16), glass: numericSetting(data.glass, 0.25), enableGlass: Boolean(data.enableGlass) };
+      setSettingsFormState(form, false);
+      await commitSettings(settings, 'Theme saved on this device.', { appearance: true });
     } else if (form.dataset.form === 'page-save') {
       const page = data.id ? await updatePage(data.id, { title: data.title, projectId: data.projectId, body: data.body }) : await createPage(data);
       navigate(`/page/${page.id}`);

@@ -206,6 +206,44 @@
         </div>
       </section>
 
+      <section class="section" aria-labelledby="sg-settings-title">
+        <div class="section-head">
+          <h2 id="sg-settings-title">Settings save bar and chips</h2>
+          <p>
+            Settings forms share one dirty/saved line and one primary Save button. Chips can
+            carry an inline remove control for editable lists.
+          </p>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <form class="form-grid" data-settings-form>
+              <div class="field field-wide">
+                <label for="sg-settings-example">Example setting</label>
+                <input id="sg-settings-example" type="text" value="Battery" />
+                <p class="field-help">Start typing to see the shared dirty-state text.</p>
+              </div>
+              <div class="settings-save-bar field-wide">
+                <p
+                  class="field-help settings-save-state"
+                  data-save-state
+                  data-dirty-text="Unsaved changes. Save before leaving."
+                  data-saved-text="All changes saved."
+                  aria-live="polite"
+                >All changes saved.</p>
+                <div class="row-actions">
+                  <button class="btn btn-primary" type="button">Save changes</button>
+                </div>
+              </div>
+            </form>
+            <div class="chip-row">
+              <span class="chip">Battery<button class="chip-remove" type="button" aria-label="Remove Battery">×</button></span>
+              <span class="chip">Display<button class="chip-remove" type="button" aria-label="Remove Display">×</button></span>
+              <span class="chip">Firmware<button class="chip-remove" type="button" aria-label="Remove Firmware">×</button></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="section" aria-labelledby="sg-table-title">
         <div class="section-head">
           <h2 id="sg-table-title">Table</h2>

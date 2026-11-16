@@ -15,6 +15,7 @@ import {
   normalizeBugStatus,
   bugWorkflowTargets,
   BUG_REASON_REQUIRED_STATUSES,
+  AI_LIMIT_DEFAULTS,
 } from './data.js';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
@@ -1228,36 +1229,90 @@ function storagePersistCard(state) {
   return `<section class="card"><div class="card-head"><h2>Persistent storage</h2>${storageBadge(storage)}</div><div class="card-body"><dl class="details"><div><dt>Status</dt><dd>${esc(storage?.status ?? 'Unsupported')}</dd></div><div><dt>Checked</dt><dd>${storage?.checkedAt ? fmtStamp(storage.checkedAt) : '—'}</dd></div></dl><p class="field-help">Granted means this browser will keep the account's IndexedDB data when the device is low on space. Unsupported means this browser has no <code>navigator.storage.persist()</code> API.</p></div></section>`;
 }
 
+const LANGUAGE_LABELS = { en: 'English', zh: 'Chinese' };
+const SETTINGS_SAVED_TEXT = 'All changes saved.';
+const SETTINGS_DIRTY_TEXT = 'Unsaved changes. Save before leaving.';
+const AI_LIMIT_SECTIONS = [
+  { key: 'summary', label: 'Summary', help: 'How many source items the Summary input may read.' },
+  { key: 'progress', label: 'Progress', help: 'How many source items the Progress input may read.' },
+  { key: 'comment', label: 'Comment', help: 'How many source items a Comment draft may read.' },
+  { key: 'issue', label: 'Issue classification', help: 'How many issues may be classified in one run.' },
+  { key: 'benchmark', label: 'Issue Benchmark', help: 'How many Issue Benchmark rows may be included.' },
+];
+
+// One save pattern for every settings form: shared dirty/saved text plus a
+// single primary Save button. The state is updated by the app's input listener.
+function settingsSaveBar({ label = 'Save changes', extra = '' } = {}) {
+  return `<div class="settings-save-bar field-wide"><p class="field-help settings-save-state" data-save-state data-dirty-text="${esc(SETTINGS_DIRTY_TEXT)}" data-saved-text="${esc(SETTINGS_SAVED_TEXT)}" aria-live="polite">${esc(SETTINGS_SAVED_TEXT)}</p><div class="row-actions">${extra}<button class="btn btn-primary" type="submit">${esc(label)}</button></div></div>`;
+}
+
+function settingsSnapshot(state) {
+  const stored = state.settings ?? {};
+  return {
+    ai: { status: 'Not configured', model: '', timeout: 90, key: '', ...(stored.ai ?? {}) },
+    aiLimits: { ...AI_LIMIT_DEFAULTS, ...(stored.aiLimits ?? {}) },
+    language: { primary: 'en', secondary: 'zh', rule: '', ...(stored.language ?? {}) },
+    dispatch: { defaultOwner: 'Dispatcher', rules: [], ...(stored.dispatch ?? {}) },
+    areas: { options: [], fallback: 'NA', ...(stored.areas ?? {}) },
+    appearance: { primary: '', radiusBtn: 8, radiusCard: 16, glass: 0.25, enableGlass: true, ...(stored.appearance ?? {}) },
+  };
+}
+
+function dispatchOwnerOptions(defaultOwner, team) {
+  return [...new Set([defaultOwner, 'Dispatcher', ...team.map((agent) => agent.name)].filter(Boolean))];
+}
+
+function dispatchRuleRow(rule, index, owners) {
+  const keyword = rule?.keyword ?? '';
+  const owner = rule?.owner || owners[0] || 'Dispatcher';
+  const ownerChoices = [...new Set([owner, ...owners].filter(Boolean))];
+  return `<div class="field-row" data-dispatch-rule><div class="field"><label for="rule-key-${esc(index)}">Keyword</label><input id="rule-key-${esc(index)}" name="rule-key-${esc(index)}" type="text" value="${esc(keyword)}" placeholder="battery" /></div><div class="field"><label for="rule-owner-${esc(index)}">Give it to</label><select id="rule-owner-${esc(index)}" class="select" name="rule-owner-${esc(index)}">${ownerChoices.map((name) => option(name, owner, name)).join('')}</select><button class="btn btn-ghost btn-sm" type="button" data-action="remove-dispatch-rule">Remove rule</button></div></div>`;
+}
+
+function areaChip(name) {
+  return `<span class="chip" data-area-chip="${esc(name)}">${esc(name)}<button class="chip-remove" type="button" data-action="remove-area" data-area="${esc(name)}" aria-label="Remove ${esc(name)}">×</button></span>`;
+}
+
 function settingsPage(route, state) {
-  const s = state.settings;
+  const s = settingsSnapshot(state);
   const storage = state.persistentStorage ?? { status: 'Unsupported' };
+  const team = state.team ?? [];
   const body = (() => {
     if (route.id === 'settings') {
-      return `${storagePersistCard(state)}<section class="card"><div class="card-head"><h2>AI connection</h2><span class="badge badge-${s.ai.status === 'Connected' ? 'success' : 'muted'}">${esc(s.ai.status)}</span></div><div class="card-body"><form class="form-grid" data-form="settings-ai"><div class="field"><label for="ai-key">API key</label><input id="ai-key" name="key" type="password" value="${esc(s.ai.key)}" /></div><div class="field"><label for="ai-model">Model</label><input id="ai-model" name="model" type="text" value="${esc(s.ai.model)}" /></div><div class="field"><label for="ai-timeout">Timeout (seconds)</label><input id="ai-timeout" name="timeout" type="number" value="${esc(s.ai.timeout)}" /></div><div class="row-actions"><button class="btn btn-primary" type="submit">Save changes</button><button class="btn btn-ghost" type="button" data-action="test-key">Test the key</button><button class="btn btn-ghost" type="button" data-action="fill-gaps">Fill the gaps now</button></div></form></div></section>
+      return `${storagePersistCard(state)}<section class="card"><div class="card-head"><h2>AI connection</h2><span class="badge badge-${s.ai.status === 'Connected' ? 'success' : 'muted'}">${esc(s.ai.status)}</span></div><div class="card-body"><form class="form-grid" data-form="settings-ai" data-settings-form><div class="field"><label for="ai-key">API key</label><input id="ai-key" name="key" type="password" value="${esc(s.ai.key)}" /><p class="field-help">Stored only in this account's local database.</p></div><div class="field"><label for="ai-model">Model</label><input id="ai-model" name="model" type="text" value="${esc(s.ai.model)}" /></div><div class="field"><label for="ai-timeout">Timeout (seconds)</label><input id="ai-timeout" name="timeout" type="number" min="1" value="${esc(s.ai.timeout)}" /></div>${settingsSaveBar({ extra: '<button class="btn btn-ghost" type="button" data-action="test-key">Test the key</button><button class="btn btn-ghost" type="button" data-action="fill-gaps">Fill the gaps now</button>' })}</form><p class="field-help">Test the key and Fill the gaps are local previews in this build. No network AI request is sent.</p></div></section>
         <section class="card"><div class="card-head"><h2>Demo data</h2><span class="badge badge-accent">Test account</span></div><div class="card-body"><p>Reset the Test account to the original demo rows. Changes in this account will be replaced.</p><button class="btn btn-danger" type="button" data-action="reset-demo">Reset demo data</button></div></section>`;
     }
     if (route.id === 'settings-ai') {
-      return `<section class="card"><div class="card-head"><h2>AI inputs & limits</h2></div><div class="card-body"><form class="form-grid" data-form="settings-limits">${[['summary', 'Summary'], ['progress', 'Progress'], ['comment', 'Comment'], ['issue', 'Issue classification'], ['benchmark', 'Issue Benchmark']].map(([key, label]) => `<div class="field"><label for="limit-${key}">${label}</label><input id="limit-${key}" name="${key}" type="number" value="${esc(s.aiLimits[key])}" /></div>`).join('')}<button class="btn btn-primary" type="submit">Save changes</button></form></div></section>`;
+      const sections = AI_LIMIT_SECTIONS.map(({ key, label, help }) => `<div class="field-wide" data-limit-section="${key}"><h3>${label}</h3><p class="field-help">${help}</p><div class="field"><label for="limit-${key}">${label} limit</label><input id="limit-${key}" name="${key}" type="number" min="0" value="${esc(s.aiLimits[key])}" /><p class="field-help">Default: ${AI_LIMIT_DEFAULTS[key]}.</p></div></div>`).join('');
+      return `<section class="card"><div class="card-head"><h2>AI inputs &amp; limits</h2><a class="card-link-small" href="#/settings/language">Language rules</a></div><div class="card-body"><p class="field-help">Each surface has its own reading limit. Limits stay in this account on this device.</p><form class="form-grid" data-form="settings-limits" data-settings-form>${sections}${settingsSaveBar({ extra: '<button class="btn btn-ghost" type="button" data-action="restore-ai-defaults">Restore defaults</button>' })}</form></div></section>`;
     }
     if (route.id === 'settings-language') {
-      return `<section class="card"><div class="card-head"><h2>Language rules</h2></div><div class="card-body"><form class="form-grid" data-form="settings-language"><div class="field"><label for="lang-primary">Primary language</label><select id="lang-primary" class="select" name="primary">${option('en', s.language.primary, 'English')}${option('zh', s.language.primary, 'Chinese')}</select></div><div class="field"><label for="lang-secondary">Secondary language</label><select id="lang-secondary" class="select" name="secondary">${option('en', s.language.secondary, 'English')}${option('zh', s.language.secondary, 'Chinese')}</select></div><div class="field field-wide"><label for="lang-rule">Natural-language rule</label><textarea id="lang-rule" name="rule" rows="5">${esc(s.language.rule)}</textarea></div><p class="field-help">Applies to the next AI call only.</p><button class="btn btn-primary" type="submit">Save changes</button></form></div></section>`;
+      const primary = LANGUAGE_LABELS[s.language.primary] ?? s.language.primary;
+      const secondary = LANGUAGE_LABELS[s.language.secondary] ?? s.language.secondary;
+      const preview = s.language.primary === s.language.secondary
+        ? `Primary and secondary are both ${primary}. Choose different languages to set a translation order.`
+        : `${primary} is written first and ${secondary} is kept beside it. The natural-language rule below is sent to every AI surface exactly as written.`;
+      return `<section class="card"><div class="card-head"><h2>Language rules</h2><a class="card-link-small" href="#/settings/ai">AI inputs &amp; limits</a></div><div class="card-body"><form class="form-grid" data-form="settings-language" data-settings-form><div class="field"><label for="lang-primary">Primary language</label><select id="lang-primary" class="select" name="primary">${option('en', s.language.primary, 'English')}${option('zh', s.language.primary, 'Chinese')}</select></div><div class="field"><label for="lang-secondary">Secondary language</label><select id="lang-secondary" class="select" name="secondary">${option('en', s.language.secondary, 'English')}${option('zh', s.language.secondary, 'Chinese')}</select><p class="field-help">Both languages are always kept; this sets their order.</p></div><div class="field field-wide"><label for="lang-rule">Natural-language rule</label><textarea id="lang-rule" name="rule" rows="5">${esc(s.language.rule)}</textarea><p class="field-help">Applies to the next AI call only. No AI call is made now.</p></div><details class="field-wide"><summary>Preview note</summary><p>${esc(preview)}</p><p class="field-help">Preview only: nothing is translated or sent to a server.</p></details>${settingsSaveBar()}</form></div></section>`;
     }
     if (route.id === 'settings-snapshots') {
-      const snapshots = state.pages.filter((page) => page.type === 'Snapshot');
-      return `<section class="card"><div class="card-head"><h2>Snapshots</h2><span class="badge badge-muted">${snapshots.length}</span></div><div class="card-body"><div class="table-wrap"><table class="table table-stack"><thead><tr><th>Date</th><th>Kind</th><th>Excerpt</th><th>Actions</th></tr></thead><tbody>${snapshots.map((page) => `<tr><td data-label="Date">${fmtStamp(page.updatedAt)}</td><td data-label="Kind">${esc(page.type)}</td><td data-label="Excerpt"><a class="table-title" href="#/page/${page.id}">${esc(page.title)}</a></td><td data-label="Actions"><button class="btn btn-ghost btn-sm" type="button" data-action="delete-page" data-id="${page.id}">Delete</button></td></tr>`).join('') || `<tr><td colspan="4">${empty('No snapshots yet.')}</td></tr>`}</tbody></table></div></div></section>`;
+      const snapshots = (state.pages ?? []).filter((page) => page.type === 'Snapshot');
+      return `<section class="card"><div class="card-head"><h2>Snapshots</h2><span class="badge badge-muted">${snapshots.length}</span></div><div class="card-body"><p class="field-help">Snapshot pages are listed newest first. Nothing is deleted automatically.</p><div class="table-wrap"><table class="table table-stack"><thead><tr><th>Date</th><th>Kind</th><th>Excerpt</th><th>Actions</th></tr></thead><tbody>${snapshots.map((page) => `<tr data-snapshot-row="${esc(page.id)}"><td data-label="Date">${fmtStamp(page.updatedAt)}</td><td data-label="Kind">${esc(page.type)}</td><td data-label="Excerpt"><a class="table-title" href="#/page/${esc(page.id)}">${esc(page.title)}</a></td><td data-label="Actions"><div class="row-actions"><a class="btn btn-ghost btn-sm" href="#/page/${esc(page.id)}">Open</a><button class="btn btn-ghost btn-sm" type="button" data-action="delete-page" data-id="${esc(page.id)}" data-snapshot="1">Delete</button></div></td></tr>`).join('') || `<tr><td colspan="4">${empty('No snapshots yet.')}</td></tr>`}</tbody></table></div></div></section>`;
     }
     if (route.id === 'settings-dispatch') {
-      return `<section class="card"><div class="card-head"><h2>Dispatch rules</h2></div><div class="card-body"><form data-form="settings-dispatch"><div class="field"><label for="dispatch-owner">Default owner</label><select id="dispatch-owner" class="select" name="defaultOwner">${state.team.map((agent) => option(agent.name, s.dispatch.defaultOwner, agent.name)).join('')}</select></div><div class="strip-list">${(s.dispatch.rules ?? []).map((rule, index) => `<div class="field-row"><div class="field"><label for="rule-key-${index}">Keyword</label><input id="rule-key-${index}" name="rule-key-${index}" type="text" value="${esc(rule.keyword)}" /></div><div class="field"><label for="rule-owner-${index}">Give it to</label><select id="rule-owner-${index}" class="select" name="rule-owner-${index}">${state.team.map((agent) => option(agent.name, rule.owner, agent.name)).join('')}</select></div></div>`).join('')}</div><p class="field-help">First matching rule wins; blank conditions are ignored.</p><button class="btn btn-primary" type="submit">Save changes</button></form></div></section>`;
+      const rules = Array.isArray(s.dispatch.rules) ? s.dispatch.rules : [];
+      const owners = dispatchOwnerOptions(s.dispatch.defaultOwner, team);
+      return `<section class="card"><div class="card-head"><h2>Dispatch rules</h2></div><div class="card-body"><form data-form="settings-dispatch" data-settings-form><div class="field"><label for="dispatch-owner">Default owner</label><select id="dispatch-owner" class="select" name="defaultOwner">${owners.map((name) => option(name, s.dispatch.defaultOwner, name)).join('')}</select><p class="field-help">Used when no rule matches.</p></div><div class="strip-list" data-dispatch-rules>${rules.map((rule, index) => dispatchRuleRow(rule, index, owners)).join('')}</div><p class="field-help" data-dispatch-empty${rules.length ? ' hidden' : ''}>No rules yet. Every new item goes to the default owner.</p><button class="btn btn-ghost" type="button" data-action="add-dispatch-rule">Add rule</button><template data-dispatch-rule-template>${dispatchRuleRow({ keyword: '', owner: s.dispatch.defaultOwner }, '__index__', owners)}</template><p class="field-help">Rules run top to bottom. The first matching rule wins, so put specific keywords above broad ones. Blank keywords are ignored and keywords match the work item title plus description. The default owner is used when nothing matches.</p>${settingsSaveBar()}</form></div></section>`;
     }
     if (route.id === 'settings-areas') {
-      return `<section class="card"><div class="card-head"><h2>Responsibility areas</h2></div><div class="card-body"><form data-form="settings-areas"><div class="field"><label for="areas-list">Area names</label><input id="areas-list" name="options" type="text" value="${esc((s.areas.options ?? []).join(', '))}" /><p class="field-help">Separate names with commas.</p></div><div class="field"><label for="areas-fallback">Unknown owner</label><input id="areas-fallback" name="fallback" type="text" value="${esc(s.areas.fallback)}" /></div><button class="btn btn-primary" type="submit">Save changes</button></form></div></section>`;
+      const options = Array.isArray(s.areas.options) ? s.areas.options : [];
+      return `<section class="card"><div class="card-head"><h2>Responsibility areas</h2></div><div class="card-body"><form class="form-grid" data-form="settings-areas" data-settings-form><div class="field field-wide"><label for="areas-new">Area names</label><div class="chip-row" data-area-chips>${options.map(areaChip).join('')}</div><input id="areas-new" name="newArea" type="text" placeholder="Add an area, then choose Add area" /><input type="hidden" name="options" data-areas-value value="${esc(options.join(', '))}" /><p class="field-help" data-area-empty${options.length ? ' hidden' : ''}>No extra areas yet. Unknown areas use the fallback below.</p><p class="field-help">Remove a chip to stop offering that area. This list is stored in this account.</p></div><div class="field"><label for="areas-fallback">Unknown owner fallback</label><input id="areas-fallback" name="fallback" type="text" value="${esc(s.areas.fallback)}" /><p class="field-help">Default: NA (PQA in reports).</p></div><div class="field"><button class="btn btn-ghost" type="button" data-action="add-area">Add area</button></div>${settingsSaveBar()}</form></div></section>`;
     }
     if (route.id === 'settings-appearance') {
-      return `<section class="card"><div class="card-head"><h2>Appearance & theme</h2></div><div class="card-body"><form class="form-grid" data-form="settings-appearance"><div class="field"><label for="theme-primary">Primary colour</label><input id="theme-primary" name="primary" type="color" value="${esc(s.appearance.primary)}" /></div><div class="field"><label for="theme-radius-btn">Button radius</label><input id="theme-radius-btn" name="radiusBtn" type="range" min="0" max="20" value="${esc(s.appearance.radiusBtn)}" /></div><div class="field"><label for="theme-radius-card">Card radius</label><input id="theme-radius-card" name="radiusCard" type="range" min="0" max="28" value="${esc(s.appearance.radiusCard)}" /></div><div class="field"><label for="theme-glass">Glass opacity</label><input id="theme-glass" name="glass" type="range" min="0.1" max="1" step="0.05" value="${esc(s.appearance.glass)}" /></div><label class="checkbox-row"><input name="enableGlass" type="checkbox"${s.appearance.enableGlass ? ' checked' : ''} /> Enable glass</label><div class="row-actions"><button class="btn btn-primary" type="submit">Save theme</button><button class="btn btn-ghost" type="button" data-action="reset-theme">Restore default look</button></div></form></div></section>`;
+      return `<section class="card"><div class="card-head"><h2>Appearance &amp; theme</h2></div><div class="card-body"><form class="form-grid" data-form="settings-appearance" data-settings-form><div class="field"><label for="theme-primary">Primary colour</label><input id="theme-primary" name="primary" type="color" value="${esc(s.appearance.primary)}" /></div><div class="field"><label for="theme-radius-btn">Button radius</label><input id="theme-radius-btn" name="radiusBtn" type="range" min="0" max="20" value="${esc(s.appearance.radiusBtn)}" /></div><div class="field"><label for="theme-radius-card">Card radius</label><input id="theme-radius-card" name="radiusCard" type="range" min="0" max="28" value="${esc(s.appearance.radiusCard)}" /></div><div class="field"><label for="theme-glass">Glass opacity</label><input id="theme-glass" name="glass" type="range" min="0.1" max="1" step="0.05" value="${esc(s.appearance.glass)}" /></div><label class="checkbox-row"><input name="enableGlass" type="checkbox"${s.appearance.enableGlass ? ' checked' : ''} /> Enable glass</label>${settingsSaveBar({ label: 'Save theme', extra: '<button class="btn btn-ghost" type="button" data-action="reset-theme">Restore default look</button>' })}</form></div></section>`;
     }
     return '';
   })();
-  return `${pageHead(route.title, 'Settings are stored on this device with the account.', `${storageBadge(storage)}<span class="badge badge-muted">${esc(state.account.name)}</span>`)}${settingsTabs(route)}${body}`;
+  return `${pageHead(route.title, 'Settings are stored on this device with the account.', `${storageBadge(storage)}<span class="badge badge-muted">${esc(state.account?.name ?? 'This device')}</span>`)}${settingsTabs(route)}${body}`;
 }
 
 function taskDetail(state, route) {

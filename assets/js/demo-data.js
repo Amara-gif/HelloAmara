@@ -274,9 +274,17 @@ const issueCounts = [
   { category: 'Packaging', count: 2 },
 ];
 
+export const AI_LIMIT_DEFAULTS = Object.freeze({
+  summary: 12,
+  progress: 8,
+  comment: 6,
+  issue: 40,
+  benchmark: 10,
+});
+
 export const demoSettings = {
   ai: { status: 'Connected', model: 'deepseek-v4-pro', timeout: 90, key: 'sk-demo-••••-2c13' },
-  aiLimits: { summary: 12, progress: 8, comment: 6, issue: 40, benchmark: 10 },
+  aiLimits: { ...AI_LIMIT_DEFAULTS },
   language: { primary: 'en', secondary: 'zh', rule: 'Use plain English. Keep Chinese product names and quoted customer words unchanged.' },
   dispatch: { defaultOwner: 'Dispatcher', rules: [{ keyword: 'battery', owner: 'Worker A' }, { keyword: 'release', owner: 'QA' }] },
   areas: { options: ['Battery', 'Display', 'Firmware', 'Supplier'], fallback: 'NA' },

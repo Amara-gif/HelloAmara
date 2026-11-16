@@ -8,7 +8,10 @@ import {
   nowIso,
   newId,
 } from './db.js';
-import { buildDemoData, demoSettings, DEMO_VERSION } from './demo-data.js';
+import { buildDemoData, demoSettings, DEMO_VERSION, AI_LIMIT_DEFAULTS } from './demo-data.js';
+
+// The seeded demo and Restore defaults read the same frozen limit object.
+export { AI_LIMIT_DEFAULTS };
 
 export const BUG_SEVERITIES = ['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'];
 const BUG_SLA_DAYS = { 'S1 Blocker': 0, 'S2 Critical': 2, 'S3 Major': 5, 'S4 Minor': null };
@@ -137,7 +140,7 @@ export function bugSlaDue(severity, baseDate = new Date()) {
   return `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`;
 }
 
-const DEFAULT_SETTINGS = {
+export const DEFAULT_SETTINGS = {
   ...structuredClone(demoSettings),
   ai: { status: 'Not configured', model: 'deepseek-v4-pro', timeout: 90, key: '' },
   dispatch: { defaultOwner: 'Dispatcher', rules: [] },
