@@ -474,53 +474,127 @@ function projectsPage(state, query) {
     </details>`;
 }
 
-function filterTasks(state, query) {
-  const scope = query.get('scope') === 'all' ? 'all' : 'open';
-  const q = (query.get('q') ?? '').toLowerCase();
-  const status = query.get('status') ?? '';
-  const owner = query.get('owner') ?? '';
-  const priorityFilter = query.get('priority') ?? '';
-  const projectFilter = query.get('project') ?? '';
-  const sort = query.get('sort') ?? 'smart';
+const PRIORITY_ORDER = ['Highest', 'High', 'Medium', 'Low', 'Lowest'];
+const WORKFLOW_STATUSES = ['New', 'Triaged', 'In progress', 'Fixed', 'Verified', 'Closed', 'Reopened', 'Deferred', 'Wont fix', 'Duplicate', 'Rejected'];
+
+function queryValues(query, key) {
+  return query.getAll(key).flatMap((value) => String(value).split(',')).map((value) => value.trim()).filter(Boolean);
+}
+
+function matchesFilter(values, value) {
+  return !values.length || values.includes(String(value ?? ''));
+}
+
+function progressOf(task) {
+  const candidates = [task.progress, task.progressText, task.progressSummary, task.progress_summary_en, task.progress_summary_zh, task.notes, task.note];
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return task.status ?? '';
+}
+
+export function filterTasks(state, query) {
+  const reset = query.get('reset') === '1';
+  const scopeParam = query.get('scope');
+  const scope = !reset && ['all', 'everything', '1', 'true', 'yes'].includes(scopeParam) ? 'all' : 'open';
+  const q = reset ? '' : (query.get('q') ?? '').trim();
+  const status = reset ? '' : queryValues(query, 'status').join(',');
+  const owner = reset ? '' : queryValues(query, 'owner').join(',');
+  const priorityFilter = reset ? '' : queryValues(query, 'priority').join(',');
+  const severity = reset ? '' : queryValues(query, 'severity').join(',');
+  const component = reset ? '' : queryValues(query, 'component').join(',');
+  const module = reset ? '' : queryValues(query, 'module').join(',');
+  const projectFilter = reset ? '' : queryValues(query, 'project').join(',');
+  const sortParam = reset ? 'smart' : (query.get('sort') ?? 'smart');
+  const sort = ['smart', 'due', 'priority', 'key'].includes(sortParam) ? sortParam : 'smart';
+
+  const statuses = status.split(',').filter(Boolean);
+  const owners = owner.split(',').filter(Boolean);
+  const priorities = priorityFilter.split(',').filter(Boolean);
+  const severities = severity.split(',').filter(Boolean);
+  const components = component.split(',').filter(Boolean);
+  const modules = module.split(',').filter(Boolean);
+  const projects = projectFilter.split(',').filter(Boolean);
+  const needle = q.toLowerCase();
+
   let rows = state.tasks.filter((task) => {
     const project = projectOf(state, task.projectId);
-    const haystack = `${task.title} ${task.key} ${task.owner} ${task.description} ${task.module} ${project?.name ?? ''}`.toLowerCase();
-    if (scope === 'open' && task.status === 'Done' && !status) return false;
-    return (!q || haystack.includes(q))
-      && (!status || task.workflow === status)
-      && (!owner || task.owner === owner)
-      && (!priorityFilter || task.priority === priorityFilter)
-      && (!projectFilter || task.projectId === projectFilter);
+    const haystack = `${task.title} ${task.notes ?? ''} ${task.note ?? ''} ${task.owner} ${task.id} ${task.key} ${task.component ?? ''} ${task.description ?? ''} ${task.module ?? ''} ${project?.name ?? ''}`.toLowerCase();
+    // An explicit workflow status filter overrides the open-only default (inventory §3.2).
+    if (scope === 'open' && task.status === 'Done' && !statuses.length) return false;
+    return (!needle || haystack.includes(needle))
+      && matchesFilter(statuses, task.workflow)
+      && matchesFilter(owners, task.owner)
+      && matchesFilter(priorities, task.priority)
+      && matchesFilter(severities, task.severity)
+      && matchesFilter(components, task.component)
+      && matchesFilter(modules, task.module)
+      && matchesFilter(projects, task.projectId);
   });
+  const priorityRank = (value) => {
+    const rank = PRIORITY_ORDER.indexOf(value);
+    return rank === -1 ? PRIORITY_ORDER.length : rank;
+  };
+  const dueValue = (task) => task.due || '9999-12-31';
   rows = [...rows].sort((a, b) => {
-    if (sort === 'due') return (a.due || '9999').localeCompare(b.due || '9999');
-    if (sort === 'priority') return ['Highest', 'High', 'Medium', 'Low', 'Lowest'].indexOf(a.priority) - ['Highest', 'High', 'Medium', 'Low', 'Lowest'].indexOf(b.priority);
+    if (sort === 'due') return dueValue(a).localeCompare(dueValue(b)) || a.key.localeCompare(b.key, undefined, { numeric: true });
+    if (sort === 'priority') return priorityRank(a.priority) - priorityRank(b.priority) || dueValue(a).localeCompare(dueValue(b)) || a.key.localeCompare(b.key, undefined, { numeric: true });
     if (sort === 'key') return a.key.localeCompare(b.key, undefined, { numeric: true });
-    return (a.status === 'Done') - (b.status === 'Done') || (a.due || '9999').localeCompare(b.due || '9999');
+    return (a.status === 'Done') - (b.status === 'Done')
+      || dueValue(a).localeCompare(dueValue(b))
+      || priorityRank(a.priority) - priorityRank(b.priority)
+      || a.key.localeCompare(b.key, undefined, { numeric: true });
   });
-  return { rows, scope, q, status, owner, priorityFilter, projectFilter, sort };
+  return { rows, scope, q, status, owner, priorityFilter, severity, component, module, projectFilter, sort };
+}
+
+function taskRow(state, task, depth, children = []) {
+  const project = projectOf(state, task.projectId);
+  const childCount = children.length;
+  const childLabel = `${childCount} ${childCount === 1 ? 'subtask' : 'subtasks'}`;
+  const controls = children.map((child) => `subtask-${child.id}`).join(' ');
+  const toggle = childCount
+    ? `<button class="btn btn-ghost btn-sm" type="button" data-action="toggle-subtasks" data-id="${task.id}" data-key="${esc(task.key)}" aria-expanded="false" aria-controls="${esc(controls)}" aria-label="Show subtasks for ${esc(task.key)}"><span aria-hidden="true" data-toggle-glyph>▸</span><span class="sr-only" data-toggle-label>Show subtasks for ${esc(task.key)}</span></button>`
+    : '';
+  return `<tr class="${depth ? 'is-subtask' : ''}" id="subtask-${task.id}" data-row-id="${task.id}"${depth ? ` data-parent-row="${task.parentId}" hidden` : ''}>
+    <td data-label="Key">${toggle}<a class="key-link" href="#/task/${task.id}">${task.parentId ? '↳ ' : ''}${esc(task.key)}</a></td>
+    <td data-label="Summary"><a class="table-title" href="#/task/${task.id}">${esc(task.title)}</a>${childCount ? `<span class="row-meta"> · ${childLabel}</span>` : ''}</td>
+    <td data-label="Project">${project ? `<span class="badge badge-accent">${esc(project.key)}</span>` : '—'}</td>
+    <td data-label="Progress"><span class="progress-text">${esc(progressOf(task))}</span></td>
+    <td data-label="Status">${statusBadge(task.workflow)}</td>
+    <td data-label="Assignee"><span class="assignee">${avatar(task.owner)}${esc(task.owner)}</span></td>
+    <td data-label="Due">${task.start ? `${fmt(task.start)} → ` : ''}${fmt(task.due)}</td>
+    <td data-label="Priority">${priority(task.priority)}</td>
+    <td data-label="Severity">${esc(task.severity)}</td>
+    <td data-label="Component">${esc(task.component)}</td>
+    <td data-label="Age">${age(task.createdAt)}</td>
+    <td data-label="Actions"><div class="row-actions">${task.status !== 'Done' && task.owner !== 'Delphine Roth' && task.status !== 'Waiting' ? `<button class="btn btn-ghost btn-sm" type="button" data-action="task-toqa" data-id="${task.id}">Send to QA</button>` : ''}<button class="btn btn-ghost btn-sm" type="button" data-action="task-brief" data-id="${task.id}">Brief</button></div></td>
+  </tr>`;
 }
 
 function taskTable(state, rows) {
+  const visible = new Set(rows.map((task) => task.id));
+  const childrenByParent = new Map();
+  for (const task of rows) {
+    if (!task.parentId || !visible.has(task.parentId) || task.parentId === task.id) continue;
+    if (!childrenByParent.has(task.parentId)) childrenByParent.set(task.parentId, []);
+    childrenByParent.get(task.parentId).push(task);
+  }
+  const output = [];
+  const rendered = new Set();
+  const render = (task, depth) => {
+    if (rendered.has(task.id)) return;
+    rendered.add(task.id);
+    const children = childrenByParent.get(task.id) ?? [];
+    output.push(taskRow(state, task, depth, children));
+    for (const child of children) render(child, depth + 1);
+  };
+  for (const task of rows) {
+    if (!task.parentId || !visible.has(task.parentId) || task.parentId === task.id) render(task, 0);
+  }
   return `<div class="table-wrap"><table class="table table-stack">
     <thead><tr><th>Key</th><th>Summary</th><th>Project</th><th>Progress</th><th>Status</th><th>Assignee</th><th>Due</th><th>Priority</th><th>Severity</th><th>Component</th><th>Age</th><th>Actions</th></tr></thead>
-    <tbody>${rows.map((task) => {
-      const project = projectOf(state, task.projectId);
-      return `<tr class="${task.parentId ? 'is-subtask' : ''}">
-        <td data-label="Key"><a class="key-link" href="#/task/${task.id}">${task.parentId ? '↳ ' : ''}${esc(task.key)}</a></td>
-        <td data-label="Summary"><a class="table-title" href="#/task/${task.id}">${esc(task.title)}</a></td>
-        <td data-label="Project">${project ? `<span class="badge badge-accent">${esc(project.key)}</span>` : '—'}</td>
-        <td data-label="Progress"><span class="progress-text">${esc(task.status)}</span></td>
-        <td data-label="Status">${statusBadge(task.workflow)}</td>
-        <td data-label="Assignee"><span class="assignee">${avatar(task.owner)}${esc(task.owner)}</span></td>
-        <td data-label="Due">${task.start ? `${fmt(task.start)} → ` : ''}${fmt(task.due)}</td>
-        <td data-label="Priority">${priority(task.priority)}</td>
-        <td data-label="Severity">${esc(task.severity)}</td>
-        <td data-label="Component">${esc(task.component)}</td>
-        <td data-label="Age">${age(task.createdAt)}</td>
-        <td data-label="Actions"><div class="row-actions">${task.status !== 'Done' && task.owner !== 'Delphine Roth' && task.status !== 'Waiting' ? `<button class="btn btn-ghost btn-sm" type="button" data-action="task-toqa" data-id="${task.id}">Send to QA</button>` : ''}<button class="btn btn-ghost btn-sm" type="button" data-action="task-brief" data-id="${task.id}">Brief</button></div></td>
-      </tr>`;
-    }).join('') || `<tr><td colspan="12">${empty('No work items match these filters.')}</td></tr>`}</tbody>
+    <tbody>${output.join('') || `<tr><td colspan="12">${empty('No work items match these filters.')}</td></tr>`}</tbody>
   </table></div>`;
 }
 
@@ -531,12 +605,17 @@ function taskBoard(state, rows) {
 }
 
 function tasksPage(state, query) {
-  const { rows, scope, q, status, owner, priorityFilter, projectFilter, sort } = filterTasks(state, query);
+  const { rows, scope, q, status, owner, priorityFilter, severity, component, module, projectFilter, sort } = filterTasks(state, query);
   const view = ['list', 'board', 'calendar', 'timeline'].includes(query.get('view')) ? query.get('view') : 'list';
   const openCount = state.tasks.filter((task) => task.status !== 'Done').length;
   const allCount = state.tasks.length;
   const overdue = state.tasks.filter((task) => task.due && task.due < today() && task.status !== 'Done').length;
-  const base = { q, status, owner, priority: priorityFilter, project: projectFilter, sort, scope };
+  const base = { q, status, owner, priority: priorityFilter, severity, component, module, project: projectFilter, sort, scope };
+  const unique = (field) => [...new Set(state.tasks.map((task) => task[field]).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
+  const statusOptions = [...new Set([...WORKFLOW_STATUSES, ...unique('workflow')])];
+  const severityOptions = [...new Set([...['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'], ...unique('severity')])];
+  const componentOptions = unique('component');
+  const moduleOptions = unique('module');
   return `
     ${pageHead('All work items', 'Everything you and your agents are working on, across projects.')}
     <div class="task-toolbar">
@@ -550,11 +629,14 @@ function tasksPage(state, query) {
     <form class="toolbar" data-form="task-filters">
       <input type="hidden" name="view" value="${view}" /><input type="hidden" name="scope" value="${scope}" />
       <input class="input" type="search" name="q" value="${esc(q)}" placeholder="Search work items…" aria-label="Search work items" />
-      <select class="select" name="status" aria-label="Status"><option value="">All statuses</option>${['New', 'Triaged', 'In progress', 'Fixed', 'Verified', 'Closed', 'Reopened', 'Deferred', 'Wont fix', 'Duplicate', 'Rejected'].map((value) => option(value, status)).join('')}</select>
-      <select class="select" name="owner" aria-label="Assignee"><option value="">All assignees</option>${[...new Set(state.tasks.map((task) => task.owner))].map((value) => option(value, owner)).join('')}</select>
-      <select class="select" name="priority" aria-label="Priority"><option value="">All priorities</option>${['Highest', 'High', 'Medium', 'Low', 'Lowest'].map((value) => option(value, priorityFilter)).join('')}</select>
+      <select class="select" name="status" aria-label="Status"><option value="">All statuses</option>${statusOptions.map((value) => option(value, status)).join('')}</select>
+      <select class="select" name="owner" aria-label="Owner"><option value="">All owners</option>${[...new Set(state.tasks.map((task) => task.owner).filter(Boolean))].map((value) => option(value, owner)).join('')}</select>
+      <select class="select" name="priority" aria-label="Priority"><option value="">All priorities</option>${PRIORITY_ORDER.map((value) => option(value, priorityFilter)).join('')}</select>
+      <select class="select" name="severity" aria-label="Severity"><option value="">All severities</option>${severityOptions.map((value) => option(value, severity)).join('')}</select>
+      <select class="select" name="component" aria-label="Component"><option value="">All components</option>${componentOptions.map((value) => option(value, component)).join('')}</select>
+      <select class="select" name="module" aria-label="Module"><option value="">All modules</option>${moduleOptions.map((value) => option(value, module)).join('')}</select>
       <select class="select" name="project" aria-label="Project"><option value="">All projects</option>${state.projects.map((p) => option(p.id, projectFilter, `${p.key} ${p.name}`)).join('')}</select>
-      <select class="select" name="sort" aria-label="Sort"><option value="smart"${sort === 'smart' ? ' selected' : ''}>Smart order</option>${['due', 'priority', 'key'].map((value) => option(value, sort)).join('')}</select>
+      <select class="select" name="sort" aria-label="Sort"><option value="smart"${sort === 'smart' ? ' selected' : ''}>Smart order</option>${[['due', 'Due date'], ['priority', 'Priority'], ['key', 'Key']].map(([value, label]) => `<option value="${value}"${sort === value ? ' selected' : ''}>${label}</option>`).join('')}</select>
       <button class="btn btn-sm btn-primary" type="submit">Apply</button>
       <a class="btn btn-ghost btn-sm" href="${pageUrl('/tasks', { view })}">Reset</a>
     </form>

@@ -350,6 +350,36 @@ async function briefTask(id) {
   catch { toast('Clipboard access is not available.', { tone: 'danger' }); }
 }
 
+function toggleSubtasks(button) {
+  const rowId = button.dataset.id;
+  const next = button.getAttribute('aria-expanded') !== 'true';
+  button.setAttribute('aria-expanded', String(next));
+  const glyph = button.querySelector('[data-toggle-glyph]');
+  const label = button.querySelector('[data-toggle-label]');
+  if (glyph) glyph.textContent = next ? '▾' : '▸';
+  const nextLabel = `${next ? 'Hide' : 'Show'} subtasks for ${button.dataset.key}`;
+  button.setAttribute('aria-label', nextLabel);
+  if (label) label.textContent = nextLabel;
+
+  const rows = [...main.querySelectorAll('tr[data-row-id]')];
+  const childrenOf = (id) => rows.filter((row) => row.dataset.parentRow === id);
+  const hideDescendants = (id) => {
+    for (const child of childrenOf(id)) {
+      child.hidden = true;
+      hideDescendants(child.dataset.rowId);
+    }
+  };
+  const revealChildren = (id) => {
+    for (const child of childrenOf(id)) {
+      child.hidden = false;
+      const childToggle = main.querySelector(`[data-action="toggle-subtasks"][data-id="${child.dataset.rowId}"]`);
+      if (childToggle?.getAttribute('aria-expanded') === 'true') revealChildren(child.dataset.rowId);
+    }
+  };
+  if (next) revealChildren(rowId);
+  else hideDescendants(rowId);
+}
+
 async function resetDemoData() {
   try {
     await resetDemo();
@@ -465,6 +495,7 @@ document.addEventListener('click', async (event) => {
     openModal({ title: 'Reset demo data?', message: 'All changes in the Test account will be replaced by the original demo rows.', confirmLabel: 'Reset', tone: 'danger', onConfirm: () => { resetDemoData(); } });
   } else if (action === 'task-toqa') sendToQA(id);
   else if (action === 'task-brief') briefTask(id);
+  else if (action === 'toggle-subtasks') toggleSubtasks(actionEl);
   else if (action === 'task-review') {
     const decision = actionEl.dataset.decision;
     await updateTask(id, { reviewed: decision === 'approve' }, 'status');
