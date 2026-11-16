@@ -539,7 +539,8 @@ function progressOf(task) {
   return task.status ?? '';
 }
 
-export function filterTasks(state, query) {
+export function filterTasks(state, query, options = {}) {
+  const forcedProject = options.projectId ?? '';
   const reset = query.get('reset') === '1';
   const scopeParam = query.get('scope');
   const scope = !reset && ['all', 'everything', '1', 'true', 'yes'].includes(scopeParam) ? 'all' : 'open';
@@ -560,7 +561,8 @@ export function filterTasks(state, query) {
   const severities = severity.split(',').filter(Boolean);
   const components = component.split(',').filter(Boolean);
   const modules = module.split(',').filter(Boolean);
-  const projects = projectFilter.split(',').filter(Boolean);
+  // A project-scoped page owns the scope; another project= value must not hide its rows.
+  const projects = forcedProject ? [] : projectFilter.split(',').filter(Boolean);
   const needle = q.toLowerCase();
 
   let rows = state.tasks.filter((task) => {
@@ -569,6 +571,7 @@ export function filterTasks(state, query) {
     // An explicit workflow status filter overrides the open-only default (inventory §3.2).
     if (scope === 'open' && task.status === 'Done' && !statuses.length) return false;
     return (!needle || haystack.includes(needle))
+      && (!forcedProject || task.projectId === forcedProject)
       && matchesFilter(statuses, task.workflow)
       && matchesFilter(owners, task.owner)
       && matchesFilter(priorities, task.priority)
@@ -591,7 +594,7 @@ export function filterTasks(state, query) {
       || priorityRank(a.priority) - priorityRank(b.priority)
       || a.key.localeCompare(b.key, undefined, { numeric: true });
   });
-  return { rows, scope, q, status, owner, priorityFilter, severity, component, module, projectFilter, sort };
+  return { rows, scope, q, status, owner, priorityFilter, severity, component, module, projectFilter: forcedProject || projectFilter, sort };
 }
 
 function taskRow(state, task, depth, children = []) {
@@ -784,7 +787,7 @@ function undatedCount(rows, isUndated) {
   return `<p class="row-meta" data-undated-count="${open.length}" data-undated-total="${undated.length}">${open.length} open undated ${open.length === 1 ? 'item' : 'items'}</p>`;
 }
 
-function taskCalendarView(rows, query, base) {
+function taskCalendarView(rows, query, base, path = '/tasks') {
   const current = parseMonth(query.get('m'));
   const monthStart = new Date(current.year, current.month - 1, 1);
   const daysInMonth = new Date(current.year, current.month, 0).getDate();
@@ -822,9 +825,9 @@ function taskCalendarView(rows, query, base) {
     <div class="card-head"><h2>Calendar</h2><span class="badge badge-muted">${monthTaskCount} in ${esc(monthName)}</span></div>
     <div class="card-body">
       <div class="calendar-toolbar">
-        <a class="btn btn-ghost btn-sm" href="${pageUrl('/tasks', { ...base, view: 'calendar', m: prev.value })}">Previous</a>
-        <a class="btn btn-ghost btn-sm" href="${pageUrl('/tasks', { ...base, view: 'calendar', m: thisMonth })}">This month</a>
-        <a class="btn btn-ghost btn-sm" href="${pageUrl('/tasks', { ...base, view: 'calendar', m: next.value })}">Next</a>
+        <a class="btn btn-ghost btn-sm" href="${pageUrl(path, { ...base, view: 'calendar', m: prev.value })}">Previous</a>
+        <a class="btn btn-ghost btn-sm" href="${pageUrl(path, { ...base, view: 'calendar', m: thisMonth })}">This month</a>
+        <a class="btn btn-ghost btn-sm" href="${pageUrl(path, { ...base, view: 'calendar', m: next.value })}">Next</a>
         <h2 class="calendar-month">${esc(monthName)}</h2>
       </div>
       <div class="calendar">
@@ -898,44 +901,58 @@ function taskTimelineView(rows, base) {
   </section>`;
 }
 
-function tasksPage(state, query) {
-  const { rows, scope, q, status, owner, priorityFilter, severity, component, module, projectFilter, sort } = filterTasks(state, query);
+function workItemsBody(state, query, options = {}) {
+  const path = options.path ?? '/tasks';
+  const projectId = options.projectId ?? '';
+  const tab = options.tab ?? '';
+  const allTasks = state.tasks ?? [];
+  const tasks = projectId ? allTasks.filter((task) => task.projectId === projectId) : allTasks;
+  const scopedState = tasks === allTasks ? state : { ...state, tasks };
+  const { rows, scope, q, status, owner, priorityFilter, severity, component, module, projectFilter, sort } = filterTasks(scopedState, query, { projectId });
   const view = ['list', 'board', 'calendar', 'timeline'].includes(query.get('view')) ? query.get('view') : 'list';
-  const openCount = state.tasks.filter((task) => task.status !== 'Done').length;
-  const allCount = state.tasks.length;
-  const overdue = state.tasks.filter((task) => task.due && task.due < today() && task.status !== 'Done').length;
+  const openCount = tasks.filter((task) => task.status !== 'Done').length;
+  const allCount = tasks.length;
+  const overdue = tasks.filter((task) => task.due && task.due < today() && task.status !== 'Done').length;
   const monthParam = query.get('m') ?? '';
-  const base = { q, status, owner, priority: priorityFilter, severity, component, module, project: projectFilter, sort, scope, m: monthParam };
-  const unique = (field) => [...new Set(state.tasks.map((task) => task[field]).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
+  const carried = { q, status, owner, priority: priorityFilter, severity, component, module, project: projectId || projectFilter, sort, scope, m: monthParam, tab };
+  const url = (params) => pageUrl(path, { ...carried, ...params });
+  const unique = (field) => [...new Set(tasks.map((task) => task[field]).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
   const statusOptions = [...new Set([...WORKFLOW_STATUSES, ...unique('workflow')])];
   const severityOptions = [...new Set([...['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'], ...unique('severity')])];
   const componentOptions = unique('component');
   const moduleOptions = unique('module');
+  const project = projectId ? (state.projects ?? []).find((row) => row.id === projectId) : null;
+  const projectField = projectId
+    ? `<select class="select" name="project" aria-label="Project" disabled><option selected>${esc([project?.key, project?.name].filter(Boolean).join(' ') || projectId)}</option></select><input type="hidden" name="project" value="${esc(projectId)}" />`
+    : `<select class="select" name="project" aria-label="Project"><option value="">All projects</option>${(state.projects ?? []).map((p) => option(p.id, projectFilter, `${p.key} ${p.name}`)).join('')}</select>`;
   return `
-    ${pageHead('All work items', 'Everything you and your agents are working on, across projects.')}
     <div class="task-toolbar">
-      <div class="tabs">${['list', 'board', 'calendar', 'timeline'].map((name) => `<a class="tab" href="${pageUrl('/tasks', { ...base, view: name })}"${view === name ? ' aria-current="page"' : ''}>${name[0].toUpperCase() + name.slice(1)}</a>`).join('')}</div>
+      <div class="tabs">${['list', 'board', 'calendar', 'timeline'].map((name) => `<a class="tab" href="${url({ view: name })}"${view === name ? ' aria-current="page"' : ''}>${name[0].toUpperCase() + name.slice(1)}</a>`).join('')}</div>
       <div class="scope-switch">
-        <a class="chip${scope === 'open' ? ' is-active' : ''}" href="${pageUrl('/tasks', { ...base, scope: 'open' })}">Open ${openCount}</a>
-        <a class="chip${scope === 'all' ? ' is-active' : ''}" href="${pageUrl('/tasks', { ...base, scope: 'all' })}">All ${allCount}</a>
+        <a class="chip${scope === 'open' ? ' is-active' : ''}" href="${url({ scope: 'open' })}">Open ${openCount}</a>
+        <a class="chip${scope === 'all' ? ' is-active' : ''}" href="${url({ scope: 'all' })}">All ${allCount}</a>
       </div>
-      <span class="toolbar-count">${state.tasks.filter((task) => task.status === 'In progress').length} in progress · ${state.tasks.filter((task) => task.status === 'Waiting').length} in review · ${overdue} overdue</span>
+      <span class="toolbar-count">${tasks.filter((task) => task.status === 'In progress').length} in progress · ${tasks.filter((task) => task.status === 'Waiting').length} in review · ${overdue} overdue</span>
     </div>
-    <form class="toolbar" data-form="task-filters">
-      <input type="hidden" name="view" value="${view}" /><input type="hidden" name="scope" value="${scope}" /><input type="hidden" name="m" value="${esc(monthParam)}" />
+    <form class="toolbar" data-form="task-filters" data-path="${esc(path)}">
+      <input type="hidden" name="view" value="${view}" /><input type="hidden" name="scope" value="${scope}" /><input type="hidden" name="m" value="${esc(monthParam)}" />${tab ? `<input type="hidden" name="tab" value="${esc(tab)}" />` : ''}
       <input class="input" type="search" name="q" value="${esc(q)}" placeholder="Search work items…" aria-label="Search work items" />
       <select class="select" name="status" aria-label="Status"><option value="">All statuses</option>${statusOptions.map((value) => option(value, status)).join('')}</select>
-      <select class="select" name="owner" aria-label="Owner"><option value="">All owners</option>${[...new Set(state.tasks.map((task) => task.owner).filter(Boolean))].map((value) => option(value, owner)).join('')}</select>
+      <select class="select" name="owner" aria-label="Owner"><option value="">All owners</option>${[...new Set(tasks.map((task) => task.owner).filter(Boolean))].map((value) => option(value, owner)).join('')}</select>
       <select class="select" name="priority" aria-label="Priority"><option value="">All priorities</option>${PRIORITY_ORDER.map((value) => option(value, priorityFilter)).join('')}</select>
       <select class="select" name="severity" aria-label="Severity"><option value="">All severities</option>${severityOptions.map((value) => option(value, severity)).join('')}</select>
       <select class="select" name="component" aria-label="Component"><option value="">All components</option>${componentOptions.map((value) => option(value, component)).join('')}</select>
       <select class="select" name="module" aria-label="Module"><option value="">All modules</option>${moduleOptions.map((value) => option(value, module)).join('')}</select>
-      <select class="select" name="project" aria-label="Project"><option value="">All projects</option>${state.projects.map((p) => option(p.id, projectFilter, `${p.key} ${p.name}`)).join('')}</select>
+      ${projectField}
       <select class="select" name="sort" aria-label="Sort"><option value="smart"${sort === 'smart' ? ' selected' : ''}>Smart order</option>${[['due', 'Due date'], ['priority', 'Priority'], ['key', 'Key']].map(([value, label]) => `<option value="${value}"${sort === value ? ' selected' : ''}>${label}</option>`).join('')}</select>
       <button class="btn btn-sm btn-primary" type="submit">Apply</button>
-      <a class="btn btn-ghost btn-sm" href="${pageUrl('/tasks', { view })}">Reset</a>
+      <a class="btn btn-ghost btn-sm" href="${pageUrl(path, { view, ...(tab ? { tab } : {}) })}">Reset</a>
     </form>
-    ${view === 'board' ? taskBoard(state, rows) : view === 'calendar' ? taskCalendarView(rows, query, base) : view === 'timeline' ? taskTimelineView(rows, base) : taskTable(state, rows)}`;
+    ${view === 'board' ? taskBoard(scopedState, rows) : view === 'calendar' ? taskCalendarView(rows, query, carried, path) : view === 'timeline' ? taskTimelineView(rows, carried) : taskTable(scopedState, rows)}`;
+}
+
+function tasksPage(state, query) {
+  return `${pageHead('All work items', 'Everything you and your agents are working on, across projects.')}${workItemsBody(state, query)}`;
 }
 
 function calendarItems(state, date, projectFilter) {
@@ -1211,7 +1228,7 @@ function projectPage(state, route, query) {
     ${pageHead(project.name, project.description, `<span class="badge badge-${project.archived ? 'muted' : 'accent'}">${esc(project.archived ? 'Archived' : project.status)}</span>`)}
     <div class="project-meta"><span class="badge badge-accent">${esc(project.key)}</span><span>Owner ${esc(project.owner)}</span><span>${fmt(project.start)} → ${fmt(project.due)}</span><span>${esc(project.keywords)}</span></div>
     <div class="tabs"><a class="tab" href="#/project/${project.key}"${tab === 'overview' ? ' aria-current="page"' : ''}>Overview</a><a class="tab" href="#/project/${project.key}?tab=work"${tab === 'work' ? ' aria-current="page"' : ''}>Work items</a><a class="tab" href="#/project/${project.key}?tab=modules"${tab === 'modules' ? ' aria-current="page"' : ''}>Modules</a><a class="tab" href="#/project/${project.key}?tab=pages"${tab === 'pages' ? ' aria-current="page"' : ''}>Pages</a></div>
-    ${tab === 'work' ? `<section class="card"><div class="card-head"><h2>Work items</h2><span class="badge badge-muted">${tasks.length}</span></div><div class="card-body"><div class="table-wrap"><table class="table table-stack"><thead><tr><th>Key</th><th>Summary</th><th>Status</th><th>Assignee</th><th>Due</th></tr></thead><tbody>${tasks.map((task) => `<tr><td data-label="Key"><a class="key-link" href="#/task/${task.id}">${esc(task.key)}</a></td><td data-label="Summary"><a class="table-title" href="#/task/${task.id}">${esc(task.title)}</a></td><td data-label="Status">${statusBadge(task.workflow)}</td><td data-label="Assignee">${esc(task.owner)}</td><td data-label="Due">${fmt(task.due)}</td></tr>`).join('') || `<tr><td colspan="5">${empty('No work items.')}</td></tr>`}</tbody></table></div></div></section>` : tab === 'pages' ? `<section class="card"><div class="card-head"><h2>Pages</h2><span class="badge badge-muted">${pages.length}</span></div><div class="card-body"><div class="row-list">${pages.map((page) => `<a class="row-item" href="#/page/${page.id}"><span class="row-main"><span class="row-title">${esc(page.title)}</span><span class="row-meta">${esc(page.type)} · ${fmtStamp(page.updatedAt)}</span></span>${icon('arrow', 16)}</a>`).join('') || empty('No pages.')}</div></div></section>` : `<div class="detail-grid"><div class="detail-main"><section class="card"><div class="card-head"><h2>Work by status</h2></div><div class="card-body"><div class="bar-list">${statuses.map((status) => `<div class="bar-row"><span>${status}</span><span class="bar-track"><span class="bar-fill" data-bar="${tasks.filter((task) => task.status === status).length}"></span></span><strong>${tasks.filter((task) => task.status === status).length}</strong></div>`).join('')}</div></div></section><section class="card"><div class="card-head"><h2>Coming up</h2></div><div class="card-body">${empty('No project schedule in the next 30 days.')}</div></section></div><aside class="detail-side"><section class="card"><div class="card-head"><h2>Snapshot</h2></div><div class="card-body"><dl class="details compact"><div><dt>Open items</dt><dd>${open.length}</dd></div><div><dt>All items</dt><dd>${tasks.length}</dd></div><div><dt>Pages</dt><dd>${pages.length}</dd></div><div><dt>Status</dt><dd>${esc(project.status)}</dd></div></dl></div></section><section class="card"><div class="card-head"><h2>Pages</h2></div><div class="card-body"><div class="row-list">${pages.slice(0, 4).map((page) => `<a class="row-item" href="#/page/${page.id}"><span class="row-main"><span class="row-title">${esc(page.title)}</span><span class="row-meta">${esc(page.type)}</span></span></a>`).join('') || empty('No pages.')}</div></div></section></aside></div>`}`;
+    ${tab === 'work' ? workItemsBody(state, query, { path: `/project/${project.key}`, projectId: project.id, tab: 'work' }) : tab === 'pages' ? `<section class="card"><div class="card-head"><h2>Pages</h2><span class="badge badge-muted">${pages.length}</span></div><div class="card-body"><div class="row-list">${pages.map((page) => `<a class="row-item" href="#/page/${page.id}"><span class="row-main"><span class="row-title">${esc(page.title)}</span><span class="row-meta">${esc(page.type)} · ${fmtStamp(page.updatedAt)}</span></span>${icon('arrow', 16)}</a>`).join('') || empty('No pages.')}</div></div></section>` : `<div class="detail-grid"><div class="detail-main"><section class="card"><div class="card-head"><h2>Work by status</h2></div><div class="card-body"><div class="bar-list">${statuses.map((status) => `<div class="bar-row"><span>${status}</span><span class="bar-track"><span class="bar-fill" data-bar="${tasks.filter((task) => task.status === status).length}"></span></span><strong>${tasks.filter((task) => task.status === status).length}</strong></div>`).join('')}</div></div></section><section class="card"><div class="card-head"><h2>Coming up</h2></div><div class="card-body">${empty('No project schedule in the next 30 days.')}</div></section></div><aside class="detail-side"><section class="card"><div class="card-head"><h2>Snapshot</h2></div><div class="card-body"><dl class="details compact"><div><dt>Open items</dt><dd>${open.length}</dd></div><div><dt>All items</dt><dd>${tasks.length}</dd></div><div><dt>Pages</dt><dd>${pages.length}</dd></div><div><dt>Status</dt><dd>${esc(project.status)}</dd></div></dl></div></section><section class="card"><div class="card-head"><h2>Pages</h2></div><div class="card-body"><div class="row-list">${pages.slice(0, 4).map((page) => `<a class="row-item" href="#/page/${page.id}"><span class="row-main"><span class="row-title">${esc(page.title)}</span><span class="row-meta">${esc(page.type)}</span></span></a>`).join('') || empty('No pages.')}</div></div></section></aside></div>`}`;
 }
 
 function pageView(state, route) {
@@ -1346,7 +1363,7 @@ export function mountView(route, query, state) {
       bar.style.setProperty('--bar-width', `${(Number(bar.dataset.bar) / max) * 100}%`);
     });
   }
-  if (route.id === 'tasks' && query.get('view') === 'timeline') {
+  if ((route.id === 'tasks' || (route.id === 'project-detail' && query.get('tab') === 'work')) && query.get('view') === 'timeline') {
     const timeline = document.querySelector('[data-timeline]');
     if (timeline) {
       const days = Math.max(1, Number(timeline.dataset.days) || 1);

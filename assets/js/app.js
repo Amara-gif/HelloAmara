@@ -629,7 +629,7 @@ document.addEventListener('submit', async (event) => {
       setActiveAccount(account.id);
       window.location.reload();
     } else if (form.dataset.form === 'task-filters') {
-      navigate('/tasks', data);
+      navigate(form.dataset.path || '/tasks', data);
     } else if (form.dataset.form === 'bug-filters') {
       navigate('/bugs', data);
     } else if (form.dataset.form === 'page-filters') {

@@ -449,7 +449,7 @@ Data root: `ROOT` = parent of App; production `WORK = ROOT/Data`, `DATA = WORK/d
 - [ ] Tabs can be reordered (double-click arm + drag, or Alt+arrows) and the order persists per project (`/api/project/tabs`).
 - [ ] Edit-project disclosure saves fields via `/api/project/save`.
 - [ ] Overview shows status donut, module bars, 14-day action chart, Coming up (≤8 items / 30 days) with Schedule button, pages list, daily record.
-- [ ] Work items tab reuses the full /tasks UI scoped to the project.
+- [x] Work items tab reuses the full /tasks UI scoped to the project.
 - [ ] Modules tab bars link into the items tab filtered by `module=`.
 - [ ] Pages tab lists pages; New Page goes to the editor with the project preset; `page=`/`edit=1`/`new=1` redirects work.
 
