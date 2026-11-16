@@ -252,16 +252,55 @@
               <div class="field">
                 <label for="sg-notes">Notes</label>
                 <textarea id="sg-notes" rows="2">A textarea uses the same field styling.</textarea>
+                <p class="field-help">Textareas use <code>--textarea-min</code> and only resize vertically.</p>
               </div>
               <div class="field">
                 <label for="sg-backup">Backup file</label>
                 <input id="sg-backup" type="file" accept="application/json,.json" />
-                <p class="field-help">File inputs keep native browser styling; they are outside the shared text-control rule.</p>
+                <p class="field-help">File inputs keep the shared box; the choose-file button matches the compact ghost button.</p>
               </div>
               <div class="field">
                 <label for="sg-colour">Primary colour</label>
-                <input id="sg-colour" type="color" />
+                <input id="sg-colour" class="control-color" type="color" />
                 <p class="field-help">A colour input is a tap-sized swatch, not a full-width bar.</p>
+              </div>
+            </div>
+            <h3 class="card-title">Special input types</h3>
+            <p class="field-help">
+              Date, time and number controls use the shared field box. Range, file, colour,
+              checkbox and radio controls each have a small token-based rule of their own.
+            </p>
+            <div class="sg-split">
+              <div class="field">
+                <label for="sg-date">Date</label>
+                <input id="sg-date" type="date" value="2026-11-16" />
+                <p class="field-help">Date, time and number keep the shared box and a normal picker icon area.</p>
+              </div>
+              <div class="field">
+                <label for="sg-time">Time</label>
+                <input id="sg-time" type="time" value="09:30" />
+              </div>
+              <div class="field">
+                <label for="sg-number">Number</label>
+                <input id="sg-number" type="number" min="0" max="99" value="12" />
+              </div>
+              <div class="field">
+                <label for="sg-range">Range</label>
+                <input id="sg-range" class="control-range" type="range" min="0" max="20" value="12" />
+                <p class="field-help">The track and thumb use <code>--range-track-height</code> and <code>--range-thumb-size</code>; the hit area stays 44 px with no border box.</p>
+              </div>
+              <div class="field">
+                <label class="checkbox-row" for="sg-checkbox"><input id="sg-checkbox" type="checkbox" checked /> Checkbox</label>
+                <p class="field-help">The box is <code>--size-checkbox</code> and uses <code>--color-accent</code>.</p>
+              </div>
+              <div class="field">
+                <label class="checkbox-row" for="sg-radio"><input id="sg-radio" name="sg-radio" type="radio" checked /> Radio</label>
+                <p class="field-help">Radio shares the accent colour and its own 20 px token size.</p>
+              </div>
+              <div class="field">
+                <label for="sg-textarea-tall">Tall textarea</label>
+                <textarea id="sg-textarea-tall" class="textarea-tall" rows="8">Tall textareas use --textarea-tall; regular textareas use --textarea-min.</textarea>
+                <p class="field-help">Textareas use a token min-height and <code>resize: vertical</code>.</p>
               </div>
             </div>
             <h3 class="card-title">Control sizes, aliases and states</h3>

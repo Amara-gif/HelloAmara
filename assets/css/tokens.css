@@ -135,9 +135,19 @@ html {
   --control-font-size: var(--font-size-base);
   --control-font-size-sm: var(--font-size-sm);
 
+  /* Special inputs keep their own small sizes instead of reusing the text box. */
+  --size-checkbox: 20px;
+  --size-radio: 20px;
+  --range-track-height: 4px;
+  --range-thumb-size: var(--space-5);
+  --textarea-min: 72px;
+  --textarea-tall: 24rem;
+  --textarea-preview-min: 16rem;
+
   --sidebar-width: 264px;
   --topbar-height: 60px;
   --content-max: 1120px;
+  --timeline-track-min: 16rem;
 
   /* Breakpoints. Mirrored as literal values in @media rules. */
   --bp-sm: 560px;

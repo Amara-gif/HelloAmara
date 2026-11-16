@@ -1098,7 +1098,12 @@ code {
 }
 
 .field textarea {
-  min-height: calc(var(--tap-size) * 2);
+  min-height: var(--textarea-min);
+  resize: vertical;
+}
+
+.textarea-tall {
+  min-height: var(--textarea-tall);
   resize: vertical;
 }
 
@@ -1164,12 +1169,15 @@ code {
   font-size: var(--control-font-size-sm);
 }
 
-/* A colour input is a swatch, not a text field. The extra selector outranks
-   .field input so the tap-sized square wins over the generic width: 100%. */
+/* A colour input is a swatch, not a text field. The `.control-color` alias
+   carries the same DS-09 swatch outside a `.field`, and the extra selector
+   outranks the generic field width so the tap-sized square always wins. */
+.control-color,
 .field input[type="color"] {
+  flex: none;
   width: var(--tap-size);
   height: var(--tap-size);
-  min-height: var(--tap-size);
+  min-height: var(--control-height);
   padding: calc(var(--space-1) / 2);
   border: var(--border-width) solid var(--color-divider);
   border-radius: var(--radius-sm);
@@ -1179,23 +1187,177 @@ code {
   appearance: none;
 }
 
+.control-color::-webkit-color-swatch-wrapper,
 .field input[type="color"]::-webkit-color-swatch-wrapper {
   padding: 0;
 }
 
+.control-color::-webkit-color-swatch,
 .field input[type="color"]::-webkit-color-swatch {
   border: 0;
   border-radius: calc(var(--radius-sm) - var(--space-1));
 }
 
+.control-color::-moz-color-swatch,
 .field input[type="color"]::-moz-color-swatch {
   border: 0;
   border-radius: calc(var(--radius-sm) - var(--space-1));
 }
 
+.control-color:focus-visible,
 .field input[type="color"]:focus-visible {
   outline: calc(var(--border-width) * 2) solid var(--color-focus);
   outline-offset: var(--space-1);
+}
+
+/* Date, time and number inputs stay on the shared text box. Only the native
+   picker control needs normalising so it keeps its own icon area. */
+.field :is(input[type="date"], input[type="time"], input[type="number"]) {
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.field input[type="date"]::-webkit-calendar-picker-indicator,
+.field input[type="time"]::-webkit-calendar-picker-indicator {
+  width: var(--space-5);
+  height: var(--space-5);
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* File inputs keep the shared box, but the native button is the compact ghost
+   button (`--control-height-sm`, `--space-3` inline padding, `--font-size-xs`). */
+.field input[type="file"] {
+  width: 100%;
+  min-height: var(--control-height);
+  padding: var(--space-1);
+  border: var(--border-width) solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--control-font-size-sm);
+}
+
+.field input[type="file"]::file-selector-button,
+.field input[type="file"]::-webkit-file-upload-button {
+  min-height: var(--control-height-sm);
+  margin: 0 var(--space-3) 0 0;
+  padding: 0 var(--space-3);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--color-accent-strong);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.field input[type="file"]::file-selector-button:hover,
+.field input[type="file"]::-webkit-file-upload-button:hover {
+  background: var(--color-accent-soft);
+}
+
+.field input[type="file"]:focus-visible {
+  outline: calc(var(--border-width) * 2) solid var(--color-focus);
+  outline-offset: var(--border-width);
+}
+
+/* Checkboxes and radios are small, accent-coloured controls. They keep the
+   label row aligned at the tap target height on touch screens. */
+input[type="checkbox"],
+input[type="radio"],
+.field input[type="checkbox"],
+.field input[type="radio"],
+.checkbox-row input[type="checkbox"],
+.checkbox-row input[type="radio"] {
+  flex: none;
+  width: var(--size-checkbox);
+  height: var(--size-checkbox);
+  margin: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+input[type="radio"],
+.field input[type="radio"],
+.checkbox-row input[type="radio"] {
+  width: var(--size-radio);
+  height: var(--size-radio);
+}
+
+/* A range is a control surface, not a text box: no border or padding box,
+   a token-sized track and thumb, and a full 44px hit area. */
+.control-range,
+.field input[type="range"] {
+  width: 100%;
+  min-height: var(--tap-size);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.control-range::-webkit-slider-runnable-track,
+.field input[type="range"]::-webkit-slider-runnable-track {
+  height: var(--range-track-height);
+  border-radius: var(--radius-pill);
+  background: var(--color-divider);
+}
+
+.control-range::-webkit-slider-thumb,
+.field input[type="range"]::-webkit-slider-thumb {
+  width: var(--range-thumb-size);
+  height: var(--range-thumb-size);
+  margin-top: calc((var(--range-track-height) - var(--range-thumb-size)) / 2);
+  border: calc(var(--border-width) * 2) solid var(--color-surface);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.control-range::-moz-range-track,
+.field input[type="range"]::-moz-range-track {
+  height: var(--range-track-height);
+  border-radius: var(--radius-pill);
+  background: var(--color-divider);
+}
+
+.control-range::-moz-range-progress,
+.field input[type="range"]::-moz-range-progress {
+  height: var(--range-track-height);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+}
+
+.control-range::-moz-range-thumb,
+.field input[type="range"]::-moz-range-thumb {
+  width: var(--range-thumb-size);
+  height: var(--range-thumb-size);
+  border: calc(var(--border-width) * 2) solid var(--color-surface);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  cursor: pointer;
+}
+
+.control-range:focus-visible,
+.field input[type="range"]:focus-visible {
+  outline: calc(var(--border-width) * 2) solid var(--color-focus);
+  outline-offset: var(--space-1);
+}
+
+.control-range:disabled,
+.field input[type="range"]:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .field-help {
@@ -1963,6 +2125,7 @@ code {
 
 .checkbox-row {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   min-height: var(--tap-size);
@@ -2552,7 +2715,7 @@ code {
 @media (max-width: 767px) {
   .timeline-head,
   .timeline-row {
-    grid-template-columns: minmax(7rem, 10rem) minmax(16rem, 1fr);
+    grid-template-columns: minmax(7rem, 10rem) minmax(var(--timeline-track-min), 1fr);
     min-width: 28rem;
   }
 }
@@ -2667,7 +2830,7 @@ code {
 }
 
 .comment-form textarea {
-  min-height: 72px;
+  min-height: var(--textarea-min);
   padding: var(--space-2) var(--space-3);
   border: var(--border-width) solid var(--color-divider);
   border-radius: var(--radius-sm);
@@ -2828,7 +2991,7 @@ code {
 }
 
 .page-editor-source textarea {
-  min-height: 24rem;
+  min-height: var(--textarea-tall);
   resize: vertical;
 }
 
@@ -2836,7 +2999,7 @@ code {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  min-height: 16rem;
+  min-height: var(--textarea-preview-min);
   padding: var(--space-3);
   border: var(--border-width) solid var(--color-divider);
   border-radius: var(--radius-md);
