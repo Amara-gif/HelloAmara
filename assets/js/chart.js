@@ -126,3 +126,44 @@ export function renderParetoChart(container, { labels = [], values = [], title =
   }
   return svg;
 }
+
+export function renderDonutChart(container, { labels = [], values = [], title = 'Donut chart' } = {}) {
+  if (!container) throw new Error('renderDonutChart: container is required');
+  const data = values.map((value) => (Number.isFinite(value) && value > 0 ? value : 0));
+  const total = data.reduce((sum, value) => sum + value, 0);
+  const width = 220;
+  const height = 220;
+  const cx = width / 2;
+  const cy = height / 2;
+  const radius = 76;
+  const strokeWidth = 24;
+  const circumference = 2 * Math.PI * radius;
+  const svg = prepare(container, title, width, height);
+
+  svg.append(svgEl('circle', {
+    class: 'chart-donut-track',
+    cx, cy, r: radius, 'stroke-width': strokeWidth,
+  }));
+
+  let offset = 0;
+  data.forEach((value, index) => {
+    if (value <= 0) return;
+    const fraction = value / (total || 1);
+    svg.append(svgEl('circle', {
+      class: `chart-donut-segment chart-donut-${(index % 6) + 1}`,
+      cx, cy, r: radius, 'stroke-width': strokeWidth,
+      'stroke-dasharray': `${(fraction * circumference).toFixed(2)} ${circumference.toFixed(2)}`,
+      'stroke-dashoffset': `${(-offset * circumference).toFixed(2)}`,
+      transform: `rotate(-90 ${cx} ${cy})`,
+    }));
+    offset += fraction;
+  });
+
+  const totalLabel = svgEl('text', { class: 'chart-donut-total', x: cx, y: cy + 3, 'text-anchor': 'middle' });
+  totalLabel.textContent = String(total);
+  svg.append(totalLabel);
+  const caption = svgEl('text', { class: 'chart-donut-caption', x: cx, y: cy + 22, 'text-anchor': 'middle' });
+  caption.textContent = labels.length === 1 ? 'item' : 'items';
+  svg.append(caption);
+  return svg;
+}

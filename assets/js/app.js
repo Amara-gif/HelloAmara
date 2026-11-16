@@ -560,6 +560,9 @@ document.addEventListener('click', async (event) => {
     }
   } else if (action === 'project-edit') {
     navigate('/projects', { ...(actionEl.dataset.archived === '1' ? { archived: 1 } : {}), edit: id });
+  } else if (action === 'project-schedule') {
+    const project = getState().projects.find((row) => row.id === id);
+    openCreateDialog({ tab: 'event', projectId: project?.id ?? '' });
   } else if (action === 'project-archive') {
     const project = getState().projects.find((row) => row.id === id);
     if (!project) return;
@@ -671,7 +674,7 @@ document.addEventListener('submit', async (event) => {
       await rerender();
       toast('Project added.', { tone: 'success' });
     } else if (form.dataset.form === 'project-edit') {
-      await updateProject(data.id, {
+      const updated = await updateProject(data.id, {
         key: String(data.key ?? '').trim().toUpperCase(),
         name: String(data.name ?? '').trim(),
         description: String(data.description ?? '').trim(),
@@ -681,7 +684,8 @@ document.addEventListener('submit', async (event) => {
         due: data.due || '',
         keywords: String(data.keywords ?? '').trim(),
       });
-      navigate('/projects', data.archived === '1' ? { archived: 1 } : {});
+      if (data.from === 'detail') navigate(`/project/${updated.key}`);
+      else navigate('/projects', data.archived === '1' ? { archived: 1 } : {});
       toast('Project saved on this device.', { tone: 'success' });
     } else if (form.dataset.form === 'task-title' || form.dataset.form === 'task-details' || form.dataset.form === 'task-fields' || form.dataset.form === 'task-plan') {
       const fields = (form.dataset.history || '').split(',').map((field) => field.trim()).filter(Boolean);

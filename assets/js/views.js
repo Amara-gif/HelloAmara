@@ -1,6 +1,6 @@
 import { SETTINGS_LINKS } from './routes.js';
 import { icon } from './icons.js';
-import { renderBarChart, renderLineChart, renderParetoChart } from './chart.js';
+import { renderBarChart, renderLineChart, renderParetoChart, renderDonutChart } from './chart.js';
 import { occurrences, occursOn } from './schedule.js';
 import {
   TASK_WORKFLOW_STATUSES,
@@ -1243,20 +1243,178 @@ function bugDetail(state, route) {
     </div>`;
 }
 
+export function projectModuleRows(tasks = []) {
+  const groups = new Map();
+  for (const task of tasks) {
+    const name = String(task.module ?? '').trim() || 'General';
+    const row = groups.get(name) ?? { name, total: 0, done: 0 };
+    row.total += 1;
+    if (task.status === 'Done') row.done += 1;
+    groups.set(name, row);
+  }
+  return [...groups.values()]
+    .map((row) => ({ ...row, open: row.total - row.done, percent: row.total ? Math.round((row.done / row.total) * 100) : 0 }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function projectStatusRows(tasks = []) {
+  const preferred = ['To do', 'In progress', 'Waiting', 'Done'];
+  const counts = new Map();
+  for (const task of tasks) {
+    const status = String(task.status ?? '').trim() || 'Unknown';
+    counts.set(status, (counts.get(status) ?? 0) + 1);
+  }
+  const order = [...preferred.filter((status) => counts.has(status)), ...[...counts.keys()].filter((status) => !preferred.includes(status)).sort((a, b) => a.localeCompare(b))];
+  return order.map((status) => ({ status, count: counts.get(status) ?? 0 })).filter((row) => row.count > 0);
+}
+
+function projectComingUp(state, project, tasks) {
+  const from = today();
+  const to = addDays(from, 30);
+  const rows = [];
+  for (const task of tasks) {
+    const due = dateOnly(task.due);
+    if (task.status === 'Done' || !due || due < from || due > to) continue;
+    rows.push({ date: due, time: '', kind: 'Work item', title: task.title, href: `#/task/${task.id}`, taskId: task.id });
+  }
+  for (const event of occurrences(state.events ?? [], from, to)) {
+    if (event.projectId !== project.id) continue;
+    rows.push({
+      date: dateOnly(event.date), time: event.time ?? '', kind: event.kind || 'Event', title: event.title,
+      href: event.taskId ? `#/task/${event.taskId}` : `#/calendar?m=${dateOnly(event.date).slice(0, 7)}`,
+    });
+  }
+  const projectDue = dateOnly(project.due);
+  if (project.status !== 'Done' && projectDue && projectDue >= from && projectDue <= to) {
+    rows.push({ date: projectDue, time: '', kind: 'Project due', title: project.name, href: `#/project/${project.key}` });
+  }
+  rows.sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`) || a.title.localeCompare(b.title));
+  return rows.slice(0, 8);
+}
+
+function projectDailyRecord(state, tasks) {
+  const taskIds = new Set(tasks.map((task) => task.id));
+  const rows = [];
+  for (const row of state.taskHistory ?? state.task_history ?? []) {
+    if (!taskIds.has(row.taskId) || !row.at) continue;
+    rows.push({ at: row.at, who: row.who ?? 'Amara', kind: 'History', text: `${row.field}: ${row.old || '—'} → ${row.new || '—'}` });
+  }
+  for (const row of state.taskComments ?? state.task_comments ?? []) {
+    if (!taskIds.has(row.taskId) || !row.at) continue;
+    rows.push({ at: row.at, who: row.who ?? row.author ?? 'Amara', kind: 'Comment', text: row.body ?? '' });
+  }
+  rows.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  const groups = [];
+  for (const row of rows) {
+    const date = String(row.at).slice(0, 10);
+    let group = groups.find((item) => item.date === date);
+    if (!group) {
+      group = { date, entries: [] };
+      groups.push(group);
+    }
+    if (group.entries.length < 3) group.entries.push(row);
+  }
+  return groups.slice(0, 5);
+}
+
+function projectEditPanel(project) {
+  const id = esc(project.id);
+  return `<details class="card" id="project-edit">
+    <summary class="card-head"><h2>Edit project</h2><span class="badge badge-muted">Saves on this device</span></summary>
+    <div class="card-body">
+      <form class="form-grid" data-form="project-edit">
+        <input type="hidden" name="id" value="${id}" />
+        <input type="hidden" name="from" value="detail" />
+        <div class="field"><label for="project-detail-edit-key-${id}">Key</label><input id="project-detail-edit-key-${id}" name="key" type="text" maxlength="6" value="${esc(project.key)}" required /></div>
+        <div class="field"><label for="project-detail-edit-name-${id}">Name</label><input id="project-detail-edit-name-${id}" name="name" type="text" value="${esc(project.name)}" required /></div>
+        <div class="field"><label for="project-detail-edit-owner-${id}">Owner</label><input id="project-detail-edit-owner-${id}" name="owner" type="text" value="${esc(project.owner)}" /></div>
+        <div class="field"><label for="project-detail-edit-status-${id}">Status</label><select id="project-detail-edit-status-${id}" class="select" name="status">${['Active', 'On hold', 'Done', 'Archived'].map((value) => option(value, project.status)).join('')}</select></div>
+        <div class="field"><label for="project-detail-edit-start-${id}">Start</label><input id="project-detail-edit-start-${id}" name="start" type="date" value="${esc(dateOnly(project.start))}" /></div>
+        <div class="field"><label for="project-detail-edit-due-${id}">Due</label><input id="project-detail-edit-due-${id}" name="due" type="date" value="${esc(dateOnly(project.due))}" /></div>
+        <div class="field field-wide"><label for="project-detail-edit-keywords-${id}">Keywords</label><input id="project-detail-edit-keywords-${id}" name="keywords" type="text" value="${esc(project.keywords)}" placeholder="Comma-separated keywords" /></div>
+        <div class="field field-wide"><label for="project-detail-edit-description-${id}">Description</label><textarea id="project-detail-edit-description-${id}" name="description" rows="3">${esc(project.description)}</textarea></div>
+        <div class="field field-wide"><div class="row-actions"><button class="btn btn-primary btn-sm" type="submit">Save project</button></div></div>
+      </form>
+    </div>
+  </details>`;
+}
+
+function projectNotFound(key) {
+  return `${pageHead('Project not found', `There is no project with the key “${key}” on this device.`)}
+    <p><a class="btn btn-primary" href="#/projects">${icon('arrow', 16)}Back to Projects</a></p>`;
+}
+
+function projectModulesTab(project, tasks) {
+  const modules = projectModuleRows(tasks);
+  return `<section class="card">
+    <div class="card-head"><h2>Modules</h2><span class="badge badge-muted">${modules.length}</span></div>
+    <div class="card-body">
+      <p class="field-help">Done / total work items in each module. Choose a module to open its filtered Work items.</p>
+      <div class="bar-list">${modules.map((row) => {
+        const href = pageUrl(`/project/${project.key}`, { tab: 'work', module: row.name, scope: 'all' });
+        return `<a class="bar-row" href="${esc(href)}" data-module="${esc(row.name)}" aria-label="${esc(`${row.name}: ${row.done} of ${row.total} done`)}"><span>${esc(row.name)}</span><span class="bar-track" aria-hidden="true"><span class="bar-fill" data-bar="${row.done}" data-total="${row.total}"></span></span><strong>${row.done}/${row.total}</strong></a>`;
+      }).join('') || empty('No modules yet. Add a module to a work item to group it here.')}</div>
+    </div>
+  </section>`;
+}
+
+function projectPagesTab(pages) {
+  return `<section class="card">
+    <div class="card-head"><h2>Pages</h2><span class="badge badge-muted">${pages.length}</span></div>
+    <div class="card-body"><div class="row-list">${pages.map((page) => `<a class="row-item" href="#/page/${page.id}"><span class="row-main"><span class="row-title">${esc(page.title)}</span><span class="row-meta">${esc(page.type)} · ${fmtStamp(page.updatedAt)}</span></span>${icon('arrow', 16)}</a>`).join('') || empty('No pages.')}</div></div>
+  </section>`;
+}
+
+function projectOverview(state, project, tasks, pages, open) {
+  const statusRows = projectStatusRows(tasks);
+  const comingUp = projectComingUp(state, project, tasks);
+  const record = projectDailyRecord(state, tasks);
+  const legend = statusRows.map((row, index) => `<span class="chart-legend-item"><span class="chart-dot chart-line-${(index % 6) + 1}" aria-hidden="true"></span>${esc(row.status)} ${row.count}</span>`).join('');
+  return `<div class="detail-grid">
+    <div class="detail-main">
+      <section class="card">
+        <div class="card-head"><h2>Work by status</h2><span class="badge badge-muted">${tasks.length} items</span></div>
+        <div class="card-body">
+          <div class="chart-box" id="project-status-chart"></div>
+          <div class="chart-legend">${legend || '<span class="chart-legend-item">No work items yet.</span>'}</div>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Coming up</h2><div class="row-actions"><span class="badge badge-muted">${comingUp.length} in 30 days</span><button class="btn btn-ghost btn-sm" type="button" data-action="project-schedule" data-id="${esc(project.id)}">Schedule</button></div></div>
+        <div class="card-body">${comingUp.length ? `<div class="row-list">${comingUp.map((row) => `<a class="row-item" href="${esc(row.href)}"><span class="row-date">${fmt(row.date)}</span><span class="row-main"><span class="row-title">${esc(row.title)}</span><span class="row-meta">${esc(row.kind)}${row.time ? ` · ${esc(row.time)}` : ''}</span></span><span class="badge badge-muted">${esc(row.kind)}</span></a>`).join('')}</div>` : empty('No project schedule in the next 30 days.')}</div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Daily record</h2><span class="badge badge-muted">History and comments</span></div>
+        <div class="card-body">${record.length ? `<div class="stack">${record.map((group) => `<div><h3 class="card-title">${fmt(group.date)}</h3><div class="feed">${group.entries.map((row) => `<div class="feed-item"><div class="feed-head"><strong>${esc(row.who)}</strong><span>${fmtStamp(row.at)}</span><span class="badge badge-muted">${esc(row.kind)}</span></div><p>${esc(row.text)}</p></div>`).join('')}</div></div>`).join('')}</div>` : empty('No daily record yet. History and comments will appear here.')}</div>
+      </section>
+    </div>
+    <aside class="detail-side">
+      <section class="card">
+        <div class="card-head"><h2>Snapshot</h2></div>
+        <div class="card-body"><dl class="details compact"><div><dt>Open items</dt><dd>${open.length}</dd></div><div><dt>All items</dt><dd>${tasks.length}</dd></div><div><dt>Modules</dt><dd>${projectModuleRows(tasks).length}</dd></div><div><dt>Pages</dt><dd>${pages.length}</dd></div><div><dt>Status</dt><dd>${esc(project.status)}</dd></div></dl></div>
+      </section>
+      ${projectEditPanel(project)}
+      <section class="card">
+        <div class="card-head"><h2>Pages</h2><span class="badge badge-muted">${pages.length}</span></div>
+        <div class="card-body"><div class="row-list">${pages.map((page) => `<a class="row-item" href="#/page/${page.id}"><span class="row-main"><span class="row-title">${esc(page.title)}</span><span class="row-meta">${esc(page.type)}</span></span></a>`).join('') || empty('No pages.')}</div></div>
+      </section>
+    </aside>
+  </div>`;
+}
+
 function projectPage(state, route, query) {
   const project = state.projects.find((row) => row.key === route.params.key || row.id === route.params.key);
-  if (!project) return notFound(`/project/${route.params.key}`);
-  const tab = ['overview', 'work', 'pages'].includes(query.get('tab')) ? query.get('tab') : 'overview';
+  if (!project) return projectNotFound(route.params.key);
+  const tab = ['overview', 'work', 'modules', 'pages'].includes(query.get('tab')) ? query.get('tab') : 'overview';
   const tasks = state.tasks.filter((task) => task.projectId === project.id);
   const pages = state.pages.filter((page) => page.projectId === project.id);
   const open = tasks.filter((task) => task.status !== 'Done');
-  const statuses = ['To do', 'In progress', 'Waiting', 'Done'];
   return `
     <nav class="breadcrumb"><a href="#/projects">← Projects</a></nav>
     ${pageHead(project.name, project.description, `<span class="badge badge-${project.archived ? 'muted' : 'accent'}">${esc(project.archived ? 'Archived' : project.status)}</span>`)}
     <div class="project-meta"><span class="badge badge-accent">${esc(project.key)}</span><span>Owner ${esc(project.owner)}</span><span>${fmt(project.start)} → ${fmt(project.due)}</span><span>${esc(project.keywords)}</span></div>
     <div class="tabs"><a class="tab" href="#/project/${project.key}"${tab === 'overview' ? ' aria-current="page"' : ''}>Overview</a><a class="tab" href="#/project/${project.key}?tab=work"${tab === 'work' ? ' aria-current="page"' : ''}>Work items</a><a class="tab" href="#/project/${project.key}?tab=modules"${tab === 'modules' ? ' aria-current="page"' : ''}>Modules</a><a class="tab" href="#/project/${project.key}?tab=pages"${tab === 'pages' ? ' aria-current="page"' : ''}>Pages</a></div>
-    ${tab === 'work' ? workItemsBody(state, query, { path: `/project/${project.key}`, projectId: project.id, tab: 'work' }) : tab === 'pages' ? `<section class="card"><div class="card-head"><h2>Pages</h2><span class="badge badge-muted">${pages.length}</span></div><div class="card-body"><div class="row-list">${pages.map((page) => `<a class="row-item" href="#/page/${page.id}"><span class="row-main"><span class="row-title">${esc(page.title)}</span><span class="row-meta">${esc(page.type)} · ${fmtStamp(page.updatedAt)}</span></span>${icon('arrow', 16)}</a>`).join('') || empty('No pages.')}</div></div></section>` : `<div class="detail-grid"><div class="detail-main"><section class="card"><div class="card-head"><h2>Work by status</h2></div><div class="card-body"><div class="bar-list">${statuses.map((status) => `<div class="bar-row"><span>${status}</span><span class="bar-track"><span class="bar-fill" data-bar="${tasks.filter((task) => task.status === status).length}"></span></span><strong>${tasks.filter((task) => task.status === status).length}</strong></div>`).join('')}</div></div></section><section class="card"><div class="card-head"><h2>Coming up</h2></div><div class="card-body">${empty('No project schedule in the next 30 days.')}</div></section></div><aside class="detail-side"><section class="card"><div class="card-head"><h2>Snapshot</h2></div><div class="card-body"><dl class="details compact"><div><dt>Open items</dt><dd>${open.length}</dd></div><div><dt>All items</dt><dd>${tasks.length}</dd></div><div><dt>Pages</dt><dd>${pages.length}</dd></div><div><dt>Status</dt><dd>${esc(project.status)}</dd></div></dl></div></section><section class="card"><div class="card-head"><h2>Pages</h2></div><div class="card-body"><div class="row-list">${pages.slice(0, 4).map((page) => `<a class="row-item" href="#/page/${page.id}"><span class="row-main"><span class="row-title">${esc(page.title)}</span><span class="row-meta">${esc(page.type)}</span></span></a>`).join('') || empty('No pages.')}</div></div></section></aside></div>`}`;
+    ${tab === 'work' ? workItemsBody(state, query, { path: `/project/${project.key}`, projectId: project.id, tab: 'work' }) : tab === 'modules' ? projectModulesTab(project, tasks) : tab === 'pages' ? projectPagesTab(pages) : projectOverview(state, project, tasks, pages, open)}`;
 }
 
 function pageView(state, route) {
@@ -1386,9 +1544,24 @@ export function mountView(route, query, state) {
     if (chart) renderBarChart(chart, { labels: ['To do', 'In progress', 'Waiting', 'Done'], values: [6, 4, 3, 5], title: 'Work items by status' });
   }
   if (route.id === 'project-detail') {
-    document.querySelectorAll('[data-bar]').forEach((bar) => {
-      const max = Math.max(...[...document.querySelectorAll('[data-bar]')].map((item) => Number(item.dataset.bar)), 1);
-      bar.style.setProperty('--bar-width', `${(Number(bar.dataset.bar) / max) * 100}%`);
+    const project = (state.projects ?? []).find((row) => row.key === route.params.key || row.id === route.params.key);
+    const statusChart = document.getElementById('project-status-chart');
+    if (project && statusChart) {
+      const tasks = (state.tasks ?? []).filter((task) => task.projectId === project.id);
+      const rows = projectStatusRows(tasks);
+      renderDonutChart(statusChart, {
+        labels: rows.map((row) => row.status),
+        values: rows.map((row) => row.count),
+        title: 'Project work items by status',
+      });
+    }
+    const bars = [...document.querySelectorAll('[data-bar]')];
+    const max = Math.max(...bars.map((bar) => Number(bar.dataset.bar)), 1);
+    bars.forEach((bar) => {
+      const value = Number(bar.dataset.bar) || 0;
+      const total = Number(bar.dataset.total) || 0;
+      const width = total > 0 ? (value / total) * 100 : (value / max) * 100;
+      bar.style.setProperty('--bar-width', `${Math.max(0, Math.min(100, width))}%`);
     });
   }
   if ((route.id === 'tasks' || (route.id === 'project-detail' && query.get('tab') === 'work')) && query.get('view') === 'timeline') {
