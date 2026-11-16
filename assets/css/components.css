@@ -604,7 +604,12 @@ code {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  min-width: 0;
   max-width: 72ch;
+}
+
+.page-head-row > * {
+  min-width: 0;
 }
 
 .eyebrow {
@@ -847,9 +852,11 @@ code {
 }
 
 .card-head h2 {
+  min-width: 0;
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-semibold);
   letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
 }
 
 .card-body {
@@ -1134,6 +1141,7 @@ code {
 
 /* ----------------------------------------------------------------- Table */
 .table-wrap {
+  max-width: 100%;
   overflow-x: auto;
 }
 
@@ -1325,9 +1333,11 @@ code {
 }
 
 .details dd {
+  min-width: 0;
   margin: 0;
   font-weight: var(--font-weight-semibold);
   text-align: right;
+  overflow-wrap: anywhere;
 }
 
 /* -------------------------------------------------------------- Roadmap */
@@ -1819,7 +1829,7 @@ code {
 }
 
 .select-sm {
-  min-height: 34px;
+  min-height: var(--tap-size);
   padding-block: 0;
 }
 
@@ -2275,7 +2285,7 @@ code {
 }
 
 .calendar-mini .calendar-day {
-  min-height: 34px;
+  min-height: var(--tap-size);
   align-items: center;
   justify-content: center;
   border: 0;
@@ -2489,8 +2499,10 @@ code {
 }
 
 .detail-title-row h2 {
+  min-width: 0;
   font-size: var(--font-size-xl);
   letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
 }
 
 .detail-badges {
@@ -3047,11 +3059,49 @@ details.card > summary::-webkit-details-marker {
   width: min(100%, 720px);
 }
 
-/* Stacked tables on phones */
+/* Stacked tables and 44 px targets on phones */
 @media (max-width: 767px) {
+  .view,
+  .page {
+    /* Keep the fixed FAB clear of the last row of primary actions. */
+    padding-bottom: calc(var(--space-9) + var(--tap-size));
+  }
+
+  .footer {
+    padding-bottom: calc(var(--space-9) + var(--tap-size));
+  }
+
   .btn-sm {
+    min-width: var(--tap-size);
     min-height: var(--tap-size);
     padding-inline: var(--space-3);
+  }
+
+  .link-button {
+    display: inline-flex;
+    align-items: center;
+    min-width: var(--tap-size);
+    min-height: var(--tap-size);
+    margin-inline: calc(-1 * var(--space-2));
+    padding-inline: var(--space-2);
+  }
+
+  .card-link-small,
+  .breadcrumb a {
+    display: inline-flex;
+    align-items: center;
+    min-width: var(--tap-size);
+    min-height: var(--tap-size);
+  }
+
+  .card-link-small {
+    margin-block: calc(-1 * var(--space-3));
+  }
+
+  .chip-remove {
+    width: var(--tap-size);
+    height: var(--tap-size);
+    margin-inline: calc(-1 * var(--space-2)) calc(-1 * var(--space-3));
   }
 
   .table-stack thead {
@@ -3079,9 +3129,24 @@ details.card > summary::-webkit-details-marker {
     align-items: flex-start;
     justify-content: space-between;
     gap: var(--space-3);
+    min-width: 0;
     padding: var(--space-1) 0;
     border: 0;
     text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .table-stack td[data-label="Due"],
+  .table-stack td.white-space-nowrap {
+    white-space: normal;
+  }
+
+  .table-stack td[data-label="Actions"] {
+    align-items: center;
+  }
+
+  .table-stack td .row-actions {
+    justify-content: flex-end;
   }
 
   .table-stack td::before {
@@ -3095,6 +3160,26 @@ details.card > summary::-webkit-details-marker {
 
   .table-stack td:first-child {
     font-size: var(--font-size-md);
+  }
+
+  /* Row links are primary open targets, so give them the full tap box. */
+  .table-stack a.key-link,
+  .table-stack a.table-title,
+  .table-stack a.mono-link {
+    display: inline-flex;
+    align-items: center;
+    min-width: var(--tap-size);
+    min-height: var(--tap-size);
+  }
+
+  .table-stack input[type="checkbox"],
+  .checkbox-row input[type="checkbox"],
+  .checkbox-row input[type="radio"] {
+    flex: none;
+    width: var(--tap-size);
+    height: var(--tap-size);
+    margin: 0;
+    accent-color: var(--color-accent);
   }
 
   .calendar-day {

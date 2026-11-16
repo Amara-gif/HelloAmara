@@ -334,12 +334,17 @@
       <section class="section" aria-labelledby="sg-table-title">
         <div class="section-head">
           <h2 id="sg-table-title">Table</h2>
-          <p>Scrolls horizontally inside its wrapper on narrow screens.</p>
+          <p>
+            On phones below 768 px add <code>.table-stack</code> and a <code>data-label</code> on
+            every cell. The header hides and each row becomes a labelled card; a table without
+            the class keeps the horizontal wrapper as a fallback. Row title/key links and
+            checkboxes grow to the 44 px <code>--tap-size</code> target on phones.
+          </p>
         </div>
         <div class="card">
           <div class="card-body">
             <div class="table-wrap">
-              <table class="table">
+              <table class="table table-stack">
                 <thead>
                   <tr>
                     <th scope="col">Task</th>
@@ -349,19 +354,19 @@
                 </thead>
                 <tbody>
                   <tr>
-                    <td>Write the shell</td>
-                    <td><span class="badge badge-success">Done</span></td>
-                    <td>2026-11-16</td>
+                    <td data-label="Task">Write the shell</td>
+                    <td data-label="Status"><span class="badge badge-success">Done</span></td>
+                    <td data-label="Updated">2026-11-16</td>
                   </tr>
                   <tr>
-                    <td>Connect the local database</td>
-                    <td><span class="badge badge-accent">Next</span></td>
-                    <td>Planned</td>
+                    <td data-label="Task">Connect the local database</td>
+                    <td data-label="Status"><span class="badge badge-accent">Next</span></td>
+                    <td data-label="Updated">Planned</td>
                   </tr>
                   <tr>
-                    <td>Export a JSON backup</td>
-                    <td><span class="badge badge-muted">P4</span></td>
-                    <td>Planned</td>
+                    <td data-label="Task">Export a JSON backup</td>
+                    <td data-label="Status"><span class="badge badge-muted">P4</span></td>
+                    <td data-label="Updated">Planned</td>
                   </tr>
                 </tbody>
               </table>
@@ -404,6 +409,40 @@
               </table>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-detail-layout-title">
+        <div class="section-head">
+          <h2 id="sg-detail-layout-title">Detail layout</h2>
+          <p>
+            Task and bug detail pages use <code>.detail-grid</code>. Below 1000 px the side
+            column stacks under the main column; both columns keep <code>min-width: 0</code> so
+            long IDs and notes wrap instead of widening the page.
+          </p>
+        </div>
+        <div class="detail-grid">
+          <div class="detail-main">
+            <section class="card">
+              <div class="card-head"><h2>Main column</h2><span class="badge badge-accent">Task</span></div>
+              <div class="card-body">
+                <p>Description, progress, attachments and comments.</p>
+                <div class="row-actions"><button class="btn btn-primary btn-sm" type="button">Save details</button></div>
+              </div>
+            </section>
+          </div>
+          <aside class="detail-side">
+            <section class="card">
+              <div class="card-head"><h2>Side column</h2></div>
+              <div class="card-body">
+                <dl class="details compact">
+                  <div><dt>Status</dt><dd>In progress</dd></div>
+                  <div><dt>ID</dt><dd>local-task-id-example</dd></div>
+                </dl>
+                <div class="row-actions"><button class="btn btn-ghost btn-sm" type="button">Edit plan</button></div>
+              </div>
+            </section>
+          </aside>
         </div>
       </section>
 
