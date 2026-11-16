@@ -360,6 +360,83 @@ async function resetDemoData() {
   }
 }
 
+function isHttpLink(value) {
+  try {
+    const url = new URL(String(value ?? '').trim());
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function openAgendaDialog(rowEl) {
+  const kind = rowEl.dataset.agendaKind || 'Item';
+  const title = rowEl.dataset.agendaTitle || '';
+  const href = rowEl.dataset.agendaHref || '#/calendar';
+  const link = rowEl.dataset.agendaLink || '';
+  const eventId = rowEl.dataset.agendaEvent || '';
+  const date = rowEl.dataset.agendaDate || '';
+  const time = rowEl.dataset.agendaTime || '';
+  const content = document.createElement('div');
+  content.className = 'stack';
+
+  const meta = document.createElement('p');
+  const badge = document.createElement('span');
+  badge.className = 'badge badge-muted';
+  badge.textContent = kind;
+  meta.append(badge);
+  content.append(meta);
+
+  const heading = document.createElement('p');
+  heading.className = 'row-title';
+  heading.textContent = title;
+  content.append(heading);
+
+  const when = document.createElement('p');
+  when.className = 'row-meta';
+  when.textContent = [date, time].filter(Boolean).join(' · ');
+  if (when.textContent) content.append(when);
+
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+  const open = document.createElement('a');
+  open.className = 'btn btn-primary';
+  open.href = href;
+  open.textContent = 'Open full page';
+  actions.append(open);
+
+  if (isHttpLink(link)) {
+    const join = document.createElement('a');
+    join.className = 'btn';
+    join.href = link;
+    join.target = '_blank';
+    join.rel = 'noopener noreferrer';
+    join.textContent = 'Join meeting';
+    actions.append(join);
+  }
+
+  let dialog;
+  if (eventId) {
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn btn-danger';
+    remove.textContent = 'Delete event';
+    remove.dataset.action = 'delete-event';
+    remove.dataset.id = eventId;
+    remove.addEventListener('click', () => dialog?.close());
+    actions.append(remove);
+  }
+  content.append(actions);
+
+  dialog = openModal({
+    title: title || 'Agenda item',
+    content,
+    confirmLabel: 'Close',
+    cancelLabel: 'Dismiss',
+  });
+  open.addEventListener('click', () => dialog.close());
+}
+
 function openAgentTodo(owner) {
   const state = getState();
   const body = document.createElement('div');
@@ -381,7 +458,8 @@ document.addEventListener('click', async (event) => {
   if (!actionEl) return;
   const action = actionEl.dataset.action;
   const id = actionEl.dataset.id;
-  if (action === 'switch-account') { clearActiveAccount(); window.location.reload(); }
+  if (action === 'agenda-row') { event.preventDefault(); openAgendaDialog(actionEl); }
+  else if (action === 'switch-account') { clearActiveAccount(); window.location.reload(); }
   else if (action === 'open-create') openCreateDialog();
   else if (action === 'reset-demo') {
     openModal({ title: 'Reset demo data?', message: 'All changes in the Test account will be replaced by the original demo rows.', confirmLabel: 'Reset', tone: 'danger', onConfirm: () => { resetDemoData(); } });

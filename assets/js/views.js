@@ -108,14 +108,18 @@ function miniCalendar(state) {
     const d = new Date(`${task.due}T12:00:00`);
     if (d.getFullYear() === year && d.getMonth() === month) marks.add(d.getDate());
   }
+  const monthValue = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const monthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   const cells = [];
   for (let i = 0; i < lead; i += 1) cells.push('<span class="calendar-day is-outside"></span>');
   for (let day = 1; day <= days; day += 1) {
     const current = day === now.getDate();
-    cells.push(`<span class="calendar-day${current ? ' is-today' : ''}"><span class="calendar-date">${day}</span>${marks.has(day) ? '<span class="calendar-mark" aria-hidden="true"></span>' : ''}</span>`);
+    const date = `${monthValue}-${String(day).padStart(2, '0')}`;
+    const dateLabel = new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    cells.push(`<a class="calendar-day${current ? ' is-today' : ''}" href="#/calendar?m=${monthValue}" data-agenda-day="${date}" aria-label="Open ${esc(dateLabel)} in the calendar"><span class="calendar-date">${day}</span>${marks.has(day) ? '<span class="calendar-mark" aria-hidden="true"></span>' : ''}</a>`);
   }
   return `
-    <div class="calendar-head"><h2>${now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</h2><a class="btn btn-ghost btn-sm" href="#/calendar">Open calendar</a></div>
+    <div class="calendar-head"><h2>${monthName}</h2><a class="btn btn-ghost btn-sm" href="#/calendar">Open calendar</a></div>
     <div class="calendar calendar-mini">
       <div class="calendar-week">${['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'].map((d) => `<span class="calendar-weekday">${d}</span>`).join('')}</div>
       <div class="calendar-grid">${cells.join('')}</div>
@@ -134,18 +138,27 @@ function agendaRows(state) {
   for (const project of state.projects) {
     if (project.status !== 'Done' && project.due && !project.archived) rows.push({ date: project.due, kind: 'Project', title: project.name, href: `#/project/${project.key}`, tone: 'project' });
   }
-  for (const event of state.events) rows.push({ date: event.date, time: event.time, kind: event.kind, title: event.title, href: event.taskId ? `#/task/${event.taskId}` : '', tone: 'event', link: event.link, id: event.id });
+  for (const event of state.events) {
+    if (event.date) rows.push({ date: event.date, time: event.time, kind: event.kind, title: event.title, href: event.taskId ? `#/task/${event.taskId}` : '', tone: 'event', link: event.link, eventId: event.id, note: event.note });
+  }
   rows.sort((a, b) => `${a.date}${a.time ?? ''}`.localeCompare(`${b.date}${b.time ?? ''}`));
-  const overdue = rows.filter((row) => row.date < todayIso).slice(0, 2);
-  const upcoming = rows.filter((row) => row.date >= todayIso).slice(0, 6);
-  return [...overdue, ...upcoming].slice(0, 8).map((row) => {
+  const overdueAll = rows.filter((row) => row.date < todayIso);
+  const upcomingAll = rows.filter((row) => row.date >= todayIso);
+  const overdue = overdueAll.slice(0, 2);
+  const upcoming = upcomingAll.slice(0, 6);
+  const shown = [...overdue, ...upcoming];
+  if (!shown.length) return empty('Nothing due.');
+  const remaining = (overdueAll.length - overdue.length) + (upcomingAll.length - upcoming.length);
+  const items = shown.map((row) => {
     const day = row.date === todayIso ? 'Today' : row.date < todayIso ? `Overdue · ${fmt(row.date)}` : fmt(row.date);
-    return `<div class="row-item">
+    const href = row.href || `#/calendar?m=${row.date.slice(0, 7)}`;
+    return `<a class="row-item" href="${esc(href)}" data-action="agenda-row" data-agenda-row data-agenda-kind="${esc(row.kind)}" data-agenda-title="${esc(row.title)}" data-agenda-href="${esc(href)}" data-agenda-link="${esc(row.link)}" data-agenda-event="${esc(row.eventId)}" data-agenda-date="${esc(row.date)}" data-agenda-time="${esc(row.time)}">
       <span class="row-date">${esc(day)}</span>
-      <span class="row-main"><span class="row-title">${row.href ? `<a href="${row.href}">${esc(row.title)}</a>` : esc(row.title)}</span><span class="row-meta">${esc(row.kind)}${row.time ? ` · ${esc(row.time)}` : ''}</span></span>
+      <span class="row-main"><span class="row-title">${esc(row.title)}</span><span class="row-meta">${esc(row.kind)}${row.time ? ` · ${esc(row.time)}` : ''}</span></span>
       <span class="badge badge-muted">${esc(row.kind)}</span>
-    </div>`;
-  });
+    </a>`;
+  }).join('');
+  return `<div class="row-list">${items}</div>${remaining ? `<a class="btn btn-ghost btn-sm" href="#/calendar" data-agenda-more>${remaining} more in the calendar</a>` : ''}`;
 }
 
 function teamLoad(state) {
@@ -170,9 +183,9 @@ function home(state) {
     <div class="home-layout">
       <div class="home-column">
         <section class="card"><div class="card-body">${miniCalendar(state)}</div></section>
-        <section class="card">
+        <section class="card" data-home-agenda>
           <div class="card-head"><h2>Today and coming up · next 6</h2><a class="card-link-small" href="#/calendar">Open calendar</a></div>
-          <div class="card-body">${userRows(agendaRows(state), 'Nothing due.')}</div>
+          <div class="card-body">${agendaRows(state)}</div>
         </section>
         <section class="card">
           <div class="card-head"><h2>Who has work · live</h2><a class="card-link-small" href="#/chat">Open team</a></div>
