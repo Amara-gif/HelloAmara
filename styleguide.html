@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="Style guide for My Platform: all design tokens and shared components in one page."
+    />
+    <title>Style guide · My Platform</title>
+    <link rel="icon" href="./assets/favicon.png" type="image/png" />
+    <link rel="stylesheet" href="./assets/css/tokens.css" />
+    <link rel="stylesheet" href="./assets/css/components.css" />
+    <script type="module" src="./assets/js/styleguide.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#sg-main">Skip to content</a>
+
+    <header class="topbar">
+      <a class="brand" href="./index.html">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5.5 18V7.5L12 13.5l6.5-6V18" />
+          </svg>
+        </span>
+        <span class="brand-text">
+          <strong>My Platform</strong>
+          <small>Design system</small>
+        </span>
+      </a>
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <span>My Platform</span>
+        <span class="crumbs-sep" aria-hidden="true">/</span>
+        <span class="crumbs-current">Style guide</span>
+      </nav>
+      <a class="btn btn-ghost" href="./index.html">Back to app</a>
+    </header>
+
+    <main class="page" id="sg-main" tabindex="-1">
+      <header class="page-head">
+        <p class="eyebrow">Design system</p>
+        <h1>Style guide</h1>
+        <p class="lede">
+          Every token and shared component lives on this page. Values are read from
+          <code>tokens.css</code> for the current colour scheme. Add a component here in the
+          same commit that introduces it.
+        </p>
+      </header>
+
+      <section class="section" aria-labelledby="sg-colors-title">
+        <div class="section-head">
+          <h2 id="sg-colors-title">Colour tokens</h2>
+          <p>Defined once in <code>assets/css/tokens.css</code>. Pages never use colour literals.</p>
+        </div>
+        <div class="token-grid" id="sg-colors"></div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-type-title">
+        <div class="section-head">
+          <h2 id="sg-type-title">Typography tokens</h2>
+          <p>System fonts only. No web fonts and no third-party font requests.</p>
+        </div>
+        <div class="sg-stack" id="sg-type"></div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-space-title">
+        <div class="section-head">
+          <h2 id="sg-space-title">Spacing tokens</h2>
+          <p>One 4 px-based scale for padding, margins and gaps.</p>
+        </div>
+        <div class="sg-stack" id="sg-space"></div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-radius-title">
+        <div class="section-head">
+          <h2 id="sg-radius-title">Radius tokens</h2>
+        </div>
+        <div class="sg-row" id="sg-radius"></div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-shadow-title">
+        <div class="section-head">
+          <h2 id="sg-shadow-title">Shadow tokens</h2>
+        </div>
+        <div class="sg-row" id="sg-shadow"></div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-breakpoints-title">
+        <div class="section-head">
+          <h2 id="sg-breakpoints-title">Breakpoints and layout sizes</h2>
+          <p>
+            Breakpoints are tokens, but <code>@media</code> cannot read custom properties, so
+            <code>components.css</code> repeats these literal widths and must stay in sync.
+          </p>
+        </div>
+        <div class="sg-stack" id="sg-breakpoints"></div>
+        <div class="sg-stack" id="sg-layout"></div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-motion-title">
+        <div class="section-head">
+          <h2 id="sg-motion-title">Motion tokens</h2>
+        </div>
+        <div class="sg-stack" id="sg-motion"></div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-buttons-title">
+        <div class="section-head">
+          <h2 id="sg-buttons-title">Buttons</h2>
+          <p>One button base with primary, ghost, danger and icon variants. Minimum height is 44 px.</p>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <div class="sg-row">
+              <button class="btn" type="button">Default</button>
+              <button class="btn btn-primary" type="button">Primary</button>
+              <button class="btn btn-ghost" type="button">Ghost</button>
+              <button class="btn btn-danger" type="button">Danger</button>
+              <button class="btn btn-icon" type="button" aria-label="Icon button">+</button>
+              <button class="btn" type="button" disabled>Disabled</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-badges-title">
+        <div class="section-head">
+          <h2 id="sg-badges-title">Badges</h2>
+          <p>Status and phase labels. The dot inherits the badge text colour.</p>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <div class="sg-row">
+              <span class="badge">Neutral</span>
+              <span class="badge badge-accent">Accent</span>
+              <span class="badge badge-success"><span class="badge-dot" aria-hidden="true"></span>Success</span>
+              <span class="badge badge-warning">Warning</span>
+              <span class="badge badge-danger">Danger</span>
+              <span class="badge badge-muted">Muted</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-cards-title">
+        <div class="section-head">
+          <h2 id="sg-cards-title">Cards</h2>
+          <p>One card component with an optional blue header. Do not create another card style.</p>
+        </div>
+        <div class="grid-2">
+          <article class="card">
+            <div class="card-head">
+              <h2>Card head</h2>
+              <span class="badge badge-on-accent">Ready</span>
+            </div>
+            <div class="card-body">
+              <p>The blue header uses the legacy card-header colour. Body text stays neutral.</p>
+              <div class="sg-row">
+                <button class="btn btn-ghost" type="button">Body action</button>
+              </div>
+            </div>
+          </article>
+
+          <a class="card card-link" href="#sg-card-link" id="sg-card-link">
+            <span class="card-body">
+              <span class="card-top">
+                <span class="card-icon" aria-hidden="true">▤</span>
+                <span class="badge badge-muted">P2</span>
+              </span>
+              <span class="card-title">Linked card</span>
+              <span class="card-text">Linked cards use the same card component with hover and focus states.</span>
+              <span class="card-more">Open <span aria-hidden="true">→</span></span>
+            </span>
+          </a>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-fields-title">
+        <div class="section-head">
+          <h2 id="sg-fields-title">Form fields</h2>
+          <p>One field wrapper for label, control and help text.</p>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <div class="sg-split">
+              <div class="field">
+                <label for="sg-name">Name</label>
+                <input id="sg-name" type="text" value="Example task" />
+                <p class="field-help">Help text uses the secondary text colour.</p>
+              </div>
+              <div class="field">
+                <label for="sg-status">Status</label>
+                <select id="sg-status">
+                  <option>Open</option>
+                  <option>In progress</option>
+                  <option>Done</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="sg-notes">Notes</label>
+                <textarea id="sg-notes" rows="2">A textarea uses the same field styling.</textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-table-title">
+        <div class="section-head">
+          <h2 id="sg-table-title">Table</h2>
+          <p>Scrolls horizontally inside its wrapper on narrow screens.</p>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Task</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Updated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Write the shell</td>
+                    <td><span class="badge badge-success">Done</span></td>
+                    <td>2026-11-16</td>
+                  </tr>
+                  <tr>
+                    <td>Connect the local database</td>
+                    <td><span class="badge badge-accent">Next</span></td>
+                    <td>Planned</td>
+                  </tr>
+                  <tr>
+                    <td>Export a JSON backup</td>
+                    <td><span class="badge badge-muted">P4</span></td>
+                    <td>Planned</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-tabs-title">
+        <div class="section-head">
+          <h2 id="sg-tabs-title">Tabs</h2>
+          <p>Use the tab component for local view switches, not for page navigation.</p>
+        </div>
+        <div class="sg-stack">
+          <div class="tabs" role="tablist" aria-label="Example tabs" data-tabs>
+            <button class="tab" type="button" role="tab" id="sg-tab-one" aria-controls="sg-panel-one" aria-selected="true" data-tab="one">Overview</button>
+            <button class="tab" type="button" role="tab" id="sg-tab-two" aria-controls="sg-panel-two" aria-selected="false" data-tab="two">History</button>
+          </div>
+          <div class="card">
+            <div class="card-body" role="tabpanel" id="sg-panel-one" aria-labelledby="sg-tab-one" data-tab-panel="one">
+              <p>The first panel is visible by default.</p>
+            </div>
+            <div class="card-body" role="tabpanel" id="sg-panel-two" aria-labelledby="sg-tab-two" data-tab-panel="two" hidden>
+              <p>The second panel appears when its tab is selected.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-nav-title">
+        <div class="section-head">
+          <h2 id="sg-nav-title">Navigation</h2>
+          <p>The app sidebar uses this nav component. The current item is marked with aria-current.</p>
+        </div>
+        <div class="sg-nav-preview" id="sg-nav">
+          <nav class="nav" aria-label="Navigation example">
+            <div class="nav-group">
+              <p class="nav-label">Workspace</p>
+              <ul class="nav-list">
+                <li><a class="nav-link" href="#sg-nav" aria-current="page">Overview</a></li>
+                <li>
+                  <a class="nav-link" href="#sg-nav">Tasks<span class="badge badge-accent nav-count">4</span></a>
+                </li>
+                <li><a class="nav-link" href="#sg-nav">Calendar</a></li>
+              </ul>
+            </div>
+            <div class="nav-group">
+              <p class="nav-label">System</p>
+              <ul class="nav-list">
+                <li>
+                  <a class="nav-link is-section" href="#sg-nav">Settings</a>
+                  <ul class="nav-sublist">
+                    <li><a class="nav-sublink" href="#sg-nav" aria-current="page">AI inputs &amp; limits</a></li>
+                    <li><a class="nav-sublink" href="#sg-nav">Language rules</a></li>
+                    <li><a class="nav-sublink" href="#sg-nav">Appearance &amp; theme</a></li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+          </nav>
+        </div>
+        <div class="sidebar-note">
+          <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3.4 5 6.3v5.4c0 4.1 2.9 7.5 7 9.3 4.1-1.8 7-5.2 7-9.3V6.3Z" />
+            <path d="m9.2 12 2 2 3.6-3.8" />
+          </svg>
+          <p><strong>Your data stays here</strong>Stored in this browser. Export a file to move it.</p>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-chart-title">
+        <div class="section-head">
+          <h2 id="sg-chart-title">Chart container</h2>
+          <p>Charts are drawn only by <code>assets/js/chart.js</code>. No chart library and no CDN.</p>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <div class="chart-box" id="sg-chart"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-feedback-title">
+        <div class="section-head">
+          <h2 id="sg-feedback-title">Toasts and dialogs</h2>
+          <p>
+            Both are created by <code>assets/js/ui.js</code>. Pages call the helpers and never
+            build their own overlays.
+          </p>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <div class="sg-row">
+              <button class="btn" type="button" data-demo="toast">Show toast</button>
+              <button class="btn btn-primary" type="button" data-demo="dialog">Open dialog</button>
+              <button class="btn btn-danger" type="button" data-demo="danger">Destructive dialog</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

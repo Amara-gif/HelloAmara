@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="My Platform is a local-first workspace for tasks, calendar, bugs and events. Data stays on your device."
+    />
+    <title>My Platform</title>
+    <link rel="icon" href="./assets/favicon.png" type="image/png" />
+    <link rel="stylesheet" href="./assets/css/tokens.css" />
+    <link rel="stylesheet" href="./assets/css/components.css" />
+    <script type="module" src="./assets/js/app.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <a class="skip-link" href="#view">Skip to content</a>
+
+      <aside class="sidebar" id="sidebar" aria-label="My Platform">
+        <a class="brand" href="#/">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5.5 18V7.5L12 13.5l6.5-6V18" />
+            </svg>
+          </span>
+          <span class="brand-text">
+            <strong>My Platform</strong>
+            <small>Local-first workspace</small>
+          </span>
+        </a>
+
+        <nav class="nav" id="nav" aria-label="Sections"></nav>
+
+        <div class="sidebar-note">
+          <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3.4 5 6.3v5.4c0 4.1 2.9 7.5 7 9.3 4.1-1.8 7-5.2 7-9.3V6.3Z" />
+            <path d="m9.2 12 2 2 3.6-3.8" />
+          </svg>
+          <p><strong>Your data stays here</strong>Stored in this browser. Export a file to move it.</p>
+        </div>
+
+        <p class="sidebar-meta"><span id="today-date">Today</span><span>Static build</span></p>
+      </aside>
+
+      <div class="backdrop" id="backdrop" aria-hidden="true"></div>
+
+      <div class="content">
+        <header class="topbar">
+          <button class="btn btn-ghost btn-icon" id="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar" aria-label="Open navigation">
+            <span class="sr-only">Open navigation</span>
+            <svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+          </button>
+          <span class="topbar-brand">My Platform</span>
+          <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
+          <span class="badge badge-success"><span class="badge-dot" aria-hidden="true"></span>Local only</span>
+        </header>
+
+        <main class="view" id="view" tabindex="-1">
+          <noscript>
+            <p class="note">
+              My Platform needs JavaScript to run. It still runs only in your browser;
+              nothing is sent to a server.
+            </p>
+          </noscript>
+        </main>
+
+        <footer class="footer">
+          <span>My Platform · Static site, no installers</span>
+          <span>Data stays in this browser</span>
+        </footer>
+      </div>
+    </div>
+  </body>
+</html>

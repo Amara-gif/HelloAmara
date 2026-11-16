@@ -1,0 +1,141 @@
+/* The only place where colour, type, spacing, radius, shadow and breakpoint values live.
+   Legacy palette values from the old app are the light-theme defaults.
+   CSS cannot read custom properties inside @media, so the literal widths in
+   components.css mirror --bp-* exactly. Keep them in sync when changing a breakpoint. */
+:root {
+  color-scheme: light dark;
+
+  /* Legacy palette */
+  --color-text: #1d1d1f;
+  --color-text-secondary: #6e6e73;
+  --color-divider: #d9d9de;
+  --color-card-header: #4a90d9;
+  --color-band: #fbf3d5;
+
+  /* Derived colours */
+  --color-bg: #f5f5f7;
+  --color-surface: #ffffff;
+  --color-surface-muted: #fafafb;
+  --color-text-faint: #8a8a90;
+  --color-divider-strong: #c3c3ca;
+  --color-accent: var(--color-card-header);
+  --color-accent-strong: #2e6da8;
+  --color-accent-strong-hover: #255a8b;
+  --color-accent-soft: #eaf3fc;
+  --color-on-accent: #ffffff;
+  --color-on-card-header: #ffffff;
+  --color-success: #1d7a4b;
+  --color-success-soft: #e3f4eb;
+  --color-warning: #8a5a00;
+  --color-warning-soft: #fcefd4;
+  --color-danger: #b3261e;
+  --color-danger-hover: #941f18;
+  --color-on-danger: #ffffff;
+  --color-overlay: rgba(29, 29, 31, 0.42);
+  --color-topbar: rgba(245, 245, 247, 0.82);
+  --color-focus: #2e6da8;
+  --color-chart-series-1: #4a90d9;
+  --color-chart-series-2: #7fb8e8;
+  --color-chart-grid: #e6e6ea;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    "Noto Sans", "Noto Sans SC", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 0.9375rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.1875rem;
+  --font-size-xl: 1.375rem;
+  --font-size-page-title: clamp(1.7rem, 1.3rem + 1.6vw, 2.3rem);
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height: 1.6;
+  --line-height-tight: 1.2;
+  --line-height-display: 1.05
+  --line-height-tight: 1.2;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-7: 2rem;
+  --space-8: 2.5rem;
+  --space-9: 3.5rem;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(29, 29, 31, 0.06);
+  --shadow-lg: 0 18px 40px -18px rgba(29, 29, 31, 0.3);
+
+  --tap-size: 44px;
+  --sidebar-width: 264px;
+  --topbar-height: 60px;
+  --content-max: 1120px;
+
+  /* Breakpoints. Mirrored as literal values in @media rules. */
+  --bp-sm: 560px;
+  --bp-md: 700px;
+  --bp-lg: 900px;
+  --bp-xl: 1100px;
+
+  --border-width: 1px;
+  --size-brand-mark: 40px;
+  --size-icon-tile: 36px;
+  --size-fact-icon: 28px;
+  --size-badge-height: 22px;
+  --size-badge-dot: 6px;
+  --size-card-min: 150px;
+
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --duration: 160ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-text: #f2f2f4;
+    --color-text-secondary: #a6a6ad;
+    --color-divider: #34343b;
+    --color-card-header: #3e7fbd;
+    --color-band: #2e2a1c;
+
+    --color-bg: #111114;
+    --color-surface: #18181d;
+    --color-surface-muted: #1e1e24;
+    --color-text-faint: #8c8c93;
+    --color-divider-strong: #47474f;
+    --color-accent: #7fb8e8;
+    --color-accent-strong: #9bcbf2;
+    --color-on-card-header: #ffffff;
+    --color-accent-strong-hover: #b9dbf8;
+    --color-accent-soft: #17293a;
+    --color-on-accent: #0b1622;
+    --color-success: #5fd39b;
+    --color-success-soft: #10301f;
+    --color-warning: #f0c36a;
+    --color-warning-soft: #33270e;
+    --color-danger: #f2a9a3;
+    --color-danger-hover: #f7c2bd;
+    --color-on-danger: #2a0b09;
+    --color-overlay: rgba(3, 5, 9, 0.62);
+    --color-topbar: rgba(17, 17, 20, 0.82);
+    --color-focus: #9bcbf2;
+    --color-chart-series-1: #5c9fe0;
+    --color-chart-series-2: #8cc3ee;
+    --color-chart-grid: #2a2a31;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 20px 44px -18px rgba(0, 0, 0, 0.65);
+  }
+}
