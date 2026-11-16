@@ -127,3 +127,29 @@ test('styleguide shows tabs, chips and nav links in all four states', () => {
     'styleguide shows a selected nav link',
   );
 });
+
+test('work-items toolbar and scope switch are defined', () => {
+  const toolbar = ruleWithSelector('.task-toolbar');
+  const scope = ruleWithSelector('.scope-switch');
+
+  assert.ok(toolbar, 'components.css defines .task-toolbar');
+  assert.ok(scope, 'components.css defines .scope-switch');
+
+  for (const [name, rule] of [
+    ['.task-toolbar', toolbar],
+    ['.scope-switch', scope],
+  ]) {
+    assert.match(rule.body, /(?:^|\n)\s*display:\s*flex\s*;/, `${name} is a flex row`);
+    assert.match(rule.body, /(?:^|\n)\s*flex-wrap:\s*wrap\s*;/, `${name} wraps`);
+    assert.match(rule.body, /(?:^|\n)\s*align-items:\s*center\s*;/, `${name} centres its items`);
+    assert.match(rule.body, /(?:^|\n)\s*gap:\s*var\(--space-/, `${name} uses spacing tokens`);
+  }
+
+  assert.match(
+    scope.body,
+    /(?:^|\n)\s*margin-left:\s*auto\s*;/,
+    '.scope-switch sits at the end of the toolbar on desktop',
+  );
+  assert.match(styleguide, /class="task-toolbar"/, 'styleguide shows the work-items toolbar');
+  assert.match(styleguide, /class="scope-switch"/, 'styleguide shows the scope switch');
+});
