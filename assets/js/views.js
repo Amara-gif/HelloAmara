@@ -2481,7 +2481,7 @@ export function renderCreateDialog(state, preset = {}) {
       ${tabButton('bug', 'Bug')}
       ${tabButton('event', 'Event')}
     </div>
-    <form class="form-grid create-panel" data-create-panel="task" data-form="create-task"${panelHidden('task')}>
+    <form class="form-grid" data-create-panel="task" data-form="create-task"${panelHidden('task')}>
       <div class="field field-wide"><label for="create-task-title">Title</label><input class="control" id="create-task-title" name="title" type="text" required /></div>
       ${parentId ? `<input type="hidden" name="parentId" value="${esc(parentId)}" /><div class="field field-wide" data-create-parent="${esc(parentId)}"><label>Parent work item</label><p class="field-help" id="create-task-parent-help">This will be created as a subtask of ${esc(parent?.key ?? parentId)}${parent ? ` · ${esc(parent.title)}` : ''}.</p></div>` : ''}
       <div class="field"><label for="create-task-type">Type</label><select id="create-task-type" class="control" name="type">${['Task', 'Story', 'Epic', 'Sub-task', 'Improvement', 'Bug'].map((value) => option(value, taskType)).join('')}</select></div>
@@ -2493,7 +2493,7 @@ export function renderCreateDialog(state, preset = {}) {
       <div class="field"><label for="create-task-actual">Actual</label><input class="control" id="create-task-actual" name="actual" type="text" /></div>
       <div class="field field-wide"><label for="create-task-description">Description</label><textarea class="control" id="create-task-description" name="description" rows="3"></textarea></div>
     </form>
-    <form class="form-grid create-panel" data-create-panel="bug" data-form="create-bug"${panelHidden('bug')}>
+    <form class="form-grid" data-create-panel="bug" data-form="create-bug"${panelHidden('bug')}>
       <div class="field field-wide"><label for="create-bug-title">Title</label><input class="control" id="create-bug-title" name="title" type="text" required value="${esc(bugTitle)}" /></div>
       <div class="field"><label for="create-bug-severity">Severity</label><select id="create-bug-severity" class="control" name="severity" required>${BUG_SEVERITIES.map((value) => option(value, bugSeverity)).join('')}</select></div>
       <div class="field"><label for="create-bug-priority">Priority</label><select id="create-bug-priority" class="control" name="priority">${['Highest', 'High', 'Medium', 'Low', 'Lowest'].map((value) => option(value, 'Medium')).join('')}</select></div>
@@ -2501,7 +2501,7 @@ export function renderCreateDialog(state, preset = {}) {
       <div class="field field-wide"><label for="create-bug-repro">Steps to reproduce</label><textarea class="control" id="create-bug-repro" name="repro" rows="3" required></textarea></div>
       <div class="field field-wide"><label for="create-bug-description">Description</label><textarea class="control" id="create-bug-description" name="description" rows="3">${esc(bugDescription)}</textarea></div>
     </form>
-    <form class="form-grid create-panel" data-create-panel="event" data-form="create-event"${panelHidden('event')}>
+    <form class="form-grid" data-create-panel="event" data-form="create-event"${panelHidden('event')}>
       <div class="field field-wide"><label for="create-event-title">What</label><input class="control" id="create-event-title" name="title" type="text" required${eventTitle ? ` value="${esc(eventTitle)}"` : ''} /></div>
       ${taskId ? `<input type="hidden" name="taskId" value="${esc(taskId)}" /><div class="field field-wide" data-create-task="${esc(taskId)}"><label>Linked work item</label><p class="field-help" id="create-event-task-help">This event will be linked to ${esc(linked?.key ?? taskId)}${linked ? ` · ${esc(linked.title)}` : ''}.</p></div>` : ''}
       <div class="field"><label for="create-event-date">Date</label><input class="control" id="create-event-date" name="date" type="date" value="${esc(eventDate)}" required /></div>

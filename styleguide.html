@@ -654,6 +654,7 @@
                 <thead>
                   <tr>
                     <th scope="col">Task</th>
+                    <th scope="col">Progress</th>
                     <th scope="col">Status</th>
                     <th scope="col">Updated</th>
                   </tr>
@@ -661,16 +662,25 @@
                 <tbody>
                   <tr>
                     <td data-label="Task">Write the shell</td>
+                    <td data-label="Progress"><span class="progress-text">100%</span></td>
                     <td data-label="Status"><span class="badge badge-success">Done</span></td>
                     <td data-label="Updated">2026-11-16</td>
                   </tr>
                   <tr>
                     <td data-label="Task">Connect the local database</td>
+                    <td data-label="Progress"><span class="progress-text">60%</span></td>
+                    <td data-label="Status"><span class="badge badge-accent">Next</span></td>
+                    <td data-label="Updated">Planned</td>
+                  </tr>
+                  <tr class="is-subtask">
+                    <td data-label="Task">↳ Add the subtask indentation</td>
+                    <td data-label="Progress"><span class="progress-text">40%</span></td>
                     <td data-label="Status"><span class="badge badge-accent">Next</span></td>
                     <td data-label="Updated">Planned</td>
                   </tr>
                   <tr>
                     <td data-label="Task">Export a JSON backup</td>
+                    <td data-label="Progress"><span class="progress-text">0%</span></td>
                     <td data-label="Status"><span class="badge badge-muted">P4</span></td>
                     <td data-label="Updated">Planned</td>
                   </tr>
@@ -1294,6 +1304,39 @@
               <button class="btn btn-danger" type="button" data-demo="danger">Destructive dialog</button>
             </div>
           </div>
+        </div>
+        <div class="toast" role="status">
+          <span class="toast-message">Example toast. The close control has an explicit 44 px target and its own hover and focus treatment.</span>
+          <button class="btn btn-ghost btn-icon toast-close" type="button" aria-label="Dismiss notification"><span aria-hidden="true">×</span></button>
+        </div>
+        <div class="create-dialog">
+          <div class="tabs" role="tablist" aria-label="Example create dialog tabs">
+            <button class="tab is-active" type="button" role="tab" aria-selected="true">Task</button>
+            <button class="tab" type="button" role="tab" aria-selected="false">Bug</button>
+            <button class="tab" type="button" role="tab" aria-selected="false">Event</button>
+          </div>
+          <form class="form-grid">
+            <div class="field field-wide">
+              <label for="sg-create-title">Title</label>
+              <input class="control" id="sg-create-title" type="text" value="Example work item" />
+            </div>
+            <div class="field">
+              <label for="sg-create-type">Type</label>
+              <select class="select" id="sg-create-type">
+                <option>Task</option>
+                <option>Bug</option>
+                <option>Event</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="sg-create-priority">Priority</label>
+              <select class="select" id="sg-create-priority">
+                <option>Medium</option>
+                <option>High</option>
+                <option>Low</option>
+              </select>
+            </div>
+          </form>
         </div>
         <div class="modal" role="dialog" aria-modal="false" aria-labelledby="sg-dialog-title">
           <div class="modal-head">

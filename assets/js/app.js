@@ -156,7 +156,7 @@ function syncSidebarMode() {
 function applySidebarState({ focus = null } = {}) {
   const folded = sidebarFolded && !isDrawerMode();
   document.body.classList.toggle('sidebar-folded', folded);
-  document.body.classList.toggle('sidebar-pinned', sidebarPinned);
+  document.body.toggleAttribute('data-sidebar-pinned', sidebarPinned);
 
   if (foldButton) {
     foldButton.setAttribute('aria-expanded', String(!folded));
