@@ -314,6 +314,28 @@ function dependencyRefs(task) {
   return String(raw ?? '').split(/[,;|]/).map((value) => value.trim()).filter(Boolean);
 }
 
+function dependencyRows(state, task) {
+  return dependencyRefs(task).map((ref) => {
+    const dependency = (state.tasks ?? []).find((row) => row.id === ref || String(row.key ?? '').toUpperCase() === ref.toUpperCase());
+    return { ref, dependency, missing: !dependency };
+  });
+}
+
+function escapeRegExp(value) {
+  return String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function pagesMentioningTask(state, task) {
+  const tokens = [task.id, task.key].map((value) => String(value ?? '').trim()).filter(Boolean);
+  const title = String(task.title ?? '').trim().toLowerCase();
+  return (state.pages ?? []).filter((page) => {
+    if (page.taskId === task.id) return true;
+    const haystack = `${page.title ?? ''}\n${page.body ?? ''}`;
+    if (tokens.some((token) => new RegExp(`(^|[^a-z0-9-])${escapeRegExp(token)}([^a-z0-9-]|$)`, 'i').test(haystack))) return true;
+    return title.length >= 12 && haystack.toLowerCase().includes(title);
+  });
+}
+
 function unfinishedDependencies(state, task) {
   return dependencyRefs(task).map((ref) => {
     const dependency = (state.tasks ?? []).find((row) => row.id === ref || String(row.key ?? '').toUpperCase() === ref.toUpperCase());
@@ -1102,7 +1124,8 @@ function taskDetail(state, route) {
   const feed = [...comments, ...history].sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''));
   const subtasks = allTasks.filter((row) => row.parentId === task.id);
   const scheduled = (state.events ?? []).filter((row) => row.taskId === task.id);
-  const mentioning = (state.pages ?? []).filter((row) => row.taskId === task.id);
+  const dependencies = dependencyRows(state, task);
+  const mentioning = pagesMentioningTask(state, task);
   const ownerOptions = [...new Set([...team.map((agent) => agent.name), task.owner, 'Amara', 'Steward', 'Dispatcher', 'QA', 'Worker A', 'Worker B', 'Worker C'].filter(Boolean))];
   const typeOptions = [...new Set([task.type, 'Task', 'Story', 'Epic', 'Sub-task', 'Bug', 'Improvement', 'Milestone', 'After Sales Top Items', 'HVT/EVT/DVT/PVT Build Report Issue'].filter(Boolean))];
   const priorityOptions = [...new Set([task.priority, ...PRIORITY_ORDER].filter(Boolean))];
@@ -1136,10 +1159,11 @@ function taskDetail(state, route) {
         <section class="card"><div class="card-head"><h2>Progress update</h2></div><div class="card-body"><form data-form="task-comment"><input type="hidden" name="id" value="${task.id}" /><div class="field"><label for="task-progress-comment">Add a comment or progress update</label><textarea id="task-progress-comment" name="body" rows="3" placeholder="What changed?" required></textarea><p class="field-help">Ctrl+Enter saves the progress update.</p></div><div class="row-actions"><button class="btn btn-primary btn-sm" type="submit">Save progress</button><label class="checkbox-row"><input name="real" type="checkbox" value="1" /> This is a real progress update</label></div></form></div></section>
         <section class="card"><div class="card-head"><h2>Details</h2><span class="badge badge-muted">Saved to this device</span></div><div class="card-body"><form class="stack" data-form="task-details" data-history="description,repro,expected,actual"><input type="hidden" name="id" value="${task.id}" /><div class="field"><label for="task-description-${task.id}">Description</label><textarea id="task-description-${task.id}" name="description" rows="3">${esc(task.description)}</textarea></div><div class="field"><label for="task-repro-${task.id}">Steps / repro</label><textarea id="task-repro-${task.id}" name="repro" rows="3">${esc(task.repro ?? task.steps ?? '')}</textarea></div><div class="field"><label for="task-expected-${task.id}">Expected</label><textarea id="task-expected-${task.id}" name="expected" rows="2">${esc(task.expected)}</textarea></div><div class="field"><label for="task-actual-${task.id}">Actual</label><textarea id="task-actual-${task.id}" name="actual" rows="2">${esc(task.actual)}</textarea></div><div class="row-actions"><button class="btn btn-primary btn-sm" type="submit">Save details</button></div></form></div></section>
         <section class="card"><div class="card-head"><h2>Attachments / deliverables</h2></div><div class="card-body">${attachments.length ? `<div class="row-list">${attachments.map((file) => `<div class="row-item"><span class="badge badge-muted">FILE</span><span class="row-main"><span class="row-title">${esc(file.name)}</span><span class="row-meta">${esc(file.kind)}</span></span><button class="btn btn-ghost btn-sm" type="button" data-action="fake-download">Open</button></div>`).join('')}</div>` : empty('No attachments yet.')}</div></section>
-        <section class="card"><div class="card-head"><h2>Subtasks</h2><span class="badge badge-muted">${subtasks.length}</span></div><div class="card-body">${subtasks.length ? `<div class="row-list">${subtasks.map((row) => `<div class="row-item"><span class="key-link">↳ ${esc(row.key)}</span><span class="row-main"><span class="row-title"><a href="#/task/${row.id}">${esc(row.title)}</a></span></span>${statusBadge(row.workflow)}</div>`).join('')}</div>` : empty('No subtasks.')}</div></section>
-        <section class="card"><div class="card-head"><h2>Scheduled</h2></div><div class="card-body">${scheduled.length ? `<div class="row-list">${scheduled.map((event) => `<div class="row-item"><span class="row-date">${fmt(event.date)}</span><span class="row-main"><span class="row-title">${esc(event.title)}</span><span class="row-meta">${esc(event.kind)} ${esc(event.time)}</span></span></div>`).join('')}</div>` : empty('No scheduled time.')}</div></section>
+        <section class="card"><div class="card-head"><h2>Subtasks</h2><div class="row-actions"><span class="badge badge-muted">${subtasks.length}</span><button class="btn btn-ghost btn-sm" type="button" data-action="new-subtask" data-id="${task.id}" data-parent-id="${task.id}">New subtask</button></div></div><div class="card-body">${subtasks.length ? `<div class="row-list">${subtasks.map((row) => `<div class="row-item" data-subtask-id="${esc(row.id)}"><span class="key-link">↳ ${esc(row.key)}</span><span class="row-main"><span class="row-title"><a href="#/task/${row.id}">${esc(row.title)}</a></span></span>${statusBadge(row.workflow)}</div>`).join('')}</div>` : empty('No subtasks.')}</div></section>
+        <section class="card"><div class="card-head"><h2>Depends on</h2><div class="row-actions"><span class="badge badge-muted">${dependencies.length}</span><button class="btn btn-ghost btn-sm" type="button" data-action="focus-dependencies" data-id="${task.id}">Edit in Plan</button></div></div><div class="card-body">${dependencies.length ? `<div class="row-list">${dependencies.map(({ ref, dependency, missing }) => missing ? `<div class="row-item" data-dependency-ref="${esc(ref)}"><span class="key-link">${esc(ref)}</span><span class="row-main"><span class="row-title">Dependency not found</span><span class="row-meta">Use a task key or ID in the Plan card.</span></span><span class="badge badge-warning">Missing</span></div>` : `<div class="row-item" data-dependency-ref="${esc(ref)}"><span class="key-link">${esc(dependency.key)}</span><span class="row-main"><span class="row-title"><a href="#/task/${dependency.id}">${esc(dependency.title)}</a></span><span class="row-meta">${esc(dependency.key)} · ${esc(dependency.status)}</span></span>${statusBadge(dependency.workflow ?? dependency.status)}</div>`).join('')}</div>` : empty('No dependencies.')}<p class="field-help">Edit this list in the Plan card using task keys or IDs, separated by commas.</p></div></section>
+        <section class="card"><div class="card-head"><h2>Scheduled</h2><div class="row-actions"><span class="badge badge-muted">${scheduled.length}</span><button class="btn btn-ghost btn-sm" type="button" data-action="schedule-task" data-id="${task.id}" data-task-id="${task.id}">Schedule time for this</button></div></div><div class="card-body">${scheduled.length ? `<div class="row-list">${scheduled.map((event) => `<div class="row-item" data-event-id="${esc(event.id)}"><span class="row-date">${fmt(event.date)}</span><span class="row-main"><span class="row-title">${esc(event.title)}</span><span class="row-meta">${esc(event.kind)} ${esc(event.time)}</span></span></div>`).join('')}</div>` : empty('No scheduled time.')}</div></section>
         <section class="card"><div class="card-head"><h2>Comments and history</h2></div><div class="card-body"><div class="feed">${feed.map((row) => `<div class="feed-item"><div class="feed-head">${avatar(row.who ?? row.author ?? 'Amara')}<strong>${esc(row.who ?? row.author ?? 'Amara')}</strong><span>${fmtStamp(row.at)}</span>${row.kind === 'history' ? `<span class="badge badge-muted">${esc(row.field)}</span>` : ''}</div><p>${row.kind === 'comment' ? esc(row.body) : `${esc(row.field)}: ${esc(row.old || '—')} → ${esc(row.new || '—')}`}</p></div>`).join('') || empty('No activity yet.')}</div><form class="comment-form" data-form="task-comment"><input type="hidden" name="id" value="${task.id}" /><textarea id="tskComment" name="body" rows="2" placeholder="Add a comment… (Ctrl+Enter posts)" required></textarea><button class="btn btn-primary btn-sm" type="submit">Comment</button></form></div></section>
-        ${mentioning.length ? `<section class="card"><div class="card-head"><h2>Pages mentioning this task</h2></div><div class="card-body"><div class="row-list">${mentioning.map((page) => `<a class="row-item" href="#/page/${page.id}"><span class="row-main"><span class="row-title">${esc(page.title)}</span><span class="row-meta">${esc(page.type)}</span></span>${icon('arrow', 16)}</a>`).join('')}</div></div></section>` : ''}
+        <section class="card"><div class="card-head"><h2>Pages mentioning this task</h2><span class="badge badge-muted">${mentioning.length}</span></div><div class="card-body">${mentioning.length ? `<div class="row-list">${mentioning.map((page) => `<a class="row-item" data-page-id="${esc(page.id)}" href="#/page/${page.id}"><span class="row-main"><span class="row-title">${esc(page.title)}</span><span class="row-meta">${esc(page.type)}</span></span>${icon('arrow', 16)}</a>`).join('')}</div>` : empty('No pages mention this task yet.')}</div></section>
       </div>
       <aside class="detail-side">
         <section class="card"><div class="card-head"><h2>Workflow</h2><span class="badge badge-muted">${allWorkflowHint} statuses</span></div><div class="card-body"><form class="stack" data-form="task-workflow"><input type="hidden" name="id" value="${task.id}" /><div class="field"><label for="task-move">Move to</label><select id="task-move" class="select" name="to" required><option value="" selected disabled>Choose a legal target…</option>${workflowTargets.map((value) => `<option value="${esc(value)}">${esc(value)}</option>`).join('')}</select><p class="field-help">From ${esc(currentWorkflow)}. Only legal targets are listed; QA-only and waiver rules apply.</p></div><div class="field"><label for="task-as">As</label><select id="task-as" class="select" name="as">${actingOptions.map((value) => option(value, defaultActor)).join('')}</select></div><div class="field"><label for="task-reason">Reason</label><input id="task-reason" name="reason" type="text" placeholder="Required for ${esc(reasonHint)}" /><p class="field-help">Waiver statuses (${esc(waiverHint)}) need Amara, QA or Steward.</p></div><button class="btn btn-primary btn-sm" type="submit">Apply move</button></form></div></section>
@@ -1349,17 +1373,33 @@ export function mountView(route, query, state) {
   }
 }
 
-export function renderCreateDialog(state) {
+export function renderCreateDialog(state, preset = {}) {
+  const options = typeof preset === 'string' ? { tab: preset } : (preset ?? {});
+  const requestedTab = options.tab || (options.taskId ? 'event' : 'task');
+  const activeTab = ['task', 'bug', 'event'].includes(requestedTab) ? requestedTab : 'task';
+  const tasks = state.tasks ?? [];
+  const parent = options.parentId ? tasks.find((row) => row.id === options.parentId || String(row.key ?? '').toUpperCase() === String(options.parentId).toUpperCase()) : null;
+  const linked = options.taskId ? tasks.find((row) => row.id === options.taskId || String(row.key ?? '').toUpperCase() === String(options.taskId).toUpperCase()) : null;
+  const parentId = parent?.id ?? options.parentId ?? '';
+  const taskId = linked?.id ?? options.taskId ?? '';
+  const taskType = options.type || (parentId ? 'Sub-task' : 'Task');
+  const taskProject = options.projectId || parent?.projectId || '';
+  const eventProject = options.projectId || linked?.projectId || '';
+  const eventTitle = options.title || (linked ? `${linked.key} · ${linked.title}` : '');
+  const eventDate = options.date || dateOnly(linked?.due) || today();
+  const tabButton = (name, label) => `<button class="tab" type="button" role="tab" aria-selected="${activeTab === name}" data-create-tab="${name}">${label}</button>`;
+  const panelHidden = (name) => (activeTab === name ? '' : ' hidden');
   return `<div class="create-dialog">
     <div class="tabs" role="tablist" data-create-tabs>
-      <button class="tab" type="button" role="tab" aria-selected="true" data-create-tab="task">Task</button>
-      <button class="tab" type="button" role="tab" aria-selected="false" data-create-tab="bug">Bug</button>
-      <button class="tab" type="button" role="tab" aria-selected="false" data-create-tab="event">Event</button>
+      ${tabButton('task', 'Task')}
+      ${tabButton('bug', 'Bug')}
+      ${tabButton('event', 'Event')}
     </div>
-    <form class="form-grid create-panel" data-create-panel="task" data-form="create-task">
+    <form class="form-grid create-panel" data-create-panel="task" data-form="create-task"${panelHidden('task')}>
       <div class="field field-wide"><label for="create-task-title">Title</label><input id="create-task-title" name="title" type="text" required /></div>
-      <div class="field"><label for="create-task-type">Type</label><select id="create-task-type" class="select" name="type">${['Task', 'Story', 'Epic', 'Sub-task', 'Improvement', 'Bug'].map((value) => option(value, 'Task')).join('')}</select></div>
-      <div class="field"><label for="create-task-project">Project</label><select id="create-task-project" class="select" name="projectId"><option value="">(Dispatcher picks)</option>${state.projects.filter((p) => !p.archived).map((p) => option(p.id, '', `${p.key} ${p.name}`)).join('')}</select></div>
+      ${parentId ? `<input type="hidden" name="parentId" value="${esc(parentId)}" /><div class="field field-wide" data-create-parent="${esc(parentId)}"><label>Parent work item</label><p class="field-help" id="create-task-parent-help">This will be created as a subtask of ${esc(parent?.key ?? parentId)}${parent ? ` · ${esc(parent.title)}` : ''}.</p></div>` : ''}
+      <div class="field"><label for="create-task-type">Type</label><select id="create-task-type" class="select" name="type">${['Task', 'Story', 'Epic', 'Sub-task', 'Improvement', 'Bug'].map((value) => option(value, taskType)).join('')}</select></div>
+      <div class="field"><label for="create-task-project">Project</label><select id="create-task-project" class="select" name="projectId"><option value="">(Dispatcher picks)</option>${state.projects.filter((p) => !p.archived).map((p) => option(p.id, taskProject, `${p.key} ${p.name}`)).join('')}</select></div>
       <div class="field"><label for="create-task-priority">Priority</label><select id="create-task-priority" class="select" name="priority">${['Highest', 'High', 'Medium', 'Low', 'Lowest'].map((value) => option(value, 'Medium')).join('')}</select></div>
       <div class="field"><label for="create-task-start">Start</label><input id="create-task-start" name="start" type="date" /></div>
       <div class="field"><label for="create-task-due">Due</label><input id="create-task-due" name="due" type="date" /></div>
@@ -1367,7 +1407,7 @@ export function renderCreateDialog(state) {
       <div class="field"><label for="create-task-actual">Actual</label><input id="create-task-actual" name="actual" type="text" /></div>
       <div class="field field-wide"><label for="create-task-description">Description</label><textarea id="create-task-description" name="description" rows="3"></textarea></div>
     </form>
-    <form class="form-grid create-panel" data-create-panel="bug" data-form="create-bug" hidden>
+    <form class="form-grid create-panel" data-create-panel="bug" data-form="create-bug"${panelHidden('bug')}>
       <div class="field field-wide"><label for="create-bug-title">Title</label><input id="create-bug-title" name="title" type="text" required /></div>
       <div class="field"><label for="create-bug-severity">Severity</label><select id="create-bug-severity" class="select" name="severity" required>${['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'].map((value) => option(value, 'S3 Major')).join('')}</select></div>
       <div class="field"><label for="create-bug-priority">Priority</label><select id="create-bug-priority" class="select" name="priority">${['Highest', 'High', 'Medium', 'Low', 'Lowest'].map((value) => option(value, 'Medium')).join('')}</select></div>
@@ -1375,15 +1415,16 @@ export function renderCreateDialog(state) {
       <div class="field field-wide"><label for="create-bug-repro">Steps to reproduce</label><textarea id="create-bug-repro" name="repro" rows="3" required></textarea></div>
       <div class="field field-wide"><label for="create-bug-description">Description</label><textarea id="create-bug-description" name="description" rows="3"></textarea></div>
     </form>
-    <form class="form-grid create-panel" data-create-panel="event" data-form="create-event" hidden>
-      <div class="field field-wide"><label for="create-event-title">What</label><input id="create-event-title" name="title" type="text" required /></div>
-      <div class="field"><label for="create-event-date">Date</label><input id="create-event-date" name="date" type="date" value="${today()}" required /></div>
+    <form class="form-grid create-panel" data-create-panel="event" data-form="create-event"${panelHidden('event')}>
+      <div class="field field-wide"><label for="create-event-title">What</label><input id="create-event-title" name="title" type="text" required${eventTitle ? ` value="${esc(eventTitle)}"` : ''} /></div>
+      ${taskId ? `<input type="hidden" name="taskId" value="${esc(taskId)}" /><div class="field field-wide" data-create-task="${esc(taskId)}"><label>Linked work item</label><p class="field-help" id="create-event-task-help">This event will be linked to ${esc(linked?.key ?? taskId)}${linked ? ` · ${esc(linked.title)}` : ''}.</p></div>` : ''}
+      <div class="field"><label for="create-event-date">Date</label><input id="create-event-date" name="date" type="date" value="${esc(eventDate)}" required /></div>
       <div class="field"><label for="create-event-time">Start time</label><input id="create-event-time" name="time" type="time" /></div>
       <div class="field"><label for="create-event-kind">Kind</label><select id="create-event-kind" class="select" name="kind">${['Meeting', 'Reminder', 'Task', 'Deadline', 'Other'].map((value) => option(value, 'Reminder')).join('')}</select></div>
       <div class="field"><label for="create-event-link">Meeting link</label><input id="create-event-link" name="link" type="url" /></div>
       <div class="field"><label for="create-event-repeat">Repeat</label><select id="create-event-repeat" class="select" name="repeat">${[['', 'Does not repeat'], ['daily', 'Daily'], ['weekdays', 'Weekdays'], ['weekly', 'Weekly'], ['monthly', 'Monthly'], ['yearly', 'Yearly']].map(([value, label]) => option(value, '', label)).join('')}</select></div>
       <div class="field"><label for="create-event-remind">Remind</label><select id="create-event-remind" class="select" name="remind">${[['0', 'At start time'], ['5', '5 minutes before'], ['15', '15 minutes before'], ['30', '30 minutes before'], ['60', '1 hour before'], ['1440', '1 day before']].map(([value, label]) => option(value, '5', label)).join('')}</select></div>
-      <div class="field"><label for="create-event-project">Project</label><select id="create-event-project" class="select" name="projectId"><option value="">No project</option>${state.projects.filter((p) => !p.archived).map((p) => option(p.id, '', `${p.key} ${p.name}`)).join('')}</select></div>
+      <div class="field"><label for="create-event-project">Project</label><select id="create-event-project" class="select" name="projectId"><option value="">No project</option>${state.projects.filter((p) => !p.archived).map((p) => option(p.id, eventProject, `${p.key} ${p.name}`)).join('')}</select></div>
       <div class="field field-wide"><label for="create-event-note">Note</label><textarea id="create-event-note" name="note" rows="2"></textarea></div>
     </form>
   </div>`;

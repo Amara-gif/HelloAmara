@@ -281,11 +281,13 @@ function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
 
-function openCreateDialog() {
+function openCreateDialog(preset = {}) {
+  const options = typeof preset === 'string' ? { tab: preset } : (preset ?? {});
   const state = getState();
   const content = document.createElement('div');
-  content.innerHTML = renderCreateDialog(state);
-  createTab = 'task';
+  content.innerHTML = renderCreateDialog(state, options);
+  const requestedTab = options.tab || (options.taskId ? 'event' : 'task');
+  createTab = ['task', 'bug', 'event'].includes(requestedTab) ? requestedTab : 'task';
   const tabs = [...content.querySelectorAll('[data-create-tab]')];
   const panels = [...content.querySelectorAll('[data-create-panel]')];
   const selectTab = (name) => {
@@ -293,6 +295,7 @@ function openCreateDialog() {
     tabs.forEach((tab) => tab.setAttribute('aria-selected', String(tab.dataset.createTab === name)));
     panels.forEach((panel) => { panel.hidden = panel.dataset.createPanel !== name; });
   };
+  selectTab(createTab);
   tabs.forEach((tab) => tab.addEventListener('click', () => selectTab(tab.dataset.createTab)));
   const dialog = openModal({
     title: 'Create',
@@ -495,6 +498,17 @@ document.addEventListener('click', async (event) => {
   if (action === 'agenda-row') { event.preventDefault(); openAgendaDialog(actionEl); }
   else if (action === 'switch-account') { clearActiveAccount(); window.location.reload(); }
   else if (action === 'open-create') openCreateDialog();
+  else if (action === 'new-subtask') {
+    const parent = getState().tasks.find((row) => row.id === id);
+    openCreateDialog({ tab: 'task', parentId: id, projectId: parent?.projectId || '', type: 'Sub-task' });
+  } else if (action === 'schedule-task' || action === 'task-schedule') {
+    const task = getState().tasks.find((row) => row.id === id);
+    openCreateDialog({ tab: 'event', taskId: id, projectId: task?.projectId || '' });
+  } else if (action === 'focus-dependencies') {
+    const input = document.getElementById(`task-plan-depends-${id}`);
+    input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    input?.focus();
+  }
   else if (action === 'reset-demo') {
     openModal({ title: 'Reset demo data?', message: 'All changes in the Test account will be replaced by the original demo rows.', confirmLabel: 'Reset', tone: 'danger', onConfirm: () => { resetDemoData(); } });
   } else if (action === 'task-toqa') sendToQA(id);
