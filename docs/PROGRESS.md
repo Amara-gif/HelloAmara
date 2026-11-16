@@ -38,7 +38,7 @@ Standards:
 | P1 | IndexedDB wrapper, schema versioning, `meta`, tests | **Done** — wrapper + demo seed + accounts + fake-IDB CRUD/schema/soft-delete/boot tests + per-account persistent-storage request/status (meta, sidebar, Settings) |
 | P2 | Tasks, Home, My work, Calendar, Projects, Pages | **Partial** — rich shells + demo data; many inventory interactions still incomplete |
 | P3 | Bugs and events | **Partial** — list/detail/create + event CRUD; workflow gates and inline edits incomplete |
-| P4 | Export and import | **Not started** |
+| P4 | Export and import | **Done** — one-file JSON export + reminder; validated merge import with added/updated/skipped confirmation and an explicit replace-all choice (`docs/IMPORT.md`) |
 | P5 | PWA and offline | **Not started** |
 | P6 | Scraper | **Blocked** on owner (BRIEF §7 / §11) |
 | P7 | Release automation and rollback proof | **Not started** (also blocked on Pages enablement) |
@@ -110,7 +110,7 @@ Phone/tablet PNGs are listed for completeness; they are not a layout target.
 | `#/settings/language` etc. | partial | Forms save to `meta.settings`; depth below inventory §3.15. |
 | `#/go/T-n`, `#/go/WD-n` | done | Resolves case-insensitive `T-`/`WD-` keys to task/bug detail; unknown keys show Not found. |
 | Tasks `view=calendar` / `timeline` | missing | Placeholder empty cards only. |
-| Export / import JSON | missing | Sidebar copy mentions export; no implementation. |
+| Export / import JSON | done | Settings → Backup exports one JSON file and imports it with validation, merge summary and an explicit replace-all choice. See `docs/IMPORT.md`. |
 | PWA (`manifest`, `sw.js`) | missing | |
 
 ## What is already working

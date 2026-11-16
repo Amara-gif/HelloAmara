@@ -647,6 +647,243 @@ export function exportStatus(currentState = state, now = new Date()) {
   return { lastExportAt, daysSince, overdue: now.getTime() - timestamp >= EXPORT_REMINDER_DAYS * 86400000 };
 }
 
+// ---------------------------------------------------------------- Import JSON
+// An import is read-only until the summary is confirmed. These helpers are
+// deliberately separate from the UI so the merge rules can be tested.
+export const IMPORT_META_PROTECTED = Object.freeze([
+  'deviceId',
+  'lastExportAt',
+  'seedVersion',
+  'storagePersist',
+  'storagePersistSupported',
+  'storagePersistCheckedAt',
+]);
+const IMPORT_META_PROTECTED_SET = new Set(IMPORT_META_PROTECTED);
+
+function importError(message) {
+  const error = new Error(message);
+  error.name = 'ImportValidationError';
+  return error;
+}
+
+function isObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isTimestamp(value) {
+  return typeof value === 'string' && value.trim() !== '' && Number.isFinite(Date.parse(value));
+}
+
+// Validate the full backup envelope and every row before any write happens.
+// Rows are returned as shallow copies with a normalized deletedAt.
+export function validateImportPayload(payload) {
+  if (!isObject(payload)) throw importError('The selected file is not a My Platform backup object.');
+  if (!Number.isInteger(payload.schemaVersion)) {
+    throw importError('The backup has no numeric schemaVersion.');
+  }
+  if (payload.schemaVersion !== DB_VERSION) {
+    throw importError(`Unsupported backup schema version ${payload.schemaVersion}. This app reads version ${DB_VERSION}.`);
+  }
+  if (!isTimestamp(payload.exportedAt)) {
+    throw importError('The backup has an invalid exportedAt timestamp.');
+  }
+  if (typeof payload.deviceId !== 'string' || !payload.deviceId.trim()) {
+    throw importError('The backup has no deviceId.');
+  }
+  if (!isObject(payload.stores)) {
+    throw importError('The backup has no stores object.');
+  }
+
+  const unknown = Object.keys(payload.stores).filter((name) => !Object.prototype.hasOwnProperty.call(STORES, name));
+  if (unknown.length) {
+    throw importError(`The backup contains unknown stores: ${unknown.join(', ')}.`);
+  }
+
+  const stores = {};
+  for (const [name, definition] of Object.entries(STORES)) {
+    const rows = payload.stores[name];
+    if (!Array.isArray(rows)) {
+      throw importError(`The backup is missing the “${name}” store array.`);
+    }
+    const seen = new Set();
+    stores[name] = rows.map((record) => {
+      if (!isObject(record)) {
+        throw importError(`The ${name} store contains a row that is not an object.`);
+      }
+      const keyPath = definition.keyPath;
+      const rawKey = record[keyPath];
+      if (rawKey === undefined || rawKey === null || String(rawKey).trim() === '') {
+        throw importError(`A row in the ${name} store has no “${keyPath}”.`);
+      }
+      const key = String(rawKey);
+      if (seen.has(key)) {
+        throw importError(`The ${name} store contains duplicate ${keyPath} “${key}”.`);
+      }
+      seen.add(key);
+      if (!isTimestamp(record.updatedAt)) {
+        throw importError(`Row “${key}” in ${name} has an invalid updatedAt; imports need an ISO 8601 timestamp.`);
+      }
+      if (record.deletedAt !== undefined && record.deletedAt !== null && !isTimestamp(record.deletedAt)) {
+        throw importError(`Row “${key}” in ${name} has an invalid deletedAt timestamp.`);
+      }
+      return { ...record, [keyPath]: key, deletedAt: record.deletedAt ?? null };
+    });
+  }
+
+  return {
+    schemaVersion: payload.schemaVersion,
+    exportedAt: payload.exportedAt,
+    deviceId: payload.deviceId,
+    stores,
+  };
+}
+
+export function parseImportJson(text) {
+  const raw = String(text ?? '').trim();
+  if (!raw) throw importError('The selected file is empty.');
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw importError('That file is not valid JSON. Choose a My Platform backup exported as .json.');
+  }
+  return validateImportPayload(parsed);
+}
+
+// Read the current database and decide, per store, which rows would be added,
+// updated or skipped. This does not write anything.
+export async function planImport(payload) {
+  const backup = validateImportPayload(payload);
+  const stores = {};
+  const writes = {};
+  let added = 0;
+  let updated = 0;
+  let skipped = 0;
+  let deleted = 0;
+
+  for (const [name, definition] of Object.entries(STORES)) {
+    const summary = { added: 0, updated: 0, skipped: 0, deleted: 0 };
+    const existing = await getAll(name);
+    const byKey = new Map(existing.map((row) => [String(row[definition.keyPath]), row]));
+    const records = [];
+
+    for (const record of backup.stores[name]) {
+      const key = String(record[definition.keyPath]);
+      // Device identity, storage status and export markers always stay local.
+      if (name === 'meta' && IMPORT_META_PROTECTED_SET.has(key)) {
+        summary.skipped += 1;
+        continue;
+      }
+      const local = byKey.get(key);
+      if (!local) {
+        summary.added += 1;
+        records.push(record);
+        continue;
+      }
+      const localTime = Date.parse(local.updatedAt);
+      if (!Number.isFinite(localTime) || Date.parse(record.updatedAt) > localTime) {
+        summary.updated += 1;
+        if (record.deletedAt) summary.deleted += 1;
+        records.push(record);
+      } else {
+        summary.skipped += 1;
+      }
+    }
+
+    stores[name] = summary;
+    writes[name] = records;
+    added += summary.added;
+    updated += summary.updated;
+    skipped += summary.skipped;
+    deleted += summary.deleted;
+  }
+
+  return {
+    ...backup,
+    added,
+    updated,
+    skipped,
+    deleted,
+    totals: { added, updated, skipped, deleted },
+    stores,
+    rows: backup.stores,
+    writes,
+  };
+}
+
+// Merge is the default. `replace` is only reached from an explicit radio
+// choice in the confirmation dialog; it clears the account before restoring
+// the file, then puts the local device-only meta rows back.
+export async function applyImportPlan(plan, { mode = 'merge' } = {}) {
+  if (!plan || !plan.writes || !plan.stores) throw importError('Choose a backup to import first.');
+  if (!['merge', 'replace'].includes(mode)) throw importError('Choose Merge or Replace all before importing.');
+  if (mode === 'replace' && !plan.rows) {
+    throw importError('The backup rows are no longer available; choose the file again.');
+  }
+
+  let localMeta = [];
+  if (mode === 'replace') {
+    localMeta = (await getAll('meta')).filter((row) => IMPORT_META_PROTECTED_SET.has(String(row.key)));
+    await clearAllStores();
+  }
+
+  if (mode === 'replace') {
+    // Replace all writes every file row, even when merge would have skipped it
+    // because the local copy was newer.
+    for (const [name, rows] of Object.entries(plan.rows)) {
+      const records = name === 'meta'
+        ? rows.filter((row) => !IMPORT_META_PROTECTED_SET.has(String(row.key)))
+        : rows;
+      if (records.length) await putRecords(name, records);
+    }
+    if (localMeta.length) await putRecords('meta', localMeta);
+  } else {
+    for (const [name, records] of Object.entries(plan.writes)) {
+      if (records.length) await putRecords(name, records);
+    }
+  }
+
+  if (currentAccount) state = await readState();
+
+  if (mode === 'replace') {
+    const source = plan.rows ?? {};
+    const replaceRows = Object.entries(source).flatMap(([name, rows]) => (
+      name === 'meta' ? rows.filter((row) => !IMPORT_META_PROTECTED_SET.has(String(row.key))) : rows
+    ));
+    const written = replaceRows.length;
+    const deletedRows = replaceRows.filter((row) => row.deletedAt).length;
+    const protectedCount = Object.values(source).flat().length - written;
+    return {
+      mode,
+      added: written,
+      updated: 0,
+      skipped: protectedCount,
+      deleted: deletedRows,
+      totals: { added: written, updated: 0, skipped: protectedCount, deleted: deletedRows },
+      stores: plan.stores,
+    };
+  }
+
+  return {
+    mode,
+    added: plan.added,
+    updated: plan.updated,
+    skipped: plan.skipped,
+    deleted: plan.deleted,
+    totals: { ...plan.totals },
+    stores: plan.stores,
+  };
+}
+
+export async function importBackup(payload, options = {}) {
+  const plan = await planImport(payload);
+  return applyImportPlan(plan, options);
+}
+
+export const validateImport = validateImportPayload;
+export const buildImportPlan = planImport;
+export const applyImport = applyImportPlan;
+
 export async function saveSettings(settings) {
   await putRecord('meta', { key: 'settings', value: settings, updatedAt: nowIso() });
   state = await readState();

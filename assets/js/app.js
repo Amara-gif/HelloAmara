@@ -5,6 +5,7 @@ import {
   createBug, updateBug, addBugComment, createEvent, deleteEvent, createPage,
   updatePage, softDeletePage, createProject, updateProject, createOrder,
   closeOrder, saveSettings, restoreQaMark, buildExport,
+  parseImportJson, planImport, applyImportPlan,
 } from './data.js';
 import { readLocation, routeForPath, groupRoutes, SETTINGS_LINKS } from './routes.js';
 import { renderView, mountView, renderAccountScreen, renderCreateDialog, canSendToQa, qaOwnerName } from './views.js';
@@ -449,6 +450,135 @@ async function exportJsonBackup() {
   }
 }
 
+function importCountsText(plan) {
+  const total = plan.totals ?? plan;
+  return `${total.added} added, ${total.updated} updated, ${total.skipped} skipped`;
+}
+
+function importTableRow(cells, tagName = 'td') {
+  const row = document.createElement('tr');
+  for (const value of cells) {
+    const cell = document.createElement(tagName);
+    cell.textContent = String(value);
+    row.append(cell);
+  }
+  return row;
+}
+
+function importModeChoice(value, label, help, checked) {
+  const wrap = document.createElement('label');
+  wrap.className = 'checkbox-row';
+  const input = document.createElement('input');
+  input.type = 'radio';
+  input.name = 'import-mode';
+  input.value = value;
+  input.checked = checked;
+  const text = document.createElement('span');
+  const strong = document.createElement('strong');
+  strong.textContent = label;
+  const detail = document.createElement('span');
+  detail.className = 'field-help';
+  detail.textContent = ` ${help}`;
+  text.append(strong, detail);
+  wrap.append(input, text);
+  return wrap;
+}
+
+// Build the confirmation dialog from a read-only plan. The DB is only touched
+// after the user presses Import and the selected mode is read from the form.
+function openImportDialog(plan, filename) {
+  const content = document.createElement('div');
+  content.className = 'stack';
+
+  const intro = document.createElement('p');
+  intro.textContent = `${filename || 'Backup file'} · exported ${plan.exportedAt} from ${plan.deviceId}.`;
+  content.append(intro);
+
+  const totals = document.createElement('p');
+  totals.textContent = `Merge summary: ${importCountsText(plan)}.`;
+  content.append(totals);
+
+  const tableWrap = document.createElement('div');
+  tableWrap.className = 'table-wrap';
+  const table = document.createElement('table');
+  table.className = 'table';
+  const thead = document.createElement('thead');
+  thead.append(importTableRow(['Store', 'Added', 'Updated', 'Skipped'], 'th'));
+  const tbody = document.createElement('tbody');
+  let tableWasEmpty = true;
+  for (const [name, summary] of Object.entries(plan.stores)) {
+    if (!summary.added && !summary.updated && !summary.skipped) continue;
+    tableWasEmpty = false;
+    tbody.append(importTableRow([name, summary.added, summary.updated, summary.skipped]));
+  }
+  if (tableWasEmpty) tbody.append(importTableRow(['No rows would be written', 0, 0, 0]));
+  const tfoot = document.createElement('tfoot');
+  tfoot.append(importTableRow([
+    'Total',
+    plan.added,
+    plan.updated,
+    plan.skipped,
+  ]));
+  table.append(thead, tbody, tfoot);
+  tableWrap.append(table);
+  content.append(tableWrap);
+
+  const deletedNote = document.createElement('p');
+  deletedNote.className = 'field-help';
+  deletedNote.textContent = `Soft-deleted rows in the file only replace a local row when their updatedAt is newer (${plan.deleted} incoming tombstone${plan.deleted === 1 ? '' : 's'} would be written). The local device id and storage status are always kept.`;
+  content.append(deletedNote);
+
+  content.append(
+    importModeChoice('merge', 'Merge', 'Keep newer local rows and add or update the rest. This is the safe default.', true),
+    importModeChoice('replace', 'Replace all', 'Clear this account first, then write every row from the file. Local-only rows are removed.', false),
+  );
+
+  const warning = document.createElement('div');
+  warning.className = 'note';
+  warning.textContent = 'Nothing is written yet. Merge never removes local-only rows. Replace all only runs when you select it and press Import.';
+  content.append(warning);
+
+  openModal({
+    title: 'Import backup',
+    content,
+    confirmLabel: 'Import backup',
+    cancelLabel: 'Cancel',
+    onConfirm: async () => {
+      const selected = content.querySelector('input[name="import-mode"]:checked');
+      const mode = selected?.value === 'replace' ? 'replace' : 'merge';
+      try {
+        const result = await applyImportPlan(plan, { mode });
+        render();
+        if (mode === 'replace') {
+          toast(`Local data replaced from ${filename || 'the backup'}.`, { tone: 'success' });
+        } else {
+          toast(`Import complete: ${importCountsText(result)}.`, { tone: 'success' });
+        }
+      } catch (error) {
+        toast(error.message || 'The backup could not be imported.', { tone: 'danger' });
+        return false;
+      }
+      return true;
+    },
+  });
+}
+
+async function importJsonFile(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  try {
+    if (file.size === 0) throw new Error('The selected file is empty.');
+    const text = typeof file.text === 'function' ? await file.text() : await new Response(file).text();
+    const payload = parseImportJson(text);
+    const plan = await planImport(payload);
+    openImportDialog(plan, file.name);
+  } catch (error) {
+    toast(error.message || 'The backup could not be read.', { tone: 'danger' });
+  } finally {
+    input.value = '';
+  }
+}
+
 function isHttpLink(value) {
   try {
     const url = new URL(String(value ?? '').trim());
@@ -564,6 +694,7 @@ document.addEventListener('click', async (event) => {
   else if (action === 'reset-demo') {
     openModal({ title: 'Reset demo data?', message: 'All changes in the Test account will be replaced by the original demo rows.', confirmLabel: 'Reset', tone: 'danger', onConfirm: () => { resetDemoData(); } });
   } else if (action === 'export-json') exportJsonBackup();
+  else if (action === 'import-json') document.querySelector('[data-import-file]')?.click();
   else if (action === 'task-toqa') sendToQA(id);
   else if (action === 'task-restore-mark') {
     try {
@@ -630,6 +761,11 @@ document.addEventListener('click', async (event) => {
 });
 
 document.addEventListener('change', async (event) => {
+  const importFile = event.target.closest('[data-import-file]');
+  if (importFile) {
+    await importJsonFile(importFile);
+    return;
+  }
   const move = event.target.closest('[data-move-task]');
   if (move) {
     const status = move.value;

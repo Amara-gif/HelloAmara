@@ -23,6 +23,8 @@ Requirements live in two documents:
 - [docs/FEATURE-INVENTORY.md](docs/FEATURE-INVENTORY.md) — the single standard for pages,
   buttons, data fields and the 161-item acceptance checklist. Old `/api/` endpoints become
   operations on the local IndexedDB layer, not HTTP endpoints.
+- [docs/IMPORT.md](docs/IMPORT.md) — JSON import validation, merge and soft-delete rules, and
+  the explicit replace-all choice.
 
 ## Preview locally
 
@@ -48,8 +50,8 @@ npm test
 `npm test` runs `node --test` and creates a temporary database per test. It covers
 `put`/`get`/`getAll`/`clear` for every store in `assets/js/db.js`, the version 1 schema plus a
 version 1 → 2 upgrade, soft-delete filtering through `assets/js/data.js` (live rows only),
-Test-account boot with demo data, and the nav In-progress badge count/show/hide helper. Tests
-live in `tests/` and clean up their databases.
+Test-account boot with demo data, JSON export, validated merge/replace import, and the nav
+In-progress badge count/show/hide helper. Tests live in `tests/` and clean up their databases.
 
 ## UI rules
 
@@ -79,7 +81,7 @@ assets/js/chart.js       the only chart renderer
 assets/js/ui.js          the only toast and dialog implementation
 assets/js/styleguide.js  token and demo rendering for the style guide
 scripts/check-styles.mjs design-system guard
-tests/                   Node tests for IndexedDB CRUD, schema upgrades and soft deletes
+tests/                   Node tests for IndexedDB CRUD, schema, soft deletes and JSON import
 package.json             test script and the fake-indexeddb dev dependency
 docs/BRIEF.md            architecture and privacy rules
 docs/FEATURE-INVENTORY.md feature standard and acceptance checklist
