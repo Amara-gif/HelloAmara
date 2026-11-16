@@ -16,6 +16,12 @@ const DEFAULT_SETTINGS = {
   dispatch: { defaultOwner: 'Dispatcher', rules: [] },
 };
 
+const STORAGE_PERSIST_META = {
+  granted: 'storagePersist',
+  supported: 'storagePersistSupported',
+  checkedAt: 'storagePersistCheckedAt',
+};
+
 let currentAccount = null;
 let state = null;
 
@@ -34,8 +40,28 @@ export async function start(account) {
   currentAccount = account;
   await openAccountDb(account.id);
   if (account.test) await seedDemo(false);
+  await requestPersistentStorage();
   state = await readState();
   return state;
+}
+
+// Ask the browser for exempt-from-eviction storage and keep the answer per account.
+async function requestPersistentStorage() {
+  const storage = globalThis.navigator?.storage;
+  const supported = typeof storage?.persist === 'function';
+  let granted = false;
+  if (supported) {
+    try {
+      granted = (await storage.persist()) === true;
+    } catch {
+      granted = false;
+    }
+  }
+  const checkedAt = nowIso();
+  await putRecord('meta', { key: STORAGE_PERSIST_META.granted, value: granted, updatedAt: checkedAt });
+  await putRecord('meta', { key: STORAGE_PERSIST_META.supported, value: supported, updatedAt: checkedAt });
+  await putRecord('meta', { key: STORAGE_PERSIST_META.checkedAt, value: checkedAt, updatedAt: checkedAt });
+  return { supported, granted, checkedAt };
 }
 
 async function seedDemo(force) {
@@ -73,6 +99,8 @@ async function readState() {
     getAll('pages'), getAll('ai_calls'), getAll('team'), getAll('orders'), getAll('meta'),
   ]);
   const meta = Object.fromEntries(metaRows.map((row) => [row.key, row.value]));
+  const supported = meta[STORAGE_PERSIST_META.supported] === true;
+  const granted = meta[STORAGE_PERSIST_META.granted] === true;
   return {
     account: currentAccount,
     tasks: live(tasks).sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true })),
@@ -90,6 +118,12 @@ async function readState() {
     settings: meta.settings ?? structuredClone(DEFAULT_SETTINGS),
     ratings: meta.ratings ?? null,
     seeded: meta.seedVersion ?? null,
+    persistentStorage: {
+      supported,
+      granted,
+      checkedAt: meta[STORAGE_PERSIST_META.checkedAt] ?? null,
+      status: supported ? (granted ? 'Granted' : 'Denied') : 'Unsupported',
+    },
   };
 }
 

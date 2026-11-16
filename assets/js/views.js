@@ -39,6 +39,8 @@ const STATUS_TONE = {
   New: 'band', 'To do': 'band', 'To Do': 'band',
 };
 const statusBadge = (status) => `<span class="badge badge-${STATUS_TONE[status] ?? 'muted'}">${esc(status)}</span>`;
+const STORAGE_TONE = { Granted: 'success', Denied: 'warning', Unsupported: 'muted' };
+const storageBadge = (storage) => `<span class="badge badge-${STORAGE_TONE[storage?.status] ?? 'muted'}">${esc(storage?.status ?? 'Unsupported')}</span>`;
 const priorityClass = { Highest: 'danger', High: 'danger', Medium: 'warning', Low: 'success', Lowest: 'muted' };
 const priority = (value) => `<span class="priority priority-${priorityClass[value] ?? 'muted'}"><span class="priority-dot" aria-hidden="true"></span>${esc(value)}</span>`;
 
@@ -533,11 +535,17 @@ function settingsTabs(route) {
   return `<nav class="tabs" aria-label="Settings sections">${tabs.map((tab) => `<a class="tab" href="#${tab.path}"${tab.id === route.id ? ' aria-current="page"' : ''}>${tab.label}</a>`).join('')}</nav>`;
 }
 
+function storagePersistCard(state) {
+  const storage = state.persistentStorage;
+  return `<section class="card"><div class="card-head"><h2>Persistent storage</h2>${storageBadge(storage)}</div><div class="card-body"><dl class="details"><div><dt>Status</dt><dd>${esc(storage?.status ?? 'Unsupported')}</dd></div><div><dt>Checked</dt><dd>${storage?.checkedAt ? fmtStamp(storage.checkedAt) : '—'}</dd></div></dl><p class="field-help">Granted means this browser will keep the account's IndexedDB data when the device is low on space. Unsupported means this browser has no <code>navigator.storage.persist()</code> API.</p></div></section>`;
+}
+
 function settingsPage(route, state) {
   const s = state.settings;
+  const storage = state.persistentStorage ?? { status: 'Unsupported' };
   const body = (() => {
     if (route.id === 'settings') {
-      return `<section class="card"><div class="card-head"><h2>AI connection</h2><span class="badge badge-${s.ai.status === 'Connected' ? 'success' : 'muted'}">${esc(s.ai.status)}</span></div><div class="card-body"><form class="form-grid" data-form="settings-ai"><div class="field"><label for="ai-key">API key</label><input id="ai-key" name="key" type="password" value="${esc(s.ai.key)}" /></div><div class="field"><label for="ai-model">Model</label><input id="ai-model" name="model" type="text" value="${esc(s.ai.model)}" /></div><div class="field"><label for="ai-timeout">Timeout (seconds)</label><input id="ai-timeout" name="timeout" type="number" value="${esc(s.ai.timeout)}" /></div><div class="row-actions"><button class="btn btn-primary" type="submit">Save changes</button><button class="btn btn-ghost" type="button" data-action="test-key">Test the key</button><button class="btn btn-ghost" type="button" data-action="fill-gaps">Fill the gaps now</button></div></form></div></section>
+      return `${storagePersistCard(state)}<section class="card"><div class="card-head"><h2>AI connection</h2><span class="badge badge-${s.ai.status === 'Connected' ? 'success' : 'muted'}">${esc(s.ai.status)}</span></div><div class="card-body"><form class="form-grid" data-form="settings-ai"><div class="field"><label for="ai-key">API key</label><input id="ai-key" name="key" type="password" value="${esc(s.ai.key)}" /></div><div class="field"><label for="ai-model">Model</label><input id="ai-model" name="model" type="text" value="${esc(s.ai.model)}" /></div><div class="field"><label for="ai-timeout">Timeout (seconds)</label><input id="ai-timeout" name="timeout" type="number" value="${esc(s.ai.timeout)}" /></div><div class="row-actions"><button class="btn btn-primary" type="submit">Save changes</button><button class="btn btn-ghost" type="button" data-action="test-key">Test the key</button><button class="btn btn-ghost" type="button" data-action="fill-gaps">Fill the gaps now</button></div></form></div></section>
         <section class="card"><div class="card-head"><h2>Demo data</h2><span class="badge badge-accent">Test account</span></div><div class="card-body"><p>Reset the Test account to the original demo rows. Changes in this account will be replaced.</p><button class="btn btn-danger" type="button" data-action="reset-demo">Reset demo data</button></div></section>`;
     }
     if (route.id === 'settings-ai') {
@@ -561,7 +569,7 @@ function settingsPage(route, state) {
     }
     return '';
   })();
-  return `${pageHead(route.title, 'Settings are stored on this device with the account.', `<span class="badge badge-muted">${esc(state.account.name)}</span>`)}${settingsTabs(route)}${body}`;
+  return `${pageHead(route.title, 'Settings are stored on this device with the account.', `${storageBadge(storage)}<span class="badge badge-muted">${esc(state.account.name)}</span>`)}${settingsTabs(route)}${body}`;
 }
 
 function taskDetail(state, route) {

@@ -20,6 +20,7 @@ const menuLabel = menuToggle?.querySelector('.sr-only');
 const main = document.getElementById('view');
 const fab = document.getElementById('fab');
 const todayEl = document.getElementById('today-date');
+const storageStatus = document.getElementById('storage-status');
 const accountButton = document.getElementById('account-name');
 const desktopQuery = window.matchMedia('(min-width: 900px)');
 let lastFocused = null;
@@ -146,6 +147,7 @@ function render() {
   mountView(route, query, state);
   setDrawer(false);
   if (accountButton) accountButton.textContent = state.account.name;
+  if (storageStatus) storageStatus.textContent = state.persistentStorage?.status ?? 'Unsupported';
   if (todayEl) todayEl.textContent = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   window.scrollTo(0, 0);
 }

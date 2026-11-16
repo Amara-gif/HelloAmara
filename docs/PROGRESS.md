@@ -35,7 +35,7 @@ Standards:
 | Phase | Scope | Status |
 |---|---|---|
 | P0 | Static shell, design system, inventory navigation | **Done** (evidence retained below) |
-| P1 | IndexedDB wrapper, schema versioning, `meta`, tests | **Partial** — wrapper + demo seed + accounts + fake-IDB CRUD/schema/soft-delete tests; no `storage.persist()` UI |
+| P1 | IndexedDB wrapper, schema versioning, `meta`, tests | **Done** — wrapper + demo seed + accounts + fake-IDB CRUD/schema/soft-delete/boot tests + per-account persistent-storage request/status (meta, sidebar, Settings) |
 | P2 | Tasks, Home, My work, Calendar, Projects, Pages | **Partial** — rich shells + demo data; many inventory interactions still incomplete |
 | P3 | Bugs and events | **Partial** — list/detail/create + event CRUD; workflow gates and inline edits incomplete |
 | P4 | Export and import | **Not started** |
@@ -56,6 +56,7 @@ assets/js/
   accounts.js   local account registry (LocalStorage); Test account + empty accounts
   db.js         IndexedDB open/CRUD; DB name my-platform-<accountId>; version 1
   data.js       domain ops (tasks/bugs/events/pages/projects/orders/settings)
+                + per-account navigator.storage.persist() status in meta
   demo-data.js  seed rows for the Test account
   app.js        hash router, drawer, create FAB, form handlers
   routes.js     inventory §1 nav + detail patterns
@@ -120,7 +121,11 @@ Phone/tablet PNGs are listed for completeness; they are not a layout target.
 - Context menu disabled; Create FAB → Task/Bug/Event dialogs persist to IndexedDB
 - Per-account IndexedDB (`my-platform-<id>`) with soft deletes (`deletedAt`) and `updatedAt`
 - Node tests (`npm test`, fake-indexeddb): CRUD for every store, version 1 → 2 schema upgrade,
-  live-only soft-delete filtering through `data.js`, and Test-account seeding
+  live-only soft-delete filtering through `data.js`, Test-account seeding, and
+  persistent-storage Granted / Denied / Unsupported status
+- Per-account persistent storage: `navigator.storage.persist()` is called on account boot,
+  its boolean result is stored in that account's `meta`, and the status appears in the
+  sidebar note and Settings
 - Demo seed for Test account (projects, tasks, bugs, events, pages, team, orders, ratings)
 - CRUD paths for tasks/bugs/events/pages/projects/orders/settings used by the shells
 - Home/My work/Tasks/Bugs/Calendar/Team/Projects/Pages/Settings screens render with live local data
@@ -184,6 +189,6 @@ Phone/tablet PNGs are listed for completeness; they are not a layout target.
 
 ## Next
 
-Ordered backlog: [TASKS.md](TASKS.md). Start with P1 leftovers (persistent-storage status), then
-screen/feature slices that stay independently verifiable. Skip Pages enablement, deploy,
+Ordered backlog: [TASKS.md](TASKS.md). P1 leftovers (persistent-storage status) are done; start
+with screen/feature slices that stay independently verifiable. Skip Pages enablement, deploy,
 P6 scraper, and any spend/delete-remote-data work.

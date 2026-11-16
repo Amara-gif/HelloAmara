@@ -87,6 +87,7 @@ docs/PROGRESS.md         phase log, evidence and checklist counts
 ## Status
 
 Phase P0 (static shell) is complete. The sidebar matches inventory §1, the Settings sub-links
-expand on every `/settings*` page, and three acceptance items are checked. P1 now has
-Node-based IndexedDB CRUD and schema-upgrade tests; persistent-storage status is still pending.
+expand on every `/settings*` page, and three acceptance items are checked. P1's data layer is
+complete: Node-based IndexedDB CRUD and schema-upgrade tests plus per-account persistent-storage
+request/status (`Granted` / `Denied` / `Unsupported`, shown in the sidebar and Settings).
 Phases P1–P7 are tracked in [docs/PROGRESS.md](docs/PROGRESS.md).
