@@ -59,6 +59,7 @@ assets/js/
                 + per-account navigator.storage.persist() status in meta
   demo-data.js  seed rows for the Test account
   app.js        hash router, drawer, create FAB, form handlers
+  nav-badge.js  In-progress task count + nav badge visibility
   routes.js     inventory §1 nav + detail patterns
   views.js      screen renderers
   chart.js, ui.js, icons.js, styleguide.js
@@ -116,13 +117,14 @@ Phone/tablet PNGs are listed for completeness; they are not a layout target.
 
 - Design system: tokens, components, styleguide, `check-styles.mjs`, self-hosted charts/toasts/dialogs
 - Hash router + inventory §1 sidebar order; Settings sub-links expand on `/settings*`
-- Project sub-links under Projects (non-archived); In-progress badge updates on tasks routes
+- Project sub-links under Projects (non-archived); In-progress badge recomputed on every route
 - Mobile drawer (inert when closed, focus trap, Escape, backdrop)
 - Context menu disabled; Create FAB → Task/Bug/Event dialogs persist to IndexedDB
 - Per-account IndexedDB (`my-platform-<id>`) with soft deletes (`deletedAt`) and `updatedAt`
 - Node tests (`npm test`, fake-indexeddb): CRUD for every store, version 1 → 2 schema upgrade,
-  live-only soft-delete filtering through `data.js`, Test-account seeding, and
-  persistent-storage Granted / Denied / Unsupported status
+  live-only soft-delete filtering through `data.js`, Test-account seeding,
+  persistent-storage Granted / Denied / Unsupported status, and nav In-progress badge
+  count/show/hide through `nav-badge.js`
 - Per-account persistent storage: `navigator.storage.persist()` is called on account boot,
   its boolean result is stored in that account's `meta`, and the status appears in the
   sidebar note and Settings

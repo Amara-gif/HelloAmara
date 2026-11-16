@@ -47,8 +47,9 @@ npm test
 
 `npm test` runs `node --test` and creates a temporary database per test. It covers
 `put`/`get`/`getAll`/`clear` for every store in `assets/js/db.js`, the version 1 schema plus a
-version 1 → 2 upgrade, soft-delete filtering through `assets/js/data.js` (live rows only), and
-Test-account boot with demo data. Tests live in `tests/` and clean up their databases.
+version 1 → 2 upgrade, soft-delete filtering through `assets/js/data.js` (live rows only),
+Test-account boot with demo data, and the nav In-progress badge count/show/hide helper. Tests
+live in `tests/` and clean up their databases.
 
 ## UI rules
 
@@ -70,6 +71,7 @@ styleguide.html          every token and component on one page
 assets/css/tokens.css    global design variables
 assets/css/components.css layout and shared components
 assets/js/app.js         navigation, drawer, hash router bootstrap
+assets/js/nav-badge.js   In-progress task count and nav badge visibility
 assets/js/routes.js      route table and sidebar order from inventory §1
 assets/js/views.js       screen shells
 assets/js/icons.js       inline icon set

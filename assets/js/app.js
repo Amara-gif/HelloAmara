@@ -8,6 +8,7 @@ import {
 import { readLocation, routeForPath, groupRoutes, SETTINGS_LINKS } from './routes.js';
 import { renderView, mountView, renderAccountScreen, renderCreateDialog } from './views.js';
 import { icon } from './icons.js';
+import { updateTaskBadge } from './nav-badge.js';
 import { openModal, toast } from './ui.js';
 
 const shell = document.getElementById('shell');
@@ -116,11 +117,7 @@ function updateNav(route) {
     nav.querySelector('[data-route="projects"]')?.classList.add('is-section');
     nav.querySelector(`[data-project-key="${escAttr(route.params.key)}"]`)?.setAttribute('aria-current', 'page');
   }
-  if (route.id === 'tasks' || route.id === 'task-detail') {
-    const count = getState().tasks.filter((task) => task.status === 'In progress').length;
-    const badge = nav.querySelector('[data-task-count]');
-    if (badge) { badge.textContent = String(count); badge.hidden = count === 0; }
-  }
+  updateTaskBadge(nav.querySelector('[data-task-count]'), getState().tasks);
 }
 
 function applyAppearance(settings) {
