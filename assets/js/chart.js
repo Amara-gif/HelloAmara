@@ -51,8 +51,32 @@ export function renderBarChart(container, { labels = [], values = [], title = 'B
   return svg;
 }
 
-export function renderLineChart(container, { labels = [], series = [], title = 'Line chart' } = {}) {
+// Catmull-Rom control points keep the curve inside the data without adding a
+// chart dependency. "straight" is the legacy polyline path.
+export function buildLinePath(points, lineStyle = 'smooth') {
+  if (!points.length) return '';
+  if (lineStyle === 'straight' || points.length < 3) {
+    return points.map((point, index) => `${index ? 'L' : 'M'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
+  }
+  const at = (index) => points[Math.max(0, Math.min(points.length - 1, index))];
+  let path = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const previous = at(index - 1);
+    const start = at(index);
+    const end = at(index + 1);
+    const next = at(index + 2);
+    const cp1x = start.x + (end.x - previous.x) / 6;
+    const cp1y = start.y + (end.y - previous.y) / 6;
+    const cp2x = end.x - (next.x - start.x) / 6;
+    const cp2y = end.y - (next.y - start.y) / 6;
+    path += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${end.x.toFixed(1)} ${end.y.toFixed(1)}`;
+  }
+  return path;
+}
+
+export function renderLineChart(container, { labels = [], series = [], title = 'Line chart', lineStyle = 'smooth', curve } = {}) {
   if (!container) throw new Error('renderLineChart: container is required');
+  const pathStyle = curve === undefined ? (lineStyle === 'straight' ? 'straight' : 'smooth') : (curve ? 'smooth' : 'straight');
   const width = 620;
   const height = 260;
   const pad = { top: 20, right: 16, bottom: 30, left: 34 };
@@ -83,8 +107,8 @@ export function renderLineChart(container, { labels = [], series = [], title = '
   });
 
   series.forEach((item, seriesIndex) => {
-    const path = item.values.map((value, index) => `${index ? 'L' : 'M'} ${xAt(index).toFixed(1)} ${yAt(value).toFixed(1)}`).join(' ');
-    svg.append(svgEl('path', { class: `chart-line chart-line-${seriesIndex + 1}`, d: path }));
+    const points = item.values.map((value, index) => ({ x: xAt(index), y: yAt(value) }));
+    svg.append(svgEl('path', { class: `chart-line chart-line-${seriesIndex + 1}`, d: buildLinePath(points, pathStyle) }));
     item.values.forEach((value, index) => {
       svg.append(svgEl('circle', { class: `chart-point chart-line-${seriesIndex + 1}`, cx: xAt(index), cy: yAt(value), r: 2.3 }));
     });
@@ -170,4 +194,109 @@ export function renderDonutChart(container, { labels = [], values = [], title = 
   caption.textContent = labels.length === 1 ? 'item' : 'items';
   svg.append(caption);
   return svg;
+}
+
+// Copy helpers keep chart export inside the only chart module. PNG through a
+// canvas is tried first because more clipboards accept it; SVG is the fallback
+// on browsers that expose image support but reject PNG write.
+function chartSize(svg) {
+  const viewBox = String(svg.getAttribute('viewBox') ?? '').split(/\s+/).map(Number);
+  const width = Number.isFinite(viewBox[2]) && viewBox[2] > 0 ? viewBox[2] : 620;
+  const height = Number.isFinite(viewBox[3]) && viewBox[3] > 0 ? viewBox[3] : 260;
+  return { width, height };
+}
+
+function tokenValue(name) {
+  try {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  } catch {
+    return '';
+  }
+}
+
+function copyPaint(source, target) {
+  if (target.tagName.toLowerCase() === 'title') return;
+  const computed = getComputedStyle(source);
+  for (const name of ['fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'fill-opacity', 'stroke-opacity', 'opacity']) {
+    const value = computed.getPropertyValue(name);
+    if (value) target.setAttribute(name, value);
+  }
+  if (target.tagName.toLowerCase() === 'text') {
+    for (const name of ['font-family', 'font-size', 'font-weight']) {
+      const value = computed.getPropertyValue(name);
+      if (value) target.setAttribute(name, value);
+    }
+  }
+}
+
+export function serializeChart(svg) {
+  if (!svg) throw new Error('serializeChart: an SVG is required');
+  const { width, height } = chartSize(svg);
+  const clone = svg.cloneNode(true);
+  const originals = [...svg.querySelectorAll('*')];
+  const copies = [...clone.querySelectorAll('*')];
+  originals.forEach((source, index) => copyPaint(source, copies[index]));
+  const background = svgEl('rect', { x: 0, y: 0, width, height, fill: tokenValue('--color-surface') || 'white' });
+  const firstGraphic = [...clone.children].find((child) => child.tagName !== 'title');
+  clone.insertBefore(background, firstGraphic ?? null);
+  clone.setAttribute('xmlns', SVG_NS);
+  clone.setAttribute('width', String(width));
+  clone.setAttribute('height', String(height));
+  return `<?xml version="1.0" encoding="UTF-8"?>${new XMLSerializer().serializeToString(clone)}`;
+}
+
+function loadSvgImage(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('The chart image could not be prepared.'));
+    image.src = url;
+  });
+}
+
+async function chartPngBlob(svg) {
+  if (typeof XMLSerializer === 'undefined' || typeof Image === 'undefined' || typeof document === 'undefined') return null;
+  const { width, height } = chartSize(svg);
+  const markup = serializeChart(svg);
+  const url = URL.createObjectURL(new Blob([markup], { type: 'image/svg+xml' }));
+  try {
+    const image = await loadSvgImage(url);
+    const canvas = document.createElement('canvas');
+    canvas.width = width * 2;
+    canvas.height = height * 2;
+    const context = canvas.getContext('2d');
+    if (!context) return null;
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+export async function copyChartImage(container) {
+  const svg = container?.tagName?.toLowerCase() === 'svg' ? container : container?.querySelector?.('svg');
+  if (!svg) throw new Error('There is no chart to copy.');
+  const clipboard = globalThis.navigator?.clipboard;
+  const ClipboardItemType = globalThis.ClipboardItem;
+  if (!clipboard?.write || typeof ClipboardItemType !== 'function') {
+    throw new Error('Clipboard image copy is not available.');
+  }
+
+  try {
+    // Pass the PNG promise to ClipboardItem so the write starts while the
+    // click still counts as a user gesture.
+    await clipboard.write([new ClipboardItemType({ 'image/png': chartPngBlob(svg) })]);
+    return 'png';
+  } catch {
+    // Some browsers accept SVG clipboard items but not canvas PNG.
+  }
+
+  try {
+    const markup = serializeChart(svg);
+    const blob = new Blob([markup], { type: 'image/svg+xml' });
+    await clipboard.write([new ClipboardItemType({ 'image/svg+xml': blob })]);
+    return 'svg';
+  } catch {
+    throw new Error('Clipboard image copy is not available.');
+  }
 }

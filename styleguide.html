@@ -176,6 +176,58 @@
         </div>
       </section>
 
+      <section class="section" aria-labelledby="sg-appearance-title">
+        <div class="section-head">
+          <h2 id="sg-appearance-title">Appearance presets</h2>
+          <p>
+            Six palette presets set the primary colour and its related accent tokens. Button and
+            card radius and glass opacity are applied as CSS variables on <code>:root</code>.
+          </p>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <div class="palette-grid">
+              <button class="palette-card" type="button" data-palette="soft" aria-pressed="true">
+                <span class="palette-dots" aria-hidden="true"><span class="palette-dot palette-dot-primary"></span><span class="palette-dot palette-dot-strong"></span><span class="palette-dot"></span></span>
+                <span class="palette-name">Soft A2</span>
+                <span class="palette-note">My palette</span>
+              </button>
+              <button class="palette-card" type="button" data-palette="apple" aria-pressed="false">
+                <span class="palette-dots" aria-hidden="true"><span class="palette-dot palette-dot-primary"></span><span class="palette-dot palette-dot-strong"></span><span class="palette-dot"></span></span>
+                <span class="palette-name">Apple system</span>
+                <span class="palette-note">Bright system blue</span>
+              </button>
+              <button class="palette-card" type="button" data-palette="ocean" aria-pressed="false">
+                <span class="palette-dots" aria-hidden="true"><span class="palette-dot palette-dot-primary"></span><span class="palette-dot palette-dot-strong"></span><span class="palette-dot"></span></span>
+                <span class="palette-name">Ocean cool</span>
+                <span class="palette-note">Teal and sea glass</span>
+              </button>
+              <button class="palette-card" type="button" data-palette="sunset" aria-pressed="false">
+                <span class="palette-dots" aria-hidden="true"><span class="palette-dot palette-dot-primary"></span><span class="palette-dot palette-dot-strong"></span><span class="palette-dot"></span></span>
+                <span class="palette-name">Sunset warm</span>
+                <span class="palette-note">Warm coral</span>
+              </button>
+              <button class="palette-card" type="button" data-palette="candy" aria-pressed="false">
+                <span class="palette-dots" aria-hidden="true"><span class="palette-dot palette-dot-primary"></span><span class="palette-dot palette-dot-strong"></span><span class="palette-dot"></span></span>
+                <span class="palette-name">Candy pop</span>
+                <span class="palette-note">Berry magenta</span>
+              </button>
+              <button class="palette-card" type="button" data-palette="graphite" aria-pressed="false">
+                <span class="palette-dots" aria-hidden="true"><span class="palette-dot palette-dot-primary"></span><span class="palette-dot palette-dot-strong"></span><span class="palette-dot"></span></span>
+                <span class="palette-name">Graphite mono</span>
+                <span class="palette-note">Neutral ink</span>
+              </button>
+            </div>
+            <div class="theme-preview" role="group" aria-label="Live preview">
+              <span class="theme-preview-label">Live preview</span>
+              <span class="btn btn-primary btn-sm" aria-hidden="true">Primary</span>
+              <span class="btn btn-sm" aria-hidden="true">Secondary</span>
+              <span class="chip is-active" aria-hidden="true">Selected chip</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="section" aria-labelledby="sg-fields-title">
         <div class="section-head">
           <h2 id="sg-fields-title">Form fields</h2>
@@ -211,7 +263,7 @@
         </div>
       </section>
 
-      <section class="section" aria-labelledby="sg-attachments-title">
+<section class="section" aria-labelledby="sg-attachments-title">
         <div class="section-head">
           <h2 id="sg-attachments-title">Local attachments</h2>
           <p>Drop, paste or choose a file on a task or bug detail page. The file is stored in IndexedDB and is never uploaded.</p>
@@ -239,6 +291,45 @@
           </div>
         </div>
       </section>
+
+<section class="section" aria-labelledby="sg-settings-title">
+        <div class="section-head">
+          <h2 id="sg-settings-title">Settings save bar and chips</h2>
+          <p>
+            Settings forms share one dirty/saved line and one primary Save button. Chips can
+            carry an inline remove control for editable lists.
+          </p>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <form class="form-grid" data-settings-form>
+              <div class="field field-wide">
+                <label for="sg-settings-example">Example setting</label>
+                <input id="sg-settings-example" type="text" value="Battery" />
+                <p class="field-help">Start typing to see the shared dirty-state text.</p>
+              </div>
+              <div class="settings-save-bar field-wide">
+                <p
+                  class="field-help settings-save-state"
+                  data-save-state
+                  data-dirty-text="Unsaved changes. Save before leaving."
+                  data-saved-text="All changes saved."
+                  aria-live="polite"
+                >All changes saved.</p>
+                <div class="row-actions">
+                  <button class="btn btn-primary" type="button">Save changes</button>
+                </div>
+              </div>
+            </form>
+            <div class="chip-row">
+              <span class="chip">Battery<button class="chip-remove" type="button" aria-label="Remove Battery">×</button></span>
+              <span class="chip">Display<button class="chip-remove" type="button" aria-label="Remove Display">×</button></span>
+              <span class="chip">Firmware<button class="chip-remove" type="button" aria-label="Remove Firmware">×</button></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
 
       <section class="section" aria-labelledby="sg-table-title">
         <div class="section-head">
@@ -557,7 +648,7 @@
         </div>
       </section>
 
-      <section class="section" aria-labelledby="sg-page-editor-title">
+<section class="section" aria-labelledby="sg-page-editor-title">
         <div class="section-head">
           <h2 id="sg-page-editor-title">Page editor and revision history</h2>
           <p>
@@ -608,7 +699,7 @@
         </section>
       </section>
 
-      <section class="section" aria-labelledby="sg-print-title">
+<section class="section" aria-labelledby="sg-print-title">
         <div class="section-head">
           <h2 id="sg-print-title">Printable page</h2>
           <p>
@@ -635,6 +726,66 @@
           </div>
         </article>
       </section>
+
+<section class="section" aria-labelledby="sg-team-title">
+        <div class="section-head">
+          <h2 id="sg-team-title">Team lead, workload and order card</h2>
+          <p>
+            The lead strip pairs the owner identity with five stat tiles. Agent cards use the same
+            card and field components, plus workload counts and an order composer.
+          </p>
+        </div>
+        <section class="card team-lead">
+          <div class="card-body team-lead-body">
+            <div class="team-lead-id">
+              <span class="avatar avatar-lg" title="Amara">A</span>
+              <div>
+                <h2 class="team-lead-name">Amara</h2>
+                <p class="row-meta">You lead this team · Lead / owner</p>
+              </div>
+            </div>
+            <div class="stat-grid team-lead-stats">
+              <div class="stat"><strong>2</strong><span>Decisions awaiting the lead</span></div>
+              <div class="stat"><strong>3</strong><span>Reviews ready</span></div>
+              <div class="stat"><strong>4</strong><span>People working</span></div>
+              <div class="stat"><strong>9</strong><span>Open work items</span></div>
+              <div class="stat"><strong>4</strong><span>Today's actions</span></div>
+            </div>
+          </div>
+        </section>
+        <div class="card-grid">
+          <section class="card team-card">
+            <div class="card-body">
+              <div class="team-head">
+                <span class="avatar avatar-lg" title="Marlowe Quinn">MQ</span>
+                <div><span class="table-title">Marlowe Quinn</span><span class="row-meta">Steward</span></div>
+                <span class="badge badge-accent"><span class="badge-dot" aria-hidden="true"></span>Working</span>
+              </div>
+              <dl class="details compact">
+                <div><dt>Focus</dt><dd>Queue health and owner routing</dd></div>
+                <div><dt>Latest activity</dt><dd>Routed two new work items</dd></div>
+                <div><dt>Model</dt><dd>deepseek-v4-flash</dd></div>
+              </dl>
+              <div class="team-counts">
+                <div class="team-count"><strong>4</strong><span>on the list</span></div>
+                <div class="team-count"><strong>1</strong><span>new orders</span></div>
+                <div class="team-count"><strong>2</strong><span>today</span></div>
+              </div>
+              <form class="order-form">
+                <div class="field">
+                  <label for="sg-order-text">Give Marlowe Quinn an order</label>
+                  <textarea id="sg-order-text" name="text" rows="2" placeholder="Tell Marlowe Quinn what to do, in plain words."></textarea>
+                </div>
+                <div class="row-actions">
+                  <button class="btn btn-primary btn-sm" type="button">Send</button>
+                  <button class="btn btn-ghost btn-sm" type="button">To-do list</button>
+                </div>
+              </form>
+            </div>
+          </section>
+        </div>
+      </section>
+
 
       <section class="section" aria-labelledby="sg-feedback-title">
         <div class="section-head">

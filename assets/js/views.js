@@ -12,6 +12,12 @@ import {
   attachmentsFingerprint,
   taskReviewFingerprint,
   exportStatus,
+  BUG_SEVERITIES,
+  normalizeBugSeverity,
+  normalizeBugStatus,
+  bugWorkflowTargets,
+  BUG_REASON_REQUIRED_STATUSES,
+  AI_LIMIT_DEFAULTS,
 } from './data.js';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
@@ -253,6 +259,7 @@ function home(state) {
   const hour = new Date().getHours();
   const greeting = `${hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'}, Amara`;
   const load = teamLoadSeries(state);
+  const ratingRows = visibleRatingSeries(state.ratings);
   return `
     ${pageHead(greeting, new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }))}
     ${exportReminder(state)}
@@ -277,7 +284,7 @@ function home(state) {
           <div class="card-head"><h2>Rating trend · live</h2><a class="card-link-small" href="#/rating-trend">Open big</a></div>
           <div class="card-body">
             <div class="chart-box" id="home-rating"></div>
-            <div class="chart-legend">${(state.ratings?.series ?? []).slice(0, 4).map((item, index) => `<span class="chart-legend-item"><span class="chart-dot chart-line-${index + 1}"></span>${esc(item.name)}</span>`).join('')}</div>
+            <div class="chart-legend">${ratingRows.slice(0, 4).map((item, index) => `<span class="chart-legend-item"><span class="chart-dot chart-line-${index + 1}"></span>${esc(item.name)}</span>`).join('')}</div>
           </div>
         </section>
         <section class="card">
@@ -1080,57 +1087,143 @@ function calendarPage(state, query) {
     </section>`;
 }
 
-function bugsPage(state, query) {
-  const q = (query.get('q') ?? '').toLowerCase();
+const BUG_STATUSES = ['New', 'Triaged', 'In progress', 'Fixed', 'Verified', 'Closed', 'Reopened', 'Duplicate', 'Wont fix', 'Deferred', 'Rejected'];
+const BUG_COMPONENTS = ['work desk', 'inbox', 'bugs page', 'tasks page', 'overview', 'calendar', 'chat', 'settings', 'scraper', 'pipeline', 'report deck', 'chart studio', 'other'];
+const BUG_SORT_OPTIONS = [
+  ['smart', 'Smart order'],
+  ['newest', 'Newest'],
+  ['oldest', 'Oldest'],
+  ['severity', 'Severity'],
+  ['due', 'Due date'],
+  ['key', 'Key'],
+];
+const BUG_CLOSED_STATUSES = ['Closed', 'Verified', 'Wont fix'];
+const bugKeyCompare = (a, b) => a.key.localeCompare(b.key, undefined, { numeric: true });
+const bugDueValue = (bug) => dateOnly(bug.due) || '9999-12-31';
+const bugSeverityRank = (bug) => {
+  const rank = BUG_SEVERITIES.indexOf(bug.severity);
+  return rank === -1 ? BUG_SEVERITIES.length : rank;
+};
+const bugPriorityRank = (bug) => {
+  const rank = PRIORITY_ORDER.indexOf(bug.priority);
+  return rank === -1 ? PRIORITY_ORDER.length : rank;
+};
+const bugOpenRank = (bug) => (BUG_CLOSED_STATUSES.includes(bug.status) ? 1 : 0);
+
+export function filterBugs(state, query) {
+  const q = (query.get('q') ?? '').trim();
   const status = query.get('status') ?? '';
-  const assignee = query.get('assignee') ?? '';
   const severity = query.get('severity') ?? '';
-  const rows = state.bugs.filter((bug) => (!q || `${bug.title} ${bug.key} ${bug.description}`.toLowerCase().includes(q)) && (!status || bug.status === status) && (!assignee || bug.assignee === assignee) && (!severity || bug.severity === severity));
-  const open = state.bugs.filter((bug) => !['Closed', 'Verified', 'Wont fix'].includes(bug.status)).length;
-  const waiting = state.bugs.filter((bug) => bug.status === 'Fixed').length;
-  const past = state.bugs.filter((bug) => bug.due && bug.due < today() && !['Closed', 'Verified', 'Wont fix'].includes(bug.status)).length;
+  const priorityFilter = query.get('priority') ?? '';
+  const component = query.get('component') ?? '';
+  const assignee = query.get('assignee') ?? '';
+  const sortParam = query.get('sort') ?? 'smart';
+  const sort = BUG_SORT_OPTIONS.some(([value]) => value === sortParam) ? sortParam : 'smart';
+  const needle = q.toLowerCase();
+
+  let rows = (state.bugs ?? []).filter((bug) => {
+    const haystack = `${bug.title ?? ''} ${bug.key ?? ''} ${bug.description ?? ''} ${bug.component ?? ''} ${bug.assignee ?? ''}`.toLowerCase();
+    return (!needle || haystack.includes(needle))
+      && (!status || bug.status === status)
+      && (!severity || bug.severity === severity)
+      && (!priorityFilter || bug.priority === priorityFilter)
+      && (!component || bug.component === component)
+      && (!assignee || bug.assignee === assignee);
+  });
+
+  rows = [...rows].sort((a, b) => {
+    if (sort === 'newest') return String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')) || bugKeyCompare(a, b);
+    if (sort === 'oldest') return String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')) || bugKeyCompare(a, b);
+    if (sort === 'severity') {
+      return bugSeverityRank(a) - bugSeverityRank(b)
+        || bugOpenRank(a) - bugOpenRank(b)
+        || bugPriorityRank(a) - bugPriorityRank(b)
+        || bugDueValue(a).localeCompare(bugDueValue(b))
+        || bugKeyCompare(a, b);
+    }
+    if (sort === 'due') {
+      return bugDueValue(a).localeCompare(bugDueValue(b))
+        || bugOpenRank(a) - bugOpenRank(b)
+        || bugSeverityRank(a) - bugSeverityRank(b)
+        || bugKeyCompare(a, b);
+    }
+    if (sort === 'key') return bugKeyCompare(a, b);
+    return bugOpenRank(a) - bugOpenRank(b)
+      || bugSeverityRank(a) - bugSeverityRank(b)
+      || bugPriorityRank(a) - bugPriorityRank(b)
+      || bugDueValue(a).localeCompare(bugDueValue(b))
+      || bugKeyCompare(a, b);
+  });
+
+  return { rows, q, status, severity, priority: priorityFilter, component, assignee, sort };
+}
+
+function bugsPage(state, query) {
+  const { rows, q, status, severity, priority: priorityFilter, component, assignee, sort } = filterBugs(state, query);
+  const bugs = state.bugs ?? [];
+  const open = bugs.filter((bug) => !BUG_CLOSED_STATUSES.includes(bug.status)).length;
+  const waiting = bugs.filter((bug) => bug.status === 'Fixed').length;
+  const past = bugs.filter((bug) => bug.due && dateOnly(bug.due) < today() && !BUG_CLOSED_STATUSES.includes(bug.status)).length;
+  const unique = (field) => [...new Set(bugs.map((bug) => bug[field]).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
   return `
     ${pageHead('Bugs', 'Defects with the eleven-status workflow.', `<a class="btn btn-primary" href="#/bugs/new">${icon('bug', 16)}Report a bug</a>`)}
     <div class="stat-grid">
       <div class="stat"><strong>${open}</strong><span>Open</span></div>
-      <div class="stat"><strong>${state.bugs.length}</strong><span>Total</span></div>
+      <div class="stat"><strong>${bugs.length}</strong><span>Total</span></div>
       <div class="stat"><strong>${waiting}</strong><span>Waiting for QA</span></div>
       <div class="stat"><strong>${past}</strong><span>Past due</span></div>
     </div>
     <form class="toolbar" data-form="bug-filters">
-      <input class="input" type="search" name="q" value="${esc(query.get('q') ?? '')}" placeholder="Search bugs…" aria-label="Search bugs" />
-      <select class="select" name="status"><option value="">All statuses</option>${['New', 'Triaged', 'In progress', 'Fixed', 'Verified', 'Closed', 'Reopened', 'Duplicate', 'Wont fix', 'Deferred', 'Rejected'].map((value) => option(value, status)).join('')}</select>
-      <select class="select" name="assignee"><option value="">All assignees</option>${[...new Set(state.bugs.map((bug) => bug.assignee))].map((value) => option(value, assignee)).join('')}</select>
-      <select class="select" name="severity"><option value="">All severities</option>${['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'].map((value) => option(value, severity)).join('')}</select>
+      <input class="input" type="search" name="q" value="${esc(q)}" placeholder="Search bugs…" aria-label="Search bugs" />
+      <select class="select" name="status" aria-label="Status"><option value="">All statuses</option>${BUG_STATUSES.map((value) => option(value, status)).join('')}</select>
+      <select class="select" name="severity" aria-label="Severity"><option value="">All severities</option>${BUG_SEVERITIES.map((value) => option(value, severity)).join('')}</select>
+      <select class="select" name="priority" aria-label="Priority"><option value="">All priorities</option>${PRIORITY_ORDER.map((value) => option(value, priorityFilter)).join('')}</select>
+      <select class="select" name="component" aria-label="Component"><option value="">All components</option>${unique('component').map((value) => option(value, component)).join('')}</select>
+      <select class="select" name="assignee" aria-label="Assignee"><option value="">All assignees</option>${unique('assignee').map((value) => option(value, assignee)).join('')}</select>
+      <select class="select" name="sort" aria-label="Sort">${BUG_SORT_OPTIONS.map(([value, label]) => option(value, sort, label)).join('')}</select>
       <button class="btn btn-sm btn-primary" type="submit">Apply</button><a class="btn btn-ghost btn-sm" href="#/bugs">Reset</a>
     </form>
+    <div class="toolbar" aria-label="Bulk actions">
+      <span class="toolbar-count" data-bug-selection aria-live="polite">0 selected</span>
+      <button class="btn btn-danger btn-sm" type="button" data-action="delete-selected-bugs" disabled>Delete selected</button>
+    </div>
     <div class="table-wrap"><table class="table table-stack">
-      <thead><tr><th>Key</th><th>Summary</th><th>Status</th><th>Assignee</th><th>Due</th><th>Priority</th><th>Severity</th><th>Component</th><th>Age</th></tr></thead>
-      <tbody>${rows.map((bug) => `<tr><td data-label="Key"><a class="key-link" href="#/bug/${bug.id}">${esc(bug.key)}</a></td><td data-label="Summary"><a class="table-title" href="#/bug/${bug.id}">${esc(bug.title)}</a></td><td data-label="Status">${statusBadge(bug.status)}</td><td data-label="Assignee"><span class="assignee">${avatar(bug.assignee)}${esc(bug.assignee)}</span></td><td data-label="Due">${fmt(bug.due)}</td><td data-label="Priority">${priority(bug.priority)}</td><td data-label="Severity">${esc(bug.severity)}</td><td data-label="Component">${esc(bug.component)}</td><td data-label="Age">${age(bug.createdAt)}</td></tr>`).join('') || `<tr><td colspan="9">${empty('No bugs match these filters.')}</td></tr>`}</tbody>
+      <thead><tr><th><input type="checkbox" data-select-all-bugs aria-label="Select all bugs" /> Key</th><th>Summary</th><th>Status</th><th>Assignee</th><th>Due</th><th>Priority</th><th>Severity</th><th>Component</th><th>Age</th></tr></thead>
+      <tbody>${rows.map((bug) => `<tr><td data-label="Key"><input type="checkbox" data-bug-select value="${esc(bug.id)}" aria-label="Select ${esc(bug.key)}" /> <a class="key-link" href="#/bug/${bug.id}">${esc(bug.key)}</a></td><td data-label="Summary"><a class="table-title" href="#/bug/${bug.id}">${esc(bug.title)}</a></td><td data-label="Status">${statusBadge(bug.status)}</td><td data-label="Assignee"><span class="assignee">${avatar(bug.assignee)}${esc(bug.assignee)}</span></td><td data-label="Due">${fmt(bug.due)}</td><td data-label="Priority">${priority(bug.priority)}</td><td data-label="Severity">${esc(bug.severity)}</td><td data-label="Component">${esc(bug.component)}</td><td data-label="Age">${age(bug.createdAt)}</td></tr>`).join('') || `<tr><td colspan="9">${empty('No bugs match these filters.')}</td></tr>`}</tbody>
     </table></div>`;
 }
 
 function teamPage(state) {
   const openTasks = state.tasks.filter((task) => task.status !== 'Done');
+  const lead = state.team.find((agent) => /lead|owner/i.test(String(agent?.role ?? ''))) ?? state.team[0];
+  const leadName = String(lead?.name ?? 'Amara');
   const stats = [
-    ['Decisions waiting', openTasks.filter((task) => task.pendingDecision).length],
+    ['Decisions awaiting the lead', openTasks.filter((task) => task.pendingDecision || String(task.notes ?? '').includes('[待确认')).length],
     ['Reviews ready', state.tasks.filter((task) => task.status === 'Done' && !task.reviewed).length],
-    ['People working', state.team.filter((agent) => agent.status === 'Working').length],
+    ['People working', state.team.filter((agent) => /^working$/i.test(String(agent.status ?? ''))).length],
     ['Open work items', openTasks.length],
-    ['Actions today', state.events.filter((event) => event.date === today()).length],
+    ["Today's actions", state.events.filter((event) => event.date === today()).length],
   ];
   return `
     ${pageHead('Team', 'Decisions, blocked work and the agents who own it.', `<button class="btn" type="button" data-action="open-create">${icon('spark', 16)}New order</button>`)}
-    <div class="stat-grid">${stats.map(([label, value]) => `<div class="stat"><strong>${value}</strong><span>${label}</span></div>`).join('')}</div>
+    <section class="card team-lead" aria-labelledby="team-lead-name">
+      <div class="card-body team-lead-body">
+        <div class="team-lead-id">${avatar(leadName, 'avatar-lg')}<div><h2 class="team-lead-name" id="team-lead-name">${esc(leadName)}</h2><p class="row-meta">You lead this team · ${esc(lead?.role ?? 'Lead / owner')}</p><p class="row-meta">${esc(lead?.focus ?? '')}</p></div></div>
+        <div class="stat-grid team-lead-stats">${stats.map(([label, value]) => `<div class="stat"><strong>${value}</strong><span>${label}</span></div>`).join('')}</div>
+      </div>
+    </section>
     <div class="card-grid three-up">
       ${state.team.map((agent) => {
         const owned = openTasks.filter((task) => task.owner === agent.name);
         const openOrders = state.orders.filter((order) => order.owner === agent.name && order.open);
-        return `<section class="card team-card">
+        const todayCount = owned.filter((task) => dateOnly(task.updatedAt) === today()).length + openOrders.filter((order) => dateOnly(order.createdAt) === today()).length;
+        const name = owned[0] ? `<a class="table-title" href="#/task/${owned[0].id}">${esc(agent.name)}</a>` : `<span class="table-title">${esc(agent.name)}</span>`;
+        return `<section class="card team-card" data-team-agent="${esc(agent.name)}">
           <div class="card-body">
-            <div class="team-head">${avatar(agent.name, 'avatar-lg')}<div><a class="table-title" href="#/task/${owned[0]?.id ?? ''}">${esc(agent.name)}</a><span class="row-meta">${esc(agent.role)} · ${esc(agent.status)}</span></div><span class="badge badge-${agent.status === 'Working' ? 'accent' : 'muted'}">${esc(agent.status)}</span></div>
-            <dl class="details compact"><div><dt>Focus</dt><dd>${esc(agent.focus)}</dd></div><div><dt>Workload</dt><dd>${owned.length} open${openOrders.length ? ` · ${openOrders.length} order` : ''}</dd></div><div><dt>Model</dt><dd>${esc(agent.model)}</dd></div><div><dt>Latest</dt><dd>${esc(agent.activity)}</dd></div></dl>
-            <form class="order-form" data-form="order"><input type="hidden" name="owner" value="${esc(agent.name)}" /><div class="field"><label for="order-${agent.id}">Give ${esc(agent.name)} an order</label><input id="order-${agent.id}" name="text" type="text" placeholder="What should they do?" required /></div><div class="row-actions"><button class="btn btn-primary btn-sm" type="submit">Send</button><button class="btn btn-ghost btn-sm" type="button" data-action="agent-todo" data-owner="${esc(agent.name)}">To-do list</button></div></form>
+            <div class="team-head">${avatar(agent.name, 'avatar-lg')}<div>${name}<span class="row-meta">${esc(agent.role)}</span></div><span class="badge badge-${/^working$/i.test(agent.status) ? 'accent' : 'muted'}"><span class="badge-dot" aria-hidden="true"></span>${esc(agent.status)}</span></div>
+            <dl class="details compact"><div><dt>Focus</dt><dd>${esc(agent.focus)}</dd></div><div><dt>Latest activity</dt><dd>${esc(agent.activity)}</dd></div><div><dt>Model</dt><dd>${esc(agent.model)}</dd></div></dl>
+            <div class="team-counts" aria-label="Workload for ${esc(agent.name)}"><div class="team-count" data-team-count="on-list"><strong>${owned.length}</strong><span>on the list</span></div><div class="team-count" data-team-count="new-orders"><strong>${openOrders.length}</strong><span>new orders</span></div><div class="team-count" data-team-count="today"><strong>${todayCount}</strong><span>today</span></div></div>
+            <form class="order-form" data-form="order"><input type="hidden" name="owner" value="${esc(agent.name)}" /><div class="field"><label for="order-${agent.id}">Give ${esc(agent.name)} an order</label><textarea id="order-${agent.id}" name="text" rows="2" placeholder="Tell ${esc(agent.name)} what to do, in plain words." required></textarea></div><div class="row-actions"><button class="btn btn-primary btn-sm" type="submit">Send</button><button class="btn btn-ghost btn-sm" type="button" data-action="agent-todo" data-owner="${esc(agent.name)}">To-do list</button><button class="btn btn-ghost btn-sm" type="button" data-action="copy-brief" data-owner="${esc(agent.name)}">Copy brief</button><button class="btn btn-ghost btn-sm" type="button" data-action="open-queue-file" data-owner="${esc(agent.name)}">Open queue file</button></div></form>
           </div>
         </section>`;
       }).join('')}
@@ -1213,6 +1306,45 @@ export function buildChartSeries(state, tableId = 'work-status', filter = '') {
   };
 }
 
+export function agentBrief(state = {}, owner) {
+  const agent = (state.team ?? []).find((row) => row.name === owner);
+  const name = String(agent?.name ?? owner ?? 'Agent');
+  const openTasks = (state.tasks ?? []).filter((task) => task.owner === name && task.status !== 'Done');
+  const openOrders = (state.orders ?? []).filter((order) => order.owner === name && order.open);
+  return [
+    `Brief for ${name}`,
+    `Role: ${agent?.role || '—'}`,
+    `Status: ${agent?.status || '—'}`,
+    `Focus: ${agent?.focus || '—'}`,
+    `Model: ${agent?.model || '—'}`,
+    `Workload: ${openTasks.length} open work item${openTasks.length === 1 ? '' : 's'}, ${openOrders.length} open order${openOrders.length === 1 ? '' : 's'}`,
+    `Latest activity: ${agent?.activity || 'No activity recorded yet.'}`,
+    '',
+    'Open orders:',
+    ...(openOrders.length ? openOrders.map((order) => `- ${order.text}`) : ['- None']),
+    '',
+    'Owned work items:',
+    ...(openTasks.length ? openTasks.slice(0, 12).map((task) => `- ${task.key ? `${task.key} · ` : ''}${task.title}`) : ['- None']),
+  ].join('\n');
+}
+
+export function renderAgentTodo(state = {}, owner) {
+  const agent = (state.team ?? []).find((row) => row.name === owner);
+  const orders = (state.orders ?? [])
+    .filter((order) => order.owner === owner)
+    .sort((a, b) => Number(Boolean(b.open)) - Number(Boolean(a.open)) || String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? '')));
+  const tasks = (state.tasks ?? []).filter((task) => task.owner === owner && task.status !== 'Done').slice(0, 12);
+  return `<div class="stack">
+    <h3>Open orders</h3>
+    <div class="row-list">${orders.map((order) => `<div class="row-item"><span class="row-main"><span class="row-title">${esc(order.text)}</span><span class="row-meta">${order.open ? 'Open' : 'Closed'}${order.updatedAt ? ` · ${fmtStamp(order.updatedAt)}` : ''}</span></span>${order.open ? `<button class="btn btn-ghost btn-sm" type="button" data-action="close-order" data-id="${esc(order.id)}">Close</button>` : `<button class="btn btn-ghost btn-sm" type="button" data-action="reopen-order" data-id="${esc(order.id)}">Reopen</button>`}</div>`).join('') || '<p class="empty-state">No orders.</p>'}</div>
+    <h3>Owned work items</h3>
+    <div class="row-list">${tasks.map((task) => `<a class="row-item" href="#/task/${esc(task.id)}"><span class="row-main"><span class="row-title">${esc(task.title)}</span><span class="row-meta">${esc(task.key)} · ${esc(task.status)}</span></span></a>`).join('') || '<p class="empty-state">No owned work items.</p>'}</div>
+    <h3>Agent</h3>
+    <dl class="details compact"><div><dt>Role</dt><dd>${esc(agent?.role ?? '—')}</dd></div><div><dt>Status</dt><dd>${esc(agent?.status ?? '—')}</dd></div><div><dt>Focus</dt><dd>${esc(agent?.focus ?? '—')}</dd></div><div><dt>Model</dt><dd>${esc(agent?.model ?? '—')}</dd></div><div><dt>Recent activity</dt><dd>${esc(agent?.activity ?? 'No activity recorded yet.')}</dd></div></dl>
+    <div class="row-actions"><button class="btn btn-primary btn-sm" type="button" data-action="copy-brief" data-owner="${esc(owner)}">Copy brief</button><button class="btn btn-ghost btn-sm" type="button" data-action="open-queue-file" data-owner="${esc(owner)}">Open queue file</button></div>
+  </div>`;
+}
+
 function filesPage(state, query) {
   const tab = query.get('tab') === 'agents' ? 'agents' : 'charts';
   const agents = state.team ?? [];
@@ -1253,36 +1385,115 @@ function storagePersistCard(state) {
   return `<section class="card"><div class="card-head"><h2>Persistent storage</h2>${storageBadge(storage)}</div><div class="card-body"><dl class="details"><div><dt>Status</dt><dd>${esc(storage?.status ?? 'Unsupported')}</dd></div><div><dt>Checked</dt><dd>${storage?.checkedAt ? fmtStamp(storage.checkedAt) : '—'}</dd></div></dl><p class="field-help">Granted means this browser will keep the account's IndexedDB data when the device is low on space. Unsupported means this browser has no <code>navigator.storage.persist()</code> API.</p></div></section>`;
 }
 
+const LANGUAGE_LABELS = { en: 'English', zh: 'Chinese' };
+const SETTINGS_SAVED_TEXT = 'All changes saved.';
+const SETTINGS_DIRTY_TEXT = 'Unsaved changes. Save before leaving.';
+const AI_LIMIT_SECTIONS = [
+  { key: 'summary', label: 'Summary', help: 'How many source items the Summary input may read.' },
+  { key: 'progress', label: 'Progress', help: 'How many source items the Progress input may read.' },
+  { key: 'comment', label: 'Comment', help: 'How many source items a Comment draft may read.' },
+  { key: 'issue', label: 'Issue classification', help: 'How many issues may be classified in one run.' },
+  { key: 'benchmark', label: 'Issue Benchmark', help: 'How many Issue Benchmark rows may be included.' },
+];
+
+// The palette values themselves live in tokens.css. Each preset names the
+// token family that applyAppearance writes on :root, so no hex literal appears
+// outside the token file.
+export const PALETTE_PRESETS = [
+  { id: 'soft', label: 'Soft A2', note: 'My palette', primary: '--palette-soft-primary', strong: '--palette-soft-strong', hover: '--palette-soft-hover', on: '--palette-soft-on' },
+  { id: 'apple', label: 'Apple system', note: 'Bright system blue', primary: '--palette-apple-primary', strong: '--palette-apple-strong', hover: '--palette-apple-hover', on: '--palette-apple-on' },
+  { id: 'ocean', label: 'Ocean cool', note: 'Teal and sea glass', primary: '--palette-ocean-primary', strong: '--palette-ocean-strong', hover: '--palette-ocean-hover', on: '--palette-ocean-on' },
+  { id: 'sunset', label: 'Sunset warm', note: 'Warm coral', primary: '--palette-sunset-primary', strong: '--palette-sunset-strong', hover: '--palette-sunset-hover', on: '--palette-sunset-on' },
+  { id: 'candy', label: 'Candy pop', note: 'Berry magenta', primary: '--palette-candy-primary', strong: '--palette-candy-strong', hover: '--palette-candy-hover', on: '--palette-candy-on' },
+  { id: 'graphite', label: 'Graphite mono', note: 'Neutral ink', primary: '--palette-graphite-primary', strong: '--palette-graphite-strong', hover: '--palette-graphite-hover', on: '--palette-graphite-on' },
+];
+
+function paletteCard(preset, currentPreset) {
+  const selected = String(currentPreset) === preset.id;
+  return `<button class="palette-card" type="button" data-palette="${esc(preset.id)}" data-action="apply-palette" aria-pressed="${selected ? 'true' : 'false'}"><span class="palette-dots" aria-hidden="true"><span class="palette-dot palette-dot-primary"></span><span class="palette-dot palette-dot-strong"></span><span class="palette-dot"></span></span><span class="palette-name">${esc(preset.label)}</span><span class="palette-note">${esc(preset.note)}</span></button>`;
+}
+
+function appearancePreview() {
+  return `<div class="theme-preview field-wide" role="group" aria-label="Live preview"><span class="theme-preview-label">Live preview</span><span class="btn btn-primary btn-sm" aria-hidden="true">Primary</span><span class="btn btn-sm" aria-hidden="true">Secondary</span><span class="chip is-active" aria-hidden="true">Selected chip</span></div>`;
+}
+
+// One save pattern for every settings form: shared dirty/saved text plus a
+// single primary Save button. The state is updated by the app's input listener.
+function settingsSaveBar({ label = 'Save changes', extra = '' } = {}) {
+  return `<div class="settings-save-bar field-wide"><p class="field-help settings-save-state" data-save-state data-dirty-text="${esc(SETTINGS_DIRTY_TEXT)}" data-saved-text="${esc(SETTINGS_SAVED_TEXT)}" aria-live="polite">${esc(SETTINGS_SAVED_TEXT)}</p><div class="row-actions">${extra}<button class="btn btn-primary" type="submit">${esc(label)}</button></div></div>`;
+}
+
+function settingsSnapshot(state) {
+  const stored = state.settings ?? {};
+  return {
+    ai: { status: 'Not configured', model: '', timeout: 90, key: '', ...(stored.ai ?? {}) },
+    aiLimits: { ...AI_LIMIT_DEFAULTS, ...(stored.aiLimits ?? {}) },
+    language: { primary: 'en', secondary: 'zh', rule: '', ...(stored.language ?? {}) },
+    dispatch: { defaultOwner: 'Dispatcher', rules: [], ...(stored.dispatch ?? {}) },
+    areas: { options: [], fallback: 'NA', ...(stored.areas ?? {}) },
+    appearance: { preset: 'soft', primary: '', radiusBtn: 8, radiusCard: 16, glass: 0.25, enableGlass: true, ...(stored.appearance ?? {}) },
+  };
+}
+
+function dispatchOwnerOptions(defaultOwner, team) {
+  return [...new Set([defaultOwner, 'Dispatcher', ...team.map((agent) => agent.name)].filter(Boolean))];
+}
+
+function dispatchRuleRow(rule, index, owners) {
+  const keyword = rule?.keyword ?? '';
+  const owner = rule?.owner || owners[0] || 'Dispatcher';
+  const ownerChoices = [...new Set([owner, ...owners].filter(Boolean))];
+  return `<div class="field-row" data-dispatch-rule><div class="field"><label for="rule-key-${esc(index)}">Keyword</label><input id="rule-key-${esc(index)}" name="rule-key-${esc(index)}" type="text" value="${esc(keyword)}" placeholder="battery" /></div><div class="field"><label for="rule-owner-${esc(index)}">Give it to</label><select id="rule-owner-${esc(index)}" class="select" name="rule-owner-${esc(index)}">${ownerChoices.map((name) => option(name, owner, name)).join('')}</select><button class="btn btn-ghost btn-sm" type="button" data-action="remove-dispatch-rule">Remove rule</button></div></div>`;
+}
+
+function areaChip(name) {
+  return `<span class="chip" data-area-chip="${esc(name)}">${esc(name)}<button class="chip-remove" type="button" data-action="remove-area" data-area="${esc(name)}" aria-label="Remove ${esc(name)}">×</button></span>`;
+}
+
 function settingsPage(route, state) {
-  const s = state.settings;
+  const s = settingsSnapshot(state);
   const storage = state.persistentStorage ?? { status: 'Unsupported' };
+  const team = state.team ?? [];
   const body = (() => {
     if (route.id === 'settings') {
-      return `${backupCard(state)}${storagePersistCard(state)}<section class="card"><div class="card-head"><h2>AI connection</h2><span class="badge badge-${s.ai.status === 'Connected' ? 'success' : 'muted'}">${esc(s.ai.status)}</span></div><div class="card-body"><form class="form-grid" data-form="settings-ai"><div class="field"><label for="ai-key">API key</label><input id="ai-key" name="key" type="password" value="${esc(s.ai.key)}" /></div><div class="field"><label for="ai-model">Model</label><input id="ai-model" name="model" type="text" value="${esc(s.ai.model)}" /></div><div class="field"><label for="ai-timeout">Timeout (seconds)</label><input id="ai-timeout" name="timeout" type="number" value="${esc(s.ai.timeout)}" /></div><div class="row-actions"><button class="btn btn-primary" type="submit">Save changes</button><button class="btn btn-ghost" type="button" data-action="test-key">Test the key</button><button class="btn btn-ghost" type="button" data-action="fill-gaps">Fill the gaps now</button></div></form></div></section>
+      return `${backupCard(state)}${storagePersistCard(state)}<section class="card"><div class="card-head"><h2>AI connection</h2><span class="badge badge-${s.ai.status === 'Connected' ? 'success' : 'muted'}">${esc(s.ai.status)}</span></div><div class="card-body"><form class="form-grid" data-form="settings-ai" data-settings-form><div class="field"><label for="ai-key">API key</label><input id="ai-key" name="key" type="password" value="${esc(s.ai.key)}" /><p class="field-help">Stored only in this account's local database.</p></div><div class="field"><label for="ai-model">Model</label><input id="ai-model" name="model" type="text" value="${esc(s.ai.model)}" /></div><div class="field"><label for="ai-timeout">Timeout (seconds)</label><input id="ai-timeout" name="timeout" type="number" min="1" value="${esc(s.ai.timeout)}" /></div>${settingsSaveBar({ extra: '<button class="btn btn-ghost" type="button" data-action="test-key">Test the key</button><button class="btn btn-ghost" type="button" data-action="fill-gaps">Fill the gaps now</button>' })}</form><p class="field-help">Test the key and Fill the gaps are local previews in this build. No network AI request is sent.</p></div></section>
         <section class="card"><div class="card-head"><h2>Demo data</h2><span class="badge badge-accent">Test account</span></div><div class="card-body"><p>Reset the Test account to the original demo rows. Changes in this account will be replaced.</p><button class="btn btn-danger" type="button" data-action="reset-demo">Reset demo data</button></div></section>`;
     }
     if (route.id === 'settings-ai') {
-      return `<section class="card"><div class="card-head"><h2>AI inputs & limits</h2></div><div class="card-body"><form class="form-grid" data-form="settings-limits">${[['summary', 'Summary'], ['progress', 'Progress'], ['comment', 'Comment'], ['issue', 'Issue classification'], ['benchmark', 'Issue Benchmark']].map(([key, label]) => `<div class="field"><label for="limit-${key}">${label}</label><input id="limit-${key}" name="${key}" type="number" value="${esc(s.aiLimits[key])}" /></div>`).join('')}<button class="btn btn-primary" type="submit">Save changes</button></form></div></section>`;
+      const sections = AI_LIMIT_SECTIONS.map(({ key, label, help }) => `<div class="field-wide" data-limit-section="${key}"><h3>${label}</h3><p class="field-help">${help}</p><div class="field"><label for="limit-${key}">${label} limit</label><input id="limit-${key}" name="${key}" type="number" min="0" value="${esc(s.aiLimits[key])}" /><p class="field-help">Default: ${AI_LIMIT_DEFAULTS[key]}.</p></div></div>`).join('');
+      return `<section class="card"><div class="card-head"><h2>AI inputs &amp; limits</h2><a class="card-link-small" href="#/settings/language">Language rules</a></div><div class="card-body"><p class="field-help">Each surface has its own reading limit. Limits stay in this account on this device.</p><form class="form-grid" data-form="settings-limits" data-settings-form>${sections}${settingsSaveBar({ extra: '<button class="btn btn-ghost" type="button" data-action="restore-ai-defaults">Restore defaults</button>' })}</form></div></section>`;
     }
     if (route.id === 'settings-language') {
-      return `<section class="card"><div class="card-head"><h2>Language rules</h2></div><div class="card-body"><form class="form-grid" data-form="settings-language"><div class="field"><label for="lang-primary">Primary language</label><select id="lang-primary" class="select" name="primary">${option('en', s.language.primary, 'English')}${option('zh', s.language.primary, 'Chinese')}</select></div><div class="field"><label for="lang-secondary">Secondary language</label><select id="lang-secondary" class="select" name="secondary">${option('en', s.language.secondary, 'English')}${option('zh', s.language.secondary, 'Chinese')}</select></div><div class="field field-wide"><label for="lang-rule">Natural-language rule</label><textarea id="lang-rule" name="rule" rows="5">${esc(s.language.rule)}</textarea></div><p class="field-help">Applies to the next AI call only.</p><button class="btn btn-primary" type="submit">Save changes</button></form></div></section>`;
+      const primary = LANGUAGE_LABELS[s.language.primary] ?? s.language.primary;
+      const secondary = LANGUAGE_LABELS[s.language.secondary] ?? s.language.secondary;
+      const preview = s.language.primary === s.language.secondary
+        ? `Primary and secondary are both ${primary}. Choose different languages to set a translation order.`
+        : `${primary} is written first and ${secondary} is kept beside it. The natural-language rule below is sent to every AI surface exactly as written.`;
+      return `<section class="card"><div class="card-head"><h2>Language rules</h2><a class="card-link-small" href="#/settings/ai">AI inputs &amp; limits</a></div><div class="card-body"><form class="form-grid" data-form="settings-language" data-settings-form><div class="field"><label for="lang-primary">Primary language</label><select id="lang-primary" class="select" name="primary">${option('en', s.language.primary, 'English')}${option('zh', s.language.primary, 'Chinese')}</select></div><div class="field"><label for="lang-secondary">Secondary language</label><select id="lang-secondary" class="select" name="secondary">${option('en', s.language.secondary, 'English')}${option('zh', s.language.secondary, 'Chinese')}</select><p class="field-help">Both languages are always kept; this sets their order.</p></div><div class="field field-wide"><label for="lang-rule">Natural-language rule</label><textarea id="lang-rule" name="rule" rows="5">${esc(s.language.rule)}</textarea><p class="field-help">Applies to the next AI call only. No AI call is made now.</p></div><details class="field-wide"><summary>Preview note</summary><p>${esc(preview)}</p><p class="field-help">Preview only: nothing is translated or sent to a server.</p></details>${settingsSaveBar()}</form></div></section>`;
     }
     if (route.id === 'settings-snapshots') {
-      const snapshots = state.pages.filter((page) => page.type === 'Snapshot');
-      return `<section class="card"><div class="card-head"><h2>Snapshots</h2><span class="badge badge-muted">${snapshots.length}</span></div><div class="card-body"><div class="table-wrap"><table class="table table-stack"><thead><tr><th>Date</th><th>Kind</th><th>Excerpt</th><th>Actions</th></tr></thead><tbody>${snapshots.map((page) => `<tr><td data-label="Date">${fmtStamp(page.updatedAt)}</td><td data-label="Kind">${esc(page.type)}</td><td data-label="Excerpt"><a class="table-title" href="#/page/${page.id}">${esc(page.title)}</a></td><td data-label="Actions"><button class="btn btn-ghost btn-sm" type="button" data-action="delete-page" data-id="${page.id}">Delete</button></td></tr>`).join('') || `<tr><td colspan="4">${empty('No snapshots yet.')}</td></tr>`}</tbody></table></div></div></section>`;
+      const snapshots = (state.pages ?? []).filter((page) => page.type === 'Snapshot');
+      return `<section class="card"><div class="card-head"><h2>Snapshots</h2><span class="badge badge-muted">${snapshots.length}</span></div><div class="card-body"><p class="field-help">Snapshot pages are listed newest first. Nothing is deleted automatically.</p><div class="table-wrap"><table class="table table-stack"><thead><tr><th>Date</th><th>Kind</th><th>Excerpt</th><th>Actions</th></tr></thead><tbody>${snapshots.map((page) => `<tr data-snapshot-row="${esc(page.id)}"><td data-label="Date">${fmtStamp(page.updatedAt)}</td><td data-label="Kind">${esc(page.type)}</td><td data-label="Excerpt"><a class="table-title" href="#/page/${esc(page.id)}">${esc(page.title)}</a></td><td data-label="Actions"><div class="row-actions"><a class="btn btn-ghost btn-sm" href="#/page/${esc(page.id)}">Open</a><button class="btn btn-ghost btn-sm" type="button" data-action="delete-page" data-id="${esc(page.id)}" data-snapshot="1">Delete</button></div></td></tr>`).join('') || `<tr><td colspan="4">${empty('No snapshots yet.')}</td></tr>`}</tbody></table></div></div></section>`;
     }
     if (route.id === 'settings-dispatch') {
-      return `<section class="card"><div class="card-head"><h2>Dispatch rules</h2></div><div class="card-body"><form data-form="settings-dispatch"><div class="field"><label for="dispatch-owner">Default owner</label><select id="dispatch-owner" class="select" name="defaultOwner">${state.team.map((agent) => option(agent.name, s.dispatch.defaultOwner, agent.name)).join('')}</select></div><div class="strip-list">${(s.dispatch.rules ?? []).map((rule, index) => `<div class="field-row"><div class="field"><label for="rule-key-${index}">Keyword</label><input id="rule-key-${index}" name="rule-key-${index}" type="text" value="${esc(rule.keyword)}" /></div><div class="field"><label for="rule-owner-${index}">Give it to</label><select id="rule-owner-${index}" class="select" name="rule-owner-${index}">${state.team.map((agent) => option(agent.name, rule.owner, agent.name)).join('')}</select></div></div>`).join('')}</div><p class="field-help">First matching rule wins; blank conditions are ignored.</p><button class="btn btn-primary" type="submit">Save changes</button></form></div></section>`;
+      const rules = Array.isArray(s.dispatch.rules) ? s.dispatch.rules : [];
+      const owners = dispatchOwnerOptions(s.dispatch.defaultOwner, team);
+      return `<section class="card"><div class="card-head"><h2>Dispatch rules</h2></div><div class="card-body"><form data-form="settings-dispatch" data-settings-form><div class="field"><label for="dispatch-owner">Default owner</label><select id="dispatch-owner" class="select" name="defaultOwner">${owners.map((name) => option(name, s.dispatch.defaultOwner, name)).join('')}</select><p class="field-help">Used when no rule matches.</p></div><div class="strip-list" data-dispatch-rules>${rules.map((rule, index) => dispatchRuleRow(rule, index, owners)).join('')}</div><p class="field-help" data-dispatch-empty${rules.length ? ' hidden' : ''}>No rules yet. Every new item goes to the default owner.</p><button class="btn btn-ghost" type="button" data-action="add-dispatch-rule">Add rule</button><template data-dispatch-rule-template>${dispatchRuleRow({ keyword: '', owner: s.dispatch.defaultOwner }, '__index__', owners)}</template><p class="field-help">Rules run top to bottom. The first matching rule wins, so put specific keywords above broad ones. Blank keywords are ignored and keywords match the work item title plus description. The default owner is used when nothing matches.</p>${settingsSaveBar()}</form></div></section>`;
     }
     if (route.id === 'settings-areas') {
-      return `<section class="card"><div class="card-head"><h2>Responsibility areas</h2></div><div class="card-body"><form data-form="settings-areas"><div class="field"><label for="areas-list">Area names</label><input id="areas-list" name="options" type="text" value="${esc((s.areas.options ?? []).join(', '))}" /><p class="field-help">Separate names with commas.</p></div><div class="field"><label for="areas-fallback">Unknown owner</label><input id="areas-fallback" name="fallback" type="text" value="${esc(s.areas.fallback)}" /></div><button class="btn btn-primary" type="submit">Save changes</button></form></div></section>`;
+      const options = Array.isArray(s.areas.options) ? s.areas.options : [];
+      return `<section class="card"><div class="card-head"><h2>Responsibility areas</h2></div><div class="card-body"><form class="form-grid" data-form="settings-areas" data-settings-form><div class="field field-wide"><label for="areas-new">Area names</label><div class="chip-row" data-area-chips>${options.map(areaChip).join('')}</div><input id="areas-new" name="newArea" type="text" placeholder="Add an area, then choose Add area" /><input type="hidden" name="options" data-areas-value value="${esc(options.join(', '))}" /><p class="field-help" data-area-empty${options.length ? ' hidden' : ''}>No extra areas yet. Unknown areas use the fallback below.</p><p class="field-help">Remove a chip to stop offering that area. This list is stored in this account.</p></div><div class="field"><label for="areas-fallback">Unknown owner fallback</label><input id="areas-fallback" name="fallback" type="text" value="${esc(s.areas.fallback)}" /><p class="field-help">Default: NA (PQA in reports).</p></div><div class="field"><button class="btn btn-ghost" type="button" data-action="add-area">Add area</button></div>${settingsSaveBar()}</form></div></section>`;
     }
     if (route.id === 'settings-appearance') {
-      return `<section class="card"><div class="card-head"><h2>Appearance & theme</h2></div><div class="card-body"><form class="form-grid" data-form="settings-appearance"><div class="field"><label for="theme-primary">Primary colour</label><input id="theme-primary" name="primary" type="color" value="${esc(s.appearance.primary)}" /></div><div class="field"><label for="theme-radius-btn">Button radius</label><input id="theme-radius-btn" name="radiusBtn" type="range" min="0" max="20" value="${esc(s.appearance.radiusBtn)}" /></div><div class="field"><label for="theme-radius-card">Card radius</label><input id="theme-radius-card" name="radiusCard" type="range" min="0" max="28" value="${esc(s.appearance.radiusCard)}" /></div><div class="field"><label for="theme-glass">Glass opacity</label><input id="theme-glass" name="glass" type="range" min="0.1" max="1" step="0.05" value="${esc(s.appearance.glass)}" /></div><label class="checkbox-row"><input name="enableGlass" type="checkbox"${s.appearance.enableGlass ? ' checked' : ''} /> Enable glass</label><div class="row-actions"><button class="btn btn-primary" type="submit">Save theme</button><button class="btn btn-ghost" type="button" data-action="reset-theme">Restore default look</button></div></form></div></section><section class="card" data-install-card><div class="card-head"><h2>Install as an app</h2><span class="badge badge-muted" id="install-status">Use browser menu</span></div><div class="card-body"><p>Install My Platform on this device. It opens like an app, works offline after the first load, and keeps reading the same local data in this browser.</p><div class="row-actions"><button class="btn btn-primary" type="button" data-action="install-app" id="install-app">Install My Platform</button></div><p class="field-help" id="install-help">The button uses the browser's <code>beforeinstallprompt</code> prompt when one is offered. Otherwise use the browser menu: Install app or Add to Home Screen. No installer and no account are needed.</p></div></section>`;
+      const a = s.appearance;
+      const glassPercent = Math.round(Number(a.glass) * 100);
+      const radiusBtn = Number(a.radiusBtn);
+      const radiusCard = Number(a.radiusCard);
+      return `<section class="card"><div class="card-head"><h2>Appearance &amp; theme</h2></div><div class="card-body"><form class="form-grid" data-form="settings-appearance" data-settings-form><div class="field field-wide"><h3>Palette presets</h3><div class="palette-grid">${PALETTE_PRESETS.map((preset) => paletteCard(preset, a.preset)).join('')}</div><p class="field-help">Choose a preset to set the primary colour and its related accent, focus and soft-tint tokens. A custom colour below leaves the preset. Each preset is stored with this account on this device.</p></div><div class="field"><label for="theme-primary">Primary colour</label><input id="theme-primary" name="primary" type="color" value="${esc(a.primary)}" /><p class="field-help">Used for the card header, focus ring and primary button.</p></div><input type="hidden" name="preset" value="${esc(a.preset)}" data-theme-preset /><div class="field"><label for="theme-radius-btn">Button radius</label><input id="theme-radius-btn" name="radiusBtn" type="range" min="0" max="20" step="1" value="${esc(radiusBtn)}" /><output class="field-help" for="theme-radius-btn" data-theme-value="radiusBtn">${esc(radiusBtn)}px</output></div><div class="field"><label for="theme-radius-card">Card radius</label><input id="theme-radius-card" name="radiusCard" type="range" min="0" max="28" step="1" value="${esc(radiusCard)}" /><output class="field-help" for="theme-radius-card" data-theme-value="radiusCard">${esc(radiusCard)}px</output></div><div class="field"><label for="theme-glass">Glass opacity</label><input id="theme-glass" name="glass" type="range" min="0.1" max="1" step="0.05" value="${esc(a.glass)}" /><output class="field-help" for="theme-glass" data-theme-value="glass">${esc(glassPercent)}%</output></div><label class="checkbox-row field-wide"><input name="enableGlass" type="checkbox"${a.enableGlass ? ' checked' : ''} /> Enable glassmorphism (blur effect)</label>${appearancePreview()}${settingsSaveBar({ label: 'Save theme', extra: '<button class="btn btn-ghost" type="button" data-action="reset-theme">Restore default look</button>' })}</form></div></section><section class="card" data-install-card><div class="card-head"><h2>Install as an app</h2><span class="badge badge-muted" id="install-status">Use browser menu</span></div><div class="card-body"><p>Install My Platform on this device. It opens like an app, works offline after the first load, and keeps reading the same local data in this browser.</p><div class="row-actions"><button class="btn btn-primary" type="button" data-action="install-app" id="install-app">Install My Platform</button></div><p class="field-help" id="install-help">The button uses the browser's <code>beforeinstallprompt</code> prompt when one is offered. Otherwise use the browser menu: Install app or Add to Home Screen. No installer and no account are needed.</p></div></section>`;
     }
     return '';
   })();
-  return `${pageHead(route.title, 'Settings are stored on this device with the account.', `${storageBadge(storage)}<span class="badge badge-muted">${esc(state.account.name)}</span>`)}${settingsTabs(route)}${body}`;
+  return `${pageHead(route.title, 'Settings are stored on this device with the account.', `${storageBadge(storage)}<span class="badge badge-muted">${esc(state.account?.name ?? 'This device')}</span>`)}${settingsTabs(route)}${body}`;
 }
 
 const formatBytes = (value) => {
@@ -1385,24 +1596,39 @@ function taskDetail(state, route) {
 }
 
 function bugDetail(state, route) {
-  const bug = state.bugs.find((row) => row.id === route.params.id);
+  const bug = (state.bugs ?? []).find((row) => row.id === route.params.id);
   if (!bug) return notFound(`/bug/${route.params.id}`);
-  const comments = state.bugComments.filter((row) => row.bugId === bug.id).map((row) => ({ ...row, kind: 'comment', who: row.author }));
-  const history = state.bugHistory.filter((row) => row.bugId === bug.id).map((row) => ({ ...row, kind: 'history' }));
+  const comments = (state.bugComments ?? state.bug_comments ?? [])
+    .filter((row) => row.bugId === bug.id)
+    .map((row) => ({ ...row, kind: 'comment', who: row.author }));
+  const history = (state.bugHistory ?? state.bug_history ?? [])
+    .filter((row) => row.bugId === bug.id)
+    .map((row) => ({ ...row, kind: 'history' }));
   const feed = [...comments, ...history].sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''));
+  const team = state.team ?? [];
+  const currentStatus = normalizeBugStatus(bug.status);
+  const workflowTargets = bugWorkflowTargets(bug);
+  const reasonHint = BUG_REASON_REQUIRED_STATUSES.join(', ');
+  const actingOptions = [...new Set(['Amara', 'Steward', 'Dispatcher', 'QA', bug.assignee, ...team.map((agent) => agent.name)].filter(Boolean))];
+  const assigneeOptions = [...new Set([...team.map((agent) => agent.name), bug.assignee, 'Amara', 'Steward', 'Dispatcher', 'QA', 'Worker A', 'Worker B', 'Worker C'].filter(Boolean))];
+  const reporterOptions = [...new Set([bug.reporter, ...assigneeOptions].filter(Boolean))];
+  const priorityOptions = [...new Set([bug.priority, ...PRIORITY_ORDER].filter(Boolean))];
+  const severityOptions = [...new Set([bug.severity, ...BUG_SEVERITIES].filter(Boolean))];
+  const typeOptions = [...new Set([bug.type, 'Bug', 'Improvement', 'Question'].filter(Boolean))];
+  const componentOptions = [...new Set([bug.component, ...BUG_COMPONENTS].filter(Boolean))];
   return `
     <nav class="breadcrumb"><a href="#/bugs">← Bugs</a></nav>
     ${pageHead('Bug', `${bug.key} · ${bug.component} · updated ${fmtStamp(bug.updatedAt)}`, `<span class="badge badge-muted">Bugs are never deleted</span>`)}
-    <section class="detail-title card"><div class="card-body"><div class="detail-title-row"><span class="key-link">${esc(bug.key)}</span><h2>${esc(bug.title)}</h2></div><div class="detail-badges">${statusBadge(bug.status)}${priority(bug.priority)}<span class="badge badge-muted">${esc(bug.severity)}</span><span class="assignee">${avatar(bug.assignee)}${esc(bug.assignee)}</span></div></div></section>
+    <section class="detail-title card"><div class="card-body"><div class="detail-title-row"><span class="key-link">${esc(bug.key)}</span><h2>${esc(bug.title)}</h2></div><div class="detail-badges">${statusBadge(currentStatus)}${priority(bug.priority)}<span class="badge badge-muted">${esc(bug.severity)}</span><span class="assignee">${avatar(bug.assignee)}${esc(bug.assignee)}</span></div><form class="stack" data-form="bug-title" data-history="title"><input type="hidden" name="id" value="${bug.id}" /><div class="field"><label for="bug-title-${bug.id}">Title</label><input id="bug-title-${bug.id}" name="title" type="text" value="${esc(bug.title)}" required /></div><div class="row-actions"><button class="btn btn-primary btn-sm" type="submit">Save title</button></div></form></div></section>
     <div class="detail-grid">
       <div class="detail-main">
-        <section class="card"><div class="card-head"><h2>Description</h2></div><div class="card-body"><dl class="details"><div><dt>Description</dt><dd>${esc(bug.description)}</dd></div><div><dt>Steps to reproduce</dt><dd>${esc(bug.repro)}</dd></div><div><dt>Expected</dt><dd>${esc(bug.expected)}</dd></div><div><dt>Actual</dt><dd>${esc(bug.actual)}</dd></div><div><dt>Environment</dt><dd>${esc(bug.environment)}</dd></div></dl></div></section>
+        <section class="card"><div class="card-head"><h2>Description</h2></div><div class="card-body"><form class="stack" data-form="bug-details" data-history="description,repro,expected,actual,environment"><input type="hidden" name="id" value="${bug.id}" /><div class="field"><label for="bug-description-${bug.id}">Description</label><textarea id="bug-description-${bug.id}" name="description" rows="3">${esc(bug.description)}</textarea></div><div class="field"><label for="bug-repro-${bug.id}">Steps to reproduce</label><textarea id="bug-repro-${bug.id}" name="repro" rows="3">${esc(bug.repro)}</textarea></div><div class="field"><label for="bug-expected-${bug.id}">Expected</label><textarea id="bug-expected-${bug.id}" name="expected" rows="2">${esc(bug.expected)}</textarea></div><div class="field"><label for="bug-actual-${bug.id}">Actual</label><textarea id="bug-actual-${bug.id}" name="actual" rows="2">${esc(bug.actual)}</textarea></div><div class="field"><label for="bug-environment-${bug.id}">Environment</label><input id="bug-environment-${bug.id}" name="environment" type="text" value="${esc(bug.environment)}" /></div><div class="row-actions"><button class="btn btn-primary btn-sm" type="submit">Save details</button></div></form></div></section>
         ${attachmentCard('bug', bug.id, bug.attachments ?? [])}
-        <section class="card"><div class="card-head"><h2>Comments and activity</h2></div><div class="card-body"><div class="feed">${feed.map((row) => `<div class="feed-item"><div class="feed-head">${avatar(row.who ?? 'Amara')}<strong>${esc(row.who ?? 'Amara')}</strong><span>${fmtStamp(row.at)}</span>${row.kind === 'history' ? `<span class="badge badge-muted">${esc(row.field)}</span>` : ''}</div><p>${row.kind === 'comment' ? esc(row.body) : `${esc(row.field)}: ${esc(row.old || '—')} → ${esc(row.new || '—')}`}</p></div>`).join('') || empty('No activity yet.')}</div><form class="comment-form" data-form="bug-comment"><input type="hidden" name="id" value="${bug.id}" /><textarea name="body" rows="2" placeholder="Add a comment…" required></textarea><button class="btn btn-primary btn-sm" type="submit">Comment</button></form></div></section>
+        <section class="card"><div class="card-head"><h2>Comments and activity</h2></div><div class="card-body"><div class="feed">${feed.map((row) => `<div class="feed-item"><div class="feed-head">${avatar(row.who ?? 'Amara')}<strong>${esc(row.who ?? 'Amara')}</strong><span>${fmtStamp(row.at)}</span>${row.kind === 'history' ? `<span class="badge badge-muted">${esc(row.field)}</span>` : ''}</div><p>${row.kind === 'comment' ? esc(row.body) : `${esc(row.field)}: ${esc(row.old || '—')} → ${esc(row.new || '—')}`}</p></div>`).join('') || empty('No activity yet.')}</div><form class="comment-form" data-form="bug-comment"><input type="hidden" name="id" value="${bug.id}" /><textarea id="bgComment" name="body" rows="2" placeholder="Add a comment… Ctrl+Enter also posts." required></textarea><button class="btn btn-primary btn-sm" type="submit">Comment</button></form><p class="field-help">Comments and field history are interleaved newest first.</p></div></section>
       </div>
       <aside class="detail-side">
-        <section class="card"><div class="card-head"><h2>Workflow</h2></div><div class="card-body"><form class="stack" data-form="bug-workflow"><input type="hidden" name="id" value="${bug.id}" /><div class="field"><label for="bug-move">Move to</label><select id="bug-move" class="select" name="to">${['New', 'Triaged', 'In progress', 'Fixed', 'Verified', 'Closed', 'Reopened', 'Duplicate', 'Wont fix', 'Deferred', 'Rejected'].map((value) => option(value, bug.status)).join('')}</select></div><div class="field"><label for="bug-reason">Reason</label><input id="bug-reason" name="reason" type="text" /></div><button class="btn btn-primary btn-sm" type="submit">Apply move</button></form></div></section>
-        <section class="card"><div class="card-head"><h2>Details</h2></div><div class="card-body"><dl class="details compact"><div><dt>Assignee</dt><dd>${esc(bug.assignee)}</dd></div><div><dt>Priority</dt><dd>${esc(bug.priority)}</dd></div><div><dt>Severity</dt><dd>${esc(bug.severity)}</dd></div><div><dt>Component</dt><dd>${esc(bug.component)}</dd></div><div><dt>Reporter</dt><dd>${esc(bug.reporter)}</dd></div><div><dt>Due</dt><dd>${fmt(bug.due)}</dd></div><div><dt>Created</dt><dd>${fmtStamp(bug.createdAt)}</dd></div><div><dt>ID</dt><dd>${esc(bug.id)}</dd></div></dl></div></section>
+        <section class="card"><div class="card-head"><h2>Workflow</h2></div><div class="card-body"><form class="stack" data-form="bug-workflow"><input type="hidden" name="id" value="${bug.id}" /><div class="field"><label for="bug-move">Move to</label><select id="bug-move" class="select" name="to" required><option value="" selected disabled>Choose a legal target…</option>${workflowTargets.map((value) => `<option value="${esc(value)}">${esc(value)}</option>`).join('')}</select><p class="field-help">From ${esc(currentStatus)}. Only TRANSITIONS targets are listed; QA alone sets Verified and a fixer cannot verify their own fix.</p></div><div class="field"><label for="bug-as">As</label><select id="bug-as" class="select" name="as">${actingOptions.map((value) => option(value, 'Amara')).join('')}</select></div><div class="field"><label for="bug-reason">Reason</label><input id="bug-reason" name="reason" type="text" placeholder="Required for ${esc(reasonHint)}" /></div><div class="field"><label for="bug-duplicate-of">Duplicate of</label><input id="bug-duplicate-of" name="duplicate_of" type="text" placeholder="WD-… (only for Duplicate)" /></div><button class="btn btn-primary btn-sm" type="submit">Apply move</button></form></div></section>
+        <section class="card"><div class="card-head"><h2>Details</h2><span class="badge badge-muted">Saved to this device</span></div><div class="card-body"><form class="stack" data-form="bug-fields" data-history="assignee,reporter,priority,severity,type,component,found_in,fix_in,due,labels,links,linked_task,resolution,note"><input type="hidden" name="id" value="${bug.id}" /><div class="field"><label for="bug-assignee-${bug.id}">Assignee</label><select id="bug-assignee-${bug.id}" class="select" name="assignee">${assigneeOptions.map((value) => option(value, bug.assignee)).join('')}</select></div><div class="field"><label for="bug-reporter-${bug.id}">Reporter</label><select id="bug-reporter-${bug.id}" class="select" name="reporter">${reporterOptions.map((value) => option(value, bug.reporter)).join('')}</select></div><div class="field"><label for="bug-priority-${bug.id}">Priority</label><select id="bug-priority-${bug.id}" class="select" name="priority">${priorityOptions.map((value) => option(value, bug.priority)).join('')}</select></div><div class="field"><label for="bug-severity-${bug.id}">Severity</label><select id="bug-severity-${bug.id}" class="select" name="severity">${severityOptions.map((value) => option(value, bug.severity)).join('')}</select></div><div class="field"><label for="bug-type-${bug.id}">Type</label><select id="bug-type-${bug.id}" class="select" name="type">${typeOptions.map((value) => option(value, bug.type)).join('')}</select></div><div class="field"><label for="bug-component-${bug.id}">Component</label><select id="bug-component-${bug.id}" class="select" name="component">${componentOptions.map((value) => option(value, bug.component)).join('')}</select></div><div class="field"><label for="bug-found-in-${bug.id}">Found in</label><input id="bug-found-in-${bug.id}" name="found_in" type="text" value="${esc(bug.found_in)}" /></div><div class="field"><label for="bug-fix-in-${bug.id}">Fix in</label><input id="bug-fix-in-${bug.id}" name="fix_in" type="text" value="${esc(bug.fix_in)}" /></div><div class="field"><label for="bug-due-${bug.id}">Due</label><input id="bug-due-${bug.id}" name="due" type="date" value="${esc(dateOnly(bug.due))}" /></div><div class="field"><label for="bug-labels-${bug.id}">Labels</label><input id="bug-labels-${bug.id}" name="labels" type="text" value="${esc(bug.labels)}" placeholder="comma separated" /></div><div class="field"><label for="bug-links-${bug.id}">Links</label><input id="bug-links-${bug.id}" name="links" type="text" value="${esc(bug.links)}" placeholder="paths or urls ; separated" /></div><div class="field"><label for="bug-linked-task-${bug.id}">Linked task</label><input id="bug-linked-task-${bug.id}" name="linked_task" type="text" value="${esc(bug.linked_task)}" /></div><div class="field"><label for="bug-resolution-${bug.id}">Resolution</label><input id="bug-resolution-${bug.id}" name="resolution" type="text" value="${esc(bug.resolution)}" /></div><div class="field"><label for="bug-note-${bug.id}">Note</label><input id="bug-note-${bug.id}" name="note" type="text" value="${esc(bug.note)}" /></div><div class="row-actions"><button class="btn btn-primary btn-sm" type="submit">Save fields</button></div></form><dl class="details compact"><div><dt>Created</dt><dd>${fmtStamp(bug.createdAt)}</dd></div><div><dt>Updated</dt><dd>${fmtStamp(bug.updatedAt)}</dd></div><div><dt>ID</dt><dd>${esc(bug.id)}</dd></div></dl><p class="field-help">Created, Updated and ID are read-only.</p></div></section>
       </aside>
     </div>`;
 }
@@ -1964,16 +2190,71 @@ function pageEditor(state, route, query) {
     </div>`;
 }
 
-function bugNew(state) {
-  return `${pageHead('Report a bug', 'A short report is enough. The key and SLA due date are added automatically.')}
-    <section class="card"><div class="card-body"><form class="form-grid" data-form="bug-create"><div class="field field-wide"><label for="bug-title">Title</label><input id="bug-title" name="title" type="text" required /></div><div class="field"><label for="bug-severity">Severity</label><select id="bug-severity" class="select" name="severity">${['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'].map((value) => option(value, 'S3 Major')).join('')}</select></div><div class="field"><label for="bug-priority">Priority</label><select id="bug-priority" class="select" name="priority">${['Highest', 'High', 'Medium', 'Low', 'Lowest'].map((value) => option(value, 'Medium')).join('')}</select></div><div class="field"><label for="bug-component">Component</label><select id="bug-component" class="select" name="component">${['work desk', 'tasks page', 'bugs page', 'calendar', 'settings', 'chart studio', 'other'].map((value) => option(value, 'other')).join('')}</select></div><div class="field"><label for="bug-assignee">Assignee</label><select id="bug-assignee" class="select" name="assignee">${state.team.map((agent) => option(agent.name, 'Dispatcher', agent.name)).join('')}</select></div><div class="field field-wide"><label for="bug-repro">Steps to reproduce</label><textarea id="bug-repro" name="repro" rows="3" required></textarea></div><div class="field field-wide"><label for="bug-description">Description</label><textarea id="bug-description" name="description" rows="3"></textarea></div><div class="field"><label for="bug-expected">Expected</label><input id="bug-expected" name="expected" type="text" /></div><div class="field"><label for="bug-actual">Actual</label><input id="bug-actual" name="actual" type="text" /></div><div class="field field-wide"><label for="bug-environment">Environment</label><input id="bug-environment" name="environment" type="text" /></div><button class="btn btn-primary" type="submit">Create bug</button></form></div></section>`;
+// Report-a-bug links carry the short form values in the query: t, d,
+// component and severity. The dialog gets the same normalized shape.
+export function bugPrefill(query) {
+  const read = (key) => {
+    if (!query) return '';
+    if (typeof query.get === 'function') return query.get(key) ?? '';
+    return query[key] ?? '';
+  };
+  return {
+    tab: 'bug',
+    title: read('t'),
+    description: read('d'),
+    component: String(read('component') ?? '').trim() || 'other',
+    severity: normalizeBugSeverity(read('severity')),
+  };
+}
+
+function bugNew() {
+  return `${pageHead('Report a bug', 'The key and SLA due date are added automatically when you create the bug.')}
+    <section class="card"><div class="card-body"><div class="stack">
+      <p class="lede">Open the bug form to add a title, severity, component, steps to reproduce and an optional description.</p>
+      <div class="row-actions">
+        <button class="btn btn-primary" type="button" data-action="open-bug-form">${icon('bug', 16)}Open the bug form</button>
+        <a class="btn btn-ghost" href="#/bugs">Back to Bugs</a>
+      </div>
+    </div></div></section>`;
+}
+
+// Rating preferences live beside the chart data in meta.ratings: a hidden-name
+// list survives product renames and a lineStyle switch applies to every chart.
+export function ratingPreferences(ratings) {
+  const hidden = new Set((Array.isArray(ratings?.hidden) ? ratings.hidden : []).map((name) => String(name)));
+  return { hidden, lineStyle: ratings?.lineStyle === 'straight' ? 'straight' : 'smooth' };
+}
+
+export function visibleRatingSeries(ratings) {
+  const { hidden } = ratingPreferences(ratings);
+  return (ratings?.series ?? []).filter((item) => !hidden.has(String(item.name)));
 }
 
 function ratingPage(state) {
+  const ratings = state.ratings;
+  const all = ratings?.series ?? [];
+  const visible = visibleRatingSeries(ratings);
+  const { lineStyle } = ratingPreferences(ratings);
+  const styleButton = (value, label) => {
+    const active = lineStyle === value;
+    return `<button class="btn ${active ? 'btn-primary' : 'btn-ghost'}" type="button" data-action="rating-line-style" data-style="${value}" aria-pressed="${active}">${label}</button>`;
+  };
   return `
-    ${pageHead('Rating trend', 'Full-page product rating trend.', `<button class="btn" type="button" data-action="toast-copy">Copy image</button>`)}
-    <section class="card"><div class="card-head"><h2>Rating trend · live</h2><span class="badge badge-muted">14 days</span></div><div class="card-body"><div class="chart-box" id="rating-chart"></div><div class="chart-legend">${(state.ratings?.series ?? []).map((item, index) => `<span class="chart-legend-item"><span class="chart-dot chart-line-${index + 1}"></span>${esc(item.name)}</span>`).join('')}</div></div></section>
-    <section class="card"><div class="card-head"><h2>Choose products</h2></div><div class="card-body"><div class="row-actions">${(state.ratings?.series ?? []).map((item) => `<span class="badge badge-muted">${esc(item.name)}</span>`).join('')}<button class="btn btn-ghost btn-sm" type="button" data-action="toast-copy">Everything</button><button class="btn btn-ghost btn-sm" type="button" data-action="toast-copy">Smooth curve</button></div></div></section>`;
+    ${pageHead('Rating trend', 'Two weeks at a time — choose products, then copy the chart when you need it.', `<a class="btn btn-ghost" href="#/">${icon('arrow', 16)}Back to Home</a>`)}
+    <section class="card">
+      <div class="card-head"><h2>Rating trend · live</h2><span class="badge badge-muted">14 days</span></div>
+      <div class="card-body stack">
+        <div class="chart-box" id="rating-chart"></div>
+        ${visible.length ? `<div class="chart-legend">${visible.map((item, index) => `<span class="chart-legend-item"><span class="chart-dot chart-line-${index + 1}"></span>${esc(item.name)}</span>`).join('')}</div>` : empty('No products are selected. Choose products to show their lines.')}
+        <div class="row-actions">
+          <button class="btn" type="button" data-action="rating-copy">Copy image</button>
+          <button class="btn btn-ghost" type="button" data-action="rating-choose">Choose products</button>
+          ${styleButton('smooth', 'Smooth curve')}
+          ${styleButton('straight', 'Straight line')}
+        </div>
+        <p class="field-help" data-rating-count>${visible.length} of ${all.length} product${all.length === 1 ? '' : 's'} on the chart. The selection and line style stay in this account on this device.</p>
+      </div>
+    </section>`;
 }
 
 function notFound(path) {
@@ -2035,7 +2316,12 @@ export function renderView(route, query, state) {
 export function mountView(route, query, state) {
   if (route.id === 'home') {
     const rating = document.getElementById('home-rating');
-    if (rating && state.ratings) renderLineChart(rating, { labels: state.ratings.labels, series: state.ratings.series.slice(0, 4), title: 'Rating trend' });
+    if (rating && state.ratings) renderLineChart(rating, {
+      labels: state.ratings.labels,
+      series: visibleRatingSeries(state.ratings).slice(0, 4),
+      lineStyle: ratingPreferences(state.ratings).lineStyle,
+      title: 'Rating trend',
+    });
     const team = document.getElementById('home-team-load');
     if (team) {
       const rows = teamLoadSeries(state);
@@ -2057,7 +2343,12 @@ export function mountView(route, query, state) {
   }
   if (route.id === 'rating-trend' && state.ratings) {
     const chart = document.getElementById('rating-chart');
-    if (chart) renderLineChart(chart, { labels: state.ratings.labels, series: state.ratings.series, title: 'Rating trend' });
+    if (chart) renderLineChart(chart, {
+      labels: state.ratings.labels,
+      series: visibleRatingSeries(state.ratings),
+      lineStyle: ratingPreferences(state.ratings).lineStyle,
+      title: 'Rating trend',
+    });
   }
   if (route.id === 'files' && query.get('run') === '1') {
     const chart = document.getElementById('files-chart');
@@ -2129,8 +2420,12 @@ export function mountView(route, query, state) {
   }
   if (route.id === 'settings-appearance') {
     const input = document.getElementById('theme-primary');
-    if (input && !state.settings.appearance.primary) {
-      input.value = getComputedStyle(document.documentElement).getPropertyValue('--color-card-header').trim();
+    const appearance = state.settings?.appearance ?? {};
+    if (input && !input.value) {
+      const preset = PALETTE_PRESETS.find((item) => item.id === String(appearance.preset ?? ''));
+      const token = preset ? preset.primary : '--color-card-header';
+      const value = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+      if (/^#[0-9a-f]{6}$/i.test(value)) input.value = value;
     }
   }
 }
@@ -2149,6 +2444,11 @@ export function renderCreateDialog(state, preset = {}) {
   const eventProject = options.projectId || linked?.projectId || '';
   const eventTitle = options.title || (linked ? `${linked.key} · ${linked.title}` : '');
   const eventDate = options.date || dateOnly(linked?.due) || today();
+  const bugTitle = options.title ?? options.t ?? '';
+  const bugDescription = options.description ?? options.d ?? '';
+  const bugSeverity = normalizeBugSeverity(options.severity);
+  const bugComponent = String(options.component ?? '').trim() || 'other';
+  const bugComponents = BUG_COMPONENTS.includes(bugComponent) ? BUG_COMPONENTS : [...BUG_COMPONENTS, bugComponent];
   const tabButton = (name, label) => `<button class="tab" type="button" role="tab" aria-selected="${activeTab === name}" data-create-tab="${name}">${label}</button>`;
   const panelHidden = (name) => (activeTab === name ? '' : ' hidden');
   return `<div class="create-dialog">
@@ -2170,12 +2470,12 @@ export function renderCreateDialog(state, preset = {}) {
       <div class="field field-wide"><label for="create-task-description">Description</label><textarea id="create-task-description" name="description" rows="3"></textarea></div>
     </form>
     <form class="form-grid create-panel" data-create-panel="bug" data-form="create-bug"${panelHidden('bug')}>
-      <div class="field field-wide"><label for="create-bug-title">Title</label><input id="create-bug-title" name="title" type="text" required /></div>
-      <div class="field"><label for="create-bug-severity">Severity</label><select id="create-bug-severity" class="select" name="severity" required>${['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'].map((value) => option(value, 'S3 Major')).join('')}</select></div>
+      <div class="field field-wide"><label for="create-bug-title">Title</label><input id="create-bug-title" name="title" type="text" required value="${esc(bugTitle)}" /></div>
+      <div class="field"><label for="create-bug-severity">Severity</label><select id="create-bug-severity" class="select" name="severity" required>${BUG_SEVERITIES.map((value) => option(value, bugSeverity)).join('')}</select></div>
       <div class="field"><label for="create-bug-priority">Priority</label><select id="create-bug-priority" class="select" name="priority">${['Highest', 'High', 'Medium', 'Low', 'Lowest'].map((value) => option(value, 'Medium')).join('')}</select></div>
-      <div class="field"><label for="create-bug-component">Component</label><select id="create-bug-component" class="select" name="component">${['work desk', 'tasks page', 'bugs page', 'calendar', 'settings', 'chart studio', 'other'].map((value) => option(value, 'other')).join('')}</select></div>
+      <div class="field"><label for="create-bug-component">Component</label><select id="create-bug-component" class="select" name="component">${bugComponents.map((value) => option(value, bugComponent)).join('')}</select></div>
       <div class="field field-wide"><label for="create-bug-repro">Steps to reproduce</label><textarea id="create-bug-repro" name="repro" rows="3" required></textarea></div>
-      <div class="field field-wide"><label for="create-bug-description">Description</label><textarea id="create-bug-description" name="description" rows="3"></textarea></div>
+      <div class="field field-wide"><label for="create-bug-description">Description</label><textarea id="create-bug-description" name="description" rows="3">${esc(bugDescription)}</textarea></div>
     </form>
     <form class="form-grid create-panel" data-create-panel="event" data-form="create-event"${panelHidden('event')}>
       <div class="field field-wide"><label for="create-event-title">What</label><input id="create-event-title" name="title" type="text" required${eventTitle ? ` value="${esc(eventTitle)}"` : ''} /></div>

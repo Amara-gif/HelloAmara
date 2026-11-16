@@ -30,6 +30,14 @@ Standards:
 - Phone layout is a **fresh** responsive design (drawer sidebar, stacked cards, ≥44 px targets).
   Narrow screenshots in `docs/Screen/` show only the broken old sidebar — do not copy them.
 
+## Bugs list delete semantics (task 22)
+
+`#/bugs` supports multi-select delete, but only as a **soft delete**. Selected rows get
+`deletedAt` + `updatedAt` timestamps, so `data.js` hides them from the live list, its counters
+and the detail route while the record, key and history stay in IndexedDB. Nothing is
+hard-deleted, which is why the bug detail page still says “Bugs are never deleted”. The
+confirmation dialog states the same choice before the write.
+
 ## Phase status (re-assessed)
 
 | Phase | Scope | Status |
@@ -37,7 +45,7 @@ Standards:
 | P0 | Static shell, design system, inventory navigation | **Done** (evidence retained below) |
 | P1 | IndexedDB wrapper, schema versioning, `meta`, tests | **Done** — wrapper + demo seed + accounts + fake-IDB CRUD/schema/soft-delete/boot tests + per-account persistent-storage request/status (meta, sidebar, Settings) |
 | P2 | Tasks, Home, My work, Calendar, Projects, Pages | **Partial** — rich shells + demo data; many inventory interactions still incomplete |
-| P3 | Bugs and events | **Partial** — list/detail/create + event CRUD; workflow gates and inline edits incomplete |
+| P3 | Bugs and events | **Partial** — list/detail/create + event CRUD; bugs list filters/sorts/multi-select soft delete; detail inline edits and TRANSITIONS gates |
 | P4 | Export and import | **Done** — one-file JSON export + reminder; validated merge import with added/updated/skipped confirmation and an explicit replace-all choice (`docs/IMPORT.md`) |
 | P5 | PWA and offline | **Done (code + Node tests)** — self-hosted manifest/icons; versioned service worker precaches the app shell and falls back to it offline; update toast posts `SKIP_WAITING` then reloads; Appearance install button uses the captured `beforeinstallprompt`. Manual Chromium installability check is left for the release pass |
 | P6 | Scraper | **Blocked** on owner (BRIEF §7 / §11) |
@@ -104,18 +112,18 @@ Phone/tablet PNGs are listed for completeness; they are not a layout target.
 | `05-tasks.png` | `#/tasks` | partial | List view, Open/All scope, filters, Send to QA, Brief, key columns. Missing: multi-value filters, parent expand/collapse, board health, Delete shown, severity/component/module filters, Progress column from real progress text. |
 | `06-tasks-all.png` | `#/tasks?scope=all` | partial | Scope=all works on the same list. Same gaps as `05`. |
 | `07-calendar.png` | `#/calendar` | partial | Month grid (≤3 + overflow), Prev/This/Next, project filter, next-seven agenda, Join/Delete, Enable reminders permission. Missing: repeat occurrence expansion, reminder polling/notifications payload, click-day detail dialog. |
-| `08-bugs.png` | `#/bugs` | partial | Open/total/QA/past-due stats, search/filters, table → detail, Report a bug. Missing: multi-select delete, full sort set, priority filter, “More fields”. |
-| `09-chat.png` | `#/chat` | partial | Summary tiles, agent cards, Send order, To-do modal, close order. Missing: lead (Amara) summary strip, Copy brief, reopen closed orders, richer per-agent counters. “Open queue file” has no static equivalent (toast). |
+| `08-bugs.png` | `#/bugs` | done for task 22 | Open/total/QA/past-due stats, full columns, q/status/severity/priority/component/assignee filters, smart/newest/oldest/severity/due/key sorts, multi-select soft delete, table → detail, Report a bug. Missing: “More fields”. |
+| `09-chat.png` | `#/chat` | done for task 25 | Amara lead strip with the five inventory stat labels; per-agent status, focus, latest activity and three workload counters; Send order; To-do panel with ≤12 owned rows; Copy brief to clipboard; Close and Reopen orders. “Open queue file” shows a clear not-available-in-browser toast. |
 | `10-files.png` | `#/files` | partial | Chart Studio + Agent Configuration tabs; stub chart when “opened”. Missing: real local chart builder UX (no OS folder), pivots/palettes, agent-file edit. Folder open correctly refused for browser. |
 | `11-settings.png` | `#/settings` | partial | AI connection fields, Save, Test/Fill toasts, demo reset for Test account. Missing: dirty-state save bar, advanced polish instructions / never-send terms, real key test (no network AI yet — keep local-only). Shared secret file path does not apply. |
 | `12-task-detail.png` | `#/task/:id` | partial | Breadcrumb, badges, stands/progress/details/local attachments/subtasks/scheduled/feed, workflow + review side cards. Attachments accept drop/click/paste and soft-detach; Open uses a temporary object URL. Missing: inline edits, Plan card save, Depends on, New subtask / Schedule presets into Create, 11-status transition map + QA gates, Ctrl+Enter comment, Analyze / real progress parse. |
 | `13-bug-detail.png` | `#/bug/:id` | partial | Description blocks, local attachments (drop/click/paste + soft-detach), activity feed, workflow, details. Missing: inline edits, TRANSITIONS map + fixer≠verifier, Ctrl+Enter. |
 | `14-project-hello-amara.png` | `#/project/TAG` | partial | Overview bars/snapshot, Work items + Pages tabs. TAG-only Rule Book / xBuild Report tabs are honest local placeholders (local page list / “not ported” copy; no API, scraper or Outlook automation). Missing: Edit project, donut, 14-day actions, Coming up + Schedule, daily record, Modules page, tab reorder. |
 | `15-project-market-review.png` | `#/project/MR` | partial | Same overview shell as other projects. **Market Review tool tabs** (Products, Review Update, Find user voices, Daily Digest, Issue Workbench, PQA Tracker, Report Deck, Issue Review, Analysis Report) are **missing**. P6 scraper-related tabs stay blocked. |
-| `16-bugs-new.png` | `#/bugs/new` | partial | Dedicated create form with SLA due on create. Inventory expects auto-open of Create dialog Bug tab + “Open the bug form”. Prefill query params incomplete. |
+| `16-bugs-new.png` | `#/bugs/new` | done for task 23 | Short page with Open the bug form + Back to Bugs; the Create dialog opens on the Bug tab automatically. Query prefills `t`, `d`, `component`, `severity` (S3 default); create assigns WD-n and the severity SLA due (S1 today, S2 +2d, S3 +5d, S4 none). |
 | `17-settings-ai.png` | `#/settings/ai` | partial | Flat numeric limits form. Missing: Summary/Progress/Comment/Benchmark section layout, toggles, Restore defaults. |
-| `18-settings-appearance.png` | `#/settings/appearance` | partial | Primary colour (applied), radius/glass fields, Save/Restore, Install-as-app using the captured browser prompt. Missing: palette presets, live preview strip, applying radius/glass tokens. |
-| `19-rating-trend.png` | `#/rating-trend` | partial | Full-page line chart from `meta.ratings`. Copy / Choose products / Smooth are placeholders. |
+| `18-settings-appearance.png` | `#/settings/appearance` | partial | Palette presets, live preview, primary colour, radius/glass tokens, Save/Restore, Install-as-app using the captured browser prompt. |
+| `19-rating-trend.png` | `#/rating-trend` | done for task 28 | Full-page line chart from `meta.ratings`. Choose products toggles series, Save keeps hidden products and the smooth/straight line style in `meta.ratings`; Copy image uses the clipboard (PNG, then SVG) and falls back to a toast. Back to Home link present. |
 | `20-page-editor.png` | `#/pages/new`, `#/page/:id/edit` | partial | Title/project/body save + pages rail. Missing: formatting toolbar, live preview, AI polish, attachments, revision history, print/PDF/Image. |
 | `21-tasks-board.png` | `#/tasks?view=board` | partial | Four columns, cards, Move to select. Missing: Send to QA on cards, board health disclosure, Waiting→In Review only when owner is QA (uses Delphine Roth name today). |
 | `t01-tasks-768.png` | (narrow ref) | n/a | Old app: sidebar overlay hides content. **Do not copy.** My Platform already uses a drawer ≥900 px breakpoint. |

@@ -2,15 +2,16 @@ import { listAccounts, getAccount, getActiveAccountId, setActiveAccount, clearAc
 import {
   start, getState, refresh, resetDemo, createTask, updateTask, addTaskComment,
   transitionTask, reviewTask,
-  createBug, updateBug, addBugComment, createEvent, deleteEvent, createPage,
+  createBug, updateBug, transitionBug, addBugComment, softDeleteBugs, createEvent, deleteEvent, createPage,
   updatePage, softDeletePage, softDeletePages, createProject, updateProject, softDeleteProject,
-  reorderProjects, createOrder, closeOrder, saveSettings, restoreQaMark, buildExport,
+  reorderProjects, createOrder, closeOrder, reopenOrder, saveSettings, saveMeta, restoreQaMark, buildExport,
   parseImportJson, planImport, applyImportPlan,
-  addAttachment, removeAttachment, attachmentObjectUrl,
+  addAttachment, removeAttachment, attachmentObjectUrl, AI_LIMIT_DEFAULTS,
 } from './data.js';
 import { readLocation, routeForPath, groupRoutes, SETTINGS_LINKS } from './routes.js';
-import { renderView, mountView, renderAccountScreen, renderCreateDialog, canSendToQa, qaOwnerName, markdown } from './views.js';
+import { renderView, mountView, renderAccountScreen, renderCreateDialog, bugPrefill, canSendToQa, qaOwnerName, markdown, agentBrief, renderAgentTodo, PALETTE_PRESETS, ratingPreferences } from './views.js';
 import { icon } from './icons.js';
+import { copyChartImage } from './chart.js';
 import { updateTaskBadge } from './nav-badge.js';
 import { openModal, toast } from './ui.js';
 import { taskFormPatch } from './task-form.js';
@@ -40,6 +41,7 @@ let sidebarPinned = readPreference(SIDEBAR_PIN_KEY);
 let lastFocused = null;
 let createTab = 'task';
 let createClose = null;
+let openedBugNewHash = null;
 let reminderTimer = null;
 const notifiedReminders = new Set();
 const installPrompt = setupInstallPrompt({ onChange: () => syncInstallUi() });
@@ -235,15 +237,107 @@ function updateNav(route) {
   updateTaskBadge(nav.querySelector('[data-task-count]'), getState().tasks);
 }
 
+const PALETTE_BY_ID = new Map(PALETTE_PRESETS.map((preset) => [preset.id, preset]));
+const DEFAULT_APPEARANCE = { preset: 'soft', primary: '', radiusBtn: 8, radiusCard: 16, glass: 0.25, enableGlass: true };
+const APPEARANCE_VARS = [
+  '--color-card-header',
+  '--color-accent',
+  '--color-accent-strong',
+  '--color-accent-strong-hover',
+  '--color-accent-soft',
+  '--color-nav-active',
+  '--color-focus',
+  '--color-on-accent',
+  '--color-on-card-header',
+];
+
+function appearanceNumber(value, fallback, min, max) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+}
+
+function applyPaletteTokens(root, preset) {
+  const primary = `var(${preset.primary})`;
+  const strong = `var(${preset.strong})`;
+  root.style.setProperty('--color-card-header', primary);
+  root.style.setProperty('--color-accent', primary);
+  root.style.setProperty('--color-accent-strong', strong);
+  root.style.setProperty('--color-accent-strong-hover', `var(${preset.hover})`);
+  root.style.setProperty('--color-accent-soft', `color-mix(in srgb, ${primary} 14%, var(--color-surface))`);
+  root.style.setProperty('--color-nav-active', `color-mix(in srgb, ${primary} 11%, var(--color-surface))`);
+  root.style.setProperty('--color-focus', strong);
+  root.style.setProperty('--color-on-accent', `var(${preset.on})`);
+  root.style.setProperty('--color-on-card-header', `var(${preset.on})`);
+}
+
+function applyCustomPrimary(root, primary) {
+  root.style.setProperty('--color-card-header', primary);
+  root.style.setProperty('--color-accent', primary);
+  root.style.setProperty('--color-accent-strong', primary);
+  root.style.setProperty('--color-accent-strong-hover', primary);
+  root.style.setProperty('--color-accent-soft', `color-mix(in srgb, ${primary} 14%, var(--color-surface))`);
+  root.style.setProperty('--color-nav-active', `color-mix(in srgb, ${primary} 11%, var(--color-surface))`);
+  root.style.setProperty('--color-focus', primary);
+}
+
 function applyAppearance(settings) {
   const root = document.documentElement;
-  root.style.removeProperty('--color-card-header');
-  root.style.removeProperty('--color-accent-strong');
-  root.style.removeProperty('--color-focus');
-  const primary = settings?.appearance?.primary;
-  if (primary) {
-    root.style.setProperty('--color-card-header', primary);
-    root.style.setProperty('--color-focus', primary);
+  for (const property of APPEARANCE_VARS) root.style.removeProperty(property);
+  const appearance = settings?.appearance ?? {};
+  const preset = PALETTE_BY_ID.get(String(appearance.preset ?? ''));
+  const primary = String(appearance.primary ?? '').trim();
+  if (preset) applyPaletteTokens(root, preset);
+  else if (primary) applyCustomPrimary(root, primary);
+  root.style.setProperty('--radius-btn', `${appearanceNumber(appearance.radiusBtn, 8, 0, 20)}px`);
+  root.style.setProperty('--radius-card', `${appearanceNumber(appearance.radiusCard, 16, 0, 28)}px`);
+  root.style.setProperty('--glass-opacity', appearance.enableGlass === false ? '1' : String(appearanceNumber(appearance.glass, 0.25, 0.1, 1)));
+}
+
+function appearanceFromForm(form) {
+  const data = formData(form);
+  return {
+    preset: String(data.preset ?? ''),
+    primary: String(data.primary ?? '').trim(),
+    radiusBtn: numericSetting(data.radiusBtn, 8),
+    radiusCard: numericSetting(data.radiusCard, 16),
+    glass: numericSetting(data.glass, 0.25),
+    enableGlass: Boolean(form.elements.enableGlass?.checked),
+  };
+}
+
+function cssColourToInputValue(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  if (/^#[0-9a-f]{6}$/i.test(text)) return text;
+  const probe = document.createElement('span');
+  probe.style.color = text;
+  document.body.append(probe);
+  const computed = getComputedStyle(probe).color;
+  probe.remove();
+  const match = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/i.exec(computed);
+  if (!match) return '';
+  return `#${[1, 2, 3].map((index) => Number(match[index]).toString(16).padStart(2, '0')).join('')}`;
+}
+
+function syncAppearanceForm(form) {
+  if (!form) return;
+  const appearance = appearanceFromForm(form);
+  const root = document.documentElement;
+  applyAppearance({ appearance });
+  const preset = PALETTE_BY_ID.get(appearance.preset);
+  form.querySelectorAll('[data-palette]').forEach((card) => {
+    card.setAttribute('aria-pressed', String(card.dataset.palette === appearance.preset));
+  });
+  form.querySelectorAll('[data-theme-value]').forEach((output) => {
+    const key = output.dataset.themeValue;
+    if (key === 'glass') output.textContent = appearance.enableGlass ? `${Math.round(appearance.glass * 100)}%` : 'Off';
+    else if (key === 'radiusBtn') output.textContent = `${appearance.radiusBtn}px`;
+    else if (key === 'radiusCard') output.textContent = `${appearance.radiusCard}px`;
+  });
+  const primaryInput = form.querySelector('#theme-primary');
+  if (primaryInput && preset) {
+    const resolved = cssColourToInputValue(getComputedStyle(root).getPropertyValue(preset.primary));
+    if (resolved) primaryInput.value = resolved;
   }
 }
 
@@ -278,6 +372,15 @@ function render() {
   applyAppearance(state.settings);
   mountView(route, query, state);
   syncInstallUi();
+  if (route.id === 'bug-new') {
+    const hash = window.location.hash;
+    if (openedBugNewHash !== hash) {
+      openedBugNewHash = hash;
+      openCreateDialog(bugPrefill(query));
+    }
+  } else {
+    openedBugNewHash = null;
+  }
   setDrawer(false);
   if (accountButton) accountButton.textContent = state.account.name;
   if (storageStatus) storageStatus.textContent = state.persistentStorage?.status ?? 'Unsupported';
@@ -345,6 +448,132 @@ function syncPageSelection() {
   if (count) count.textContent = `${selected} selected`;
 }
 
+function numericSetting(value, fallback) {
+  if (value === undefined || value === null || String(value).trim() === '') return fallback;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function setSettingsFormState(form, dirty) {
+  const status = form?.querySelector('[data-save-state]');
+  if (!status) return;
+  status.textContent = dirty
+    ? (status.dataset.dirtyText || 'Unsaved changes. Save before leaving.')
+    : (status.dataset.savedText || 'All changes saved.');
+  status.classList.toggle('is-dirty', dirty);
+}
+
+function markSettingsDirty(form) {
+  setSettingsFormState(form, true);
+}
+
+async function commitSettings(settings, message, { appearance = false } = {}) {
+  await saveSettings(settings);
+  if (appearance) applyAppearance(settings);
+  await rerender();
+  toast(message, { tone: 'success' });
+}
+
+function addDispatchRule(form) {
+  if (!form) return;
+  const list = form.querySelector('[data-dispatch-rules]');
+  const template = form.querySelector('template[data-dispatch-rule-template]');
+  if (!list || !template) return;
+  const index = `new-${Date.now()}-${list.querySelectorAll('[data-dispatch-rule]').length}`;
+  const fragment = template.content.cloneNode(true);
+  for (const node of fragment.querySelectorAll('[name], [id], [for]')) {
+    for (const attribute of ['name', 'id', 'for']) {
+      const value = node.getAttribute(attribute);
+      if (value) node.setAttribute(attribute, value.split('__index__').join(index));
+    }
+  }
+  list.append(fragment);
+  const empty = form.querySelector('[data-dispatch-empty]');
+  if (empty) empty.hidden = true;
+  markSettingsDirty(form);
+  list.querySelector('[data-dispatch-rule]:last-child input[name^="rule-key-"]')?.focus();
+}
+
+function removeDispatchRule(button) {
+  const row = button.closest('[data-dispatch-rule]');
+  const form = button.closest('form');
+  if (!row) return;
+  row.remove();
+  const empty = form?.querySelector('[data-dispatch-empty]');
+  if (empty) empty.hidden = Boolean(form.querySelector('[data-dispatch-rule]'));
+  markSettingsDirty(form);
+}
+
+function syncAreaField(form) {
+  const field = form?.querySelector('[data-areas-value]');
+  if (!field) return;
+  field.value = [...form.querySelectorAll('[data-area-chip]')].map((chip) => chip.dataset.areaChip).filter(Boolean).join(', ');
+  const empty = form.querySelector('[data-area-empty]');
+  if (empty) empty.hidden = Boolean(form.querySelector('[data-area-chip]'));
+}
+
+function addAreaChip(form) {
+  if (!form) return;
+  const input = form.querySelector('#areas-new');
+  const name = input?.value.trim() ?? '';
+  if (!name) {
+    toast('Type an area name first.', { tone: 'danger' });
+    input?.focus();
+    return;
+  }
+  const existing = [...form.querySelectorAll('[data-area-chip]')].some((chip) => String(chip.dataset.areaChip).toLowerCase() === name.toLowerCase());
+  if (existing) {
+    toast('That area is already on the list.', { tone: 'danger' });
+    return;
+  }
+  const chip = document.createElement('span');
+  chip.className = 'chip';
+  chip.dataset.areaChip = name;
+  chip.append(document.createTextNode(name));
+  const remove = document.createElement('button');
+  remove.className = 'chip-remove';
+  remove.type = 'button';
+  remove.dataset.action = 'remove-area';
+  remove.dataset.area = name;
+  remove.setAttribute('aria-label', `Remove ${name}`);
+  remove.textContent = '×';
+  chip.append(remove);
+  form.querySelector('[data-area-chips]')?.append(chip);
+  input.value = '';
+  syncAreaField(form);
+  markSettingsDirty(form);
+  input.focus();
+}
+
+function removeAreaChip(button) {
+  const form = button.closest('form');
+  button.closest('[data-area-chip]')?.remove();
+  syncAreaField(form);
+  markSettingsDirty(form);
+}
+
+function parseAreaNames(value) {
+  return String(value ?? '').split(',').map((name) => name.trim()).filter(Boolean);
+}
+
+function selectedBugIds() {
+  return [...document.querySelectorAll('[data-bug-select]:checked')].map((input) => input.value);
+}
+
+function syncBugSelection() {
+  const selected = selectedBugIds();
+  const boxes = [...document.querySelectorAll('[data-bug-select]')];
+  const selection = document.querySelector('[data-bug-selection]');
+  const bulkDelete = document.querySelector('[data-action="delete-selected-bugs"]');
+  const selectAll = document.querySelector('[data-select-all-bugs]');
+  if (selection) selection.textContent = `${selected.length} selected`;
+  if (bulkDelete) bulkDelete.disabled = selected.length === 0;
+  if (selectAll) {
+    selectAll.checked = boxes.length > 0 && selected.length === boxes.length;
+    selectAll.indeterminate = selected.length > 0 && selected.length < boxes.length;
+  }
+}
+
 function openCreateDialog(preset = {}) {
   const options = typeof preset === 'string' ? { tab: preset } : (preset ?? {});
   const state = getState();
@@ -387,7 +616,10 @@ async function submitCreate() {
     } else if (createTab === 'bug') {
       const bug = await createBug(data);
       createClose?.();
-      await rerender();
+      // The report-a-bug route auto-opens this dialog; leave it so a re-render
+      // cannot open the dialog again before the new bug is shown.
+      if (readLocation().path === '/bugs/new') navigate(`/bug/${bug.id}`);
+      else await rerender();
       toast(`Bug ${bug.key} reported.`, { tone: 'success' });
     } else {
       const event = await createEvent(data);
@@ -746,17 +978,78 @@ function downloadAttachment(url, name) {
 }
 
 function openAgentTodo(owner) {
-  const state = getState();
   const body = document.createElement('div');
-  const orders = state.orders.filter((order) => order.owner === owner);
-  const tasks = state.tasks.filter((task) => task.owner === owner && task.status !== 'Done').slice(0, 12);
-  body.innerHTML = `<div class="stack">
-    <h3>Open orders</h3>
-    <div class="row-list">${orders.map((order) => `<div class="row-item"><span class="row-main"><span class="row-title">${escAttr(order.text)}</span><span class="row-meta">${order.open ? 'Open' : 'Closed'}</span></span>${order.open ? `<button class="btn btn-ghost btn-sm" type="button" data-action="close-order" data-id="${order.id}">Done</button>` : ''}</div>`).join('') || '<p class="empty-state">No orders.</p>'}</div>
-    <h3>Owned work items</h3>
-    <div class="row-list">${tasks.map((task) => `<a class="row-item" href="#/task/${task.id}"><span class="row-main"><span class="row-title">${escAttr(task.title)}</span><span class="row-meta">${escAttr(task.key)} · ${escAttr(task.status)}</span></span></a>`).join('') || '<p class="empty-state">No owned work items.</p>'}</div>
-  </div>`;
+  body.innerHTML = renderAgentTodo(getState(), owner);
   openModal({ title: `${owner} · to-do list`, content: body, confirmLabel: 'Close' });
+}
+
+async function copyAgentBrief(owner) {
+  try {
+    await navigator.clipboard.writeText(agentBrief(getState(), owner));
+    toast(`${owner}'s brief copied to the clipboard.`, { tone: 'success' });
+  } catch {
+    toast('Clipboard access is not available.', { tone: 'danger' });
+  }
+}
+
+function openRatingProductsDialog() {
+  const ratings = getState().ratings;
+  const all = ratings?.series ?? [];
+  if (!all.length) {
+    toast('No rating products are available in this account yet.', { tone: 'danger' });
+    return;
+  }
+  const { hidden } = ratingPreferences(ratings);
+  const body = document.createElement('div');
+  body.className = 'stack';
+  body.innerHTML = `<p class="field-help">Tick the products to show on the chart. Everything selects all products; Save keeps the choice in this account on this device.</p>
+    <div class="row-list" data-rating-product-list>${all.map((item) => `<label class="checkbox-row"><input type="checkbox" name="ratingProduct" value="${escAttr(item.name)}"${hidden.has(String(item.name)) ? '' : ' checked'} /><span>${escAttr(item.name)}</span></label>`).join('')}</div>
+    <div class="row-actions"><button class="btn btn-ghost btn-sm" type="button" data-rating-everything>Everything</button><span class="field-help" data-rating-selected aria-live="polite"></span></div>`;
+  const boxes = [...body.querySelectorAll('input[name="ratingProduct"]')];
+  const count = body.querySelector('[data-rating-selected]');
+  const sync = () => {
+    if (count) count.textContent = `${boxes.filter((box) => box.checked).length} of ${boxes.length} selected`;
+  };
+  boxes.forEach((box) => box.addEventListener('change', sync));
+  body.querySelector('[data-rating-everything]')?.addEventListener('click', () => {
+    boxes.forEach((box) => { box.checked = true; });
+    sync();
+    boxes[0]?.focus();
+  });
+  sync();
+  openModal({
+    title: 'Choose products',
+    content: body,
+    confirmLabel: 'Save',
+    cancelLabel: 'Close',
+    onConfirm: async () => {
+      const selected = new Set(boxes.filter((box) => box.checked).map((box) => box.value));
+      const nextHidden = all.map((item) => String(item.name)).filter((name) => !selected.has(name));
+      await saveMeta('ratings', { ...ratings, hidden: nextHidden });
+      render();
+      toast(`${selected.size} of ${all.length} product${all.length === 1 ? '' : 's'} on the chart.`, { tone: 'success' });
+    },
+  });
+}
+
+async function setRatingLineStyle(value) {
+  const ratings = getState().ratings;
+  if (!ratings) return;
+  const lineStyle = value === 'straight' ? 'straight' : 'smooth';
+  if (ratings.lineStyle === lineStyle) return;
+  await saveMeta('ratings', { ...ratings, lineStyle });
+  render();
+  toast(lineStyle === 'straight' ? 'Straight line style saved.' : 'Smooth curve style saved.', { tone: 'success' });
+}
+
+async function copyRatingImage() {
+  const chart = document.getElementById('rating-chart');
+  try {
+    const format = await copyChartImage(chart);
+    toast(format === 'svg' ? 'Chart SVG copied to the clipboard.' : 'Chart image copied to the clipboard.', { tone: 'success' });
+  } catch {
+    toast('Copy image is not available in this browser.', { tone: 'danger' });
+  }
 }
 
 document.addEventListener('click', async (event) => {
@@ -769,6 +1062,7 @@ document.addEventListener('click', async (event) => {
   if (action === 'agenda-row') { event.preventDefault(); openAgendaDialog(actionEl); }
   else if (action === 'switch-account') { clearActiveAccount(); window.location.reload(); }
   else if (action === 'open-create') openCreateDialog();
+  else if (action === 'open-bug-form') openCreateDialog(bugPrefill(readLocation().query));
   else if (action === 'new-subtask') {
     const parent = getState().tasks.find((row) => row.id === id);
     openCreateDialog({ tab: 'task', parentId: id, projectId: parent?.projectId || '', type: 'Sub-task' });
@@ -851,7 +1145,16 @@ document.addEventListener('click', async (event) => {
       },
     });
   } else if (action === 'delete-page') {
-    openModal({ title: 'Delete this page?', message: 'The page is soft-deleted on this device. Other versions stay in the account.', confirmLabel: 'Delete', tone: 'danger', onConfirm: async () => { await softDeletePage(id); render(); toast('Page deleted.', { tone: 'success' }); } });
+    const isSnapshot = actionEl.dataset.snapshot === '1';
+    openModal({
+      title: isSnapshot ? 'Delete this snapshot?' : 'Delete this page?',
+      message: isSnapshot
+        ? 'The snapshot page is soft-deleted on this device. Other versions stay in the account. Nothing is deleted automatically.'
+        : 'The page is soft-deleted on this device. Other versions stay in the account.',
+      confirmLabel: isSnapshot ? 'Delete snapshot' : 'Delete',
+      tone: 'danger',
+      onConfirm: async () => { await softDeletePage(id); render(); toast(isSnapshot ? 'Snapshot deleted.' : 'Page deleted.', { tone: 'success' }); },
+    });
   } else if (action === 'delete-selected-pages') {
     const ids = [...main.querySelectorAll('[data-page-select]:checked')].map((box) => box.value);
     if (!ids.length) {
@@ -872,6 +1175,24 @@ document.addEventListener('click', async (event) => {
     });
   } else if (action === 'delete-event') {
     openModal({ title: 'Delete this event?', message: 'This removes the event from this device.', confirmLabel: 'Delete', tone: 'danger', onConfirm: async () => { await deleteEvent(id); render(); toast('Event deleted.', { tone: 'success' }); } });
+  } else if (action === 'delete-selected-bugs') {
+    const ids = selectedBugIds();
+    if (!ids.length) {
+      toast('Select at least one bug first.', { tone: 'danger' });
+    } else {
+      const count = ids.length;
+      openModal({
+        title: `Delete ${count} selected bug${count === 1 ? '' : 's'}?`,
+        message: 'Selected bugs are soft-deleted on this device: they disappear from the list and its counters, but the stored rows and their history remain in IndexedDB. There is no hard delete.',
+        confirmLabel: 'Delete selected',
+        tone: 'danger',
+        onConfirm: async () => {
+          const deleted = await softDeleteBugs(ids);
+          render();
+          toast(`${deleted} bug${deleted === 1 ? '' : 's'} hidden from the list.`, { tone: 'success' });
+        },
+      });
+    }
   } else if (action === 'enable-reminders') {
     if (typeof Notification !== 'undefined') {
       let result = Notification.permission;
@@ -915,15 +1236,38 @@ document.addEventListener('click', async (event) => {
       toast(error.message || 'That attachment could not be removed.', { tone: 'danger' });
     }
   } else if (action === 'fake-download') toast('Attachment placeholder — file storage is a later phase.');
+  else if (action === 'fake-download') toast('Attachment placeholder — file storage is a later phase.');
+  else if (action === 'rating-choose') openRatingProductsDialog();
+  else if (action === 'rating-line-style') await setRatingLineStyle(actionEl.dataset.style);
+  else if (action === 'rating-copy') await copyRatingImage();
   else if (action === 'toast-copy') toast('Copied actions are placeholders in this build.');
-  else if (action === 'test-key') toast('Demo key is valid for preview.', { tone: 'success' });
-  else if (action === 'fill-gaps') toast('Backfill is not connected to an AI service yet.');
-  else if (action === 'agent-todo') openAgentTodo(actionEl.dataset.owner);
-  else if (action === 'close-order') { await closeOrder(id); render(); document.querySelector('.modal-backdrop')?.remove(); }
-  else if (action === 'focus-add-project') document.getElementById('add-project-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  else if (action === 'reset-theme') {
+  else if (action === 'add-dispatch-rule') addDispatchRule(actionEl.closest('form'));
+  else if (action === 'remove-dispatch-rule') removeDispatchRule(actionEl);
+  else if (action === 'add-area') addAreaChip(actionEl.closest('form'));
+  else if (action === 'remove-area') removeAreaChip(actionEl);
+  else if (action === 'restore-ai-defaults') {
     const settings = structuredClone(getState().settings);
-    settings.appearance = { primary: '', radiusBtn: 8, radiusCard: 16, glass: 0.25, enableGlass: true };
+    settings.aiLimits = { ...AI_LIMIT_DEFAULTS };
+    await commitSettings(settings, 'AI limits restored to defaults.');
+  } else if (action === 'test-key') toast('Key test is local in this build. No network AI is connected.', { tone: 'success' });
+  else if (action === 'fill-gaps') toast('Fill gaps is a local preview. No network AI is connected.');
+  else if (action === 'agent-todo') openAgentTodo(actionEl.dataset.owner);
+  else if (action === 'close-order') { await closeOrder(id); render(); document.querySelector('.modal-backdrop')?.remove(); toast('Order closed. Reopen it from the agent to-do list.', { tone: 'success' }); }
+  else if (action === 'reopen-order') { await reopenOrder(id); render(); document.querySelector('.modal-backdrop')?.remove(); toast('Order reopened and back on the agent To-do list.', { tone: 'success' }); }
+  else if (action === 'copy-brief') await copyAgentBrief(actionEl.dataset.owner);
+  else if (action === 'open-queue-file') toast('Queue files are not available in browser. Orders stay in this account on this device.', { tone: 'danger' });
+  else if (action === 'focus-add-project') document.getElementById('add-project-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  else if (action === 'apply-palette') {
+    const card = actionEl.closest('[data-palette]');
+    const form = actionEl.closest('form[data-form="settings-appearance"]');
+    if (card && form && PALETTE_BY_ID.has(card.dataset.palette)) {
+      form.querySelector('[data-theme-preset]').value = card.dataset.palette;
+      markSettingsDirty(form);
+      syncAppearanceForm(form);
+    }
+  } else if (action === 'reset-theme') {
+    const settings = structuredClone(getState().settings);
+    settings.appearance = { ...DEFAULT_APPEARANCE };
     await saveSettings(settings);
     applyAppearance(settings);
     render();
@@ -933,9 +1277,16 @@ document.addEventListener('click', async (event) => {
 
 document.addEventListener('input', (event) => {
   const source = event.target.closest?.('[data-page-preview-source]');
-  if (!source) return;
-  const preview = main.querySelector('[data-page-preview]');
-  if (preview) preview.innerHTML = markdown(source.value);
+  if (source) {
+    const preview = main.querySelector('[data-page-preview]');
+    if (preview) preview.innerHTML = markdown(source.value);
+  }
+  const form = event.target.closest('form[data-settings-form]');
+  if (form) markSettingsDirty(form);
+  if (form?.dataset.form === 'settings-appearance') {
+    if (event.target.name === 'primary') form.querySelector('[data-theme-preset]').value = '';
+    syncAppearanceForm(form);
+  }
 });
 
 document.addEventListener('change', async (event) => {
@@ -959,6 +1310,16 @@ document.addEventListener('change', async (event) => {
     await importJsonFile(importFile);
     return;
   }
+  const settingsForm = event.target.closest('form[data-settings-form]');
+  if (settingsForm) markSettingsDirty(settingsForm);
+  if (settingsForm?.dataset.form === 'settings-appearance') syncAppearanceForm(settingsForm);
+  const selectAllBugs = event.target.closest('[data-select-all-bugs]');
+  if (selectAllBugs) {
+    document.querySelectorAll('[data-bug-select]').forEach((box) => { box.checked = selectAllBugs.checked; });
+    syncBugSelection();
+  }
+  const oneBug = event.target.closest('[data-bug-select]');
+  if (oneBug) syncBugSelection();
   const move = event.target.closest('[data-move-task]');
   if (move) {
     const status = move.value;
@@ -1062,6 +1423,13 @@ document.addEventListener('submit', async (event) => {
       await addTaskComment(data.id, data.body);
       await rerender();
       toast('Comment saved on this device.', { tone: 'success' });
+    } else if (form.dataset.form === 'bug-title' || form.dataset.form === 'bug-details' || form.dataset.form === 'bug-fields') {
+      const fields = (form.dataset.history || '').split(',').map((field) => field.trim()).filter(Boolean);
+      const patch = {};
+      for (const field of fields) patch[field] = data[field] ?? '';
+      await updateBug(data.id, patch, fields);
+      await rerender();
+      toast('Bug saved on this device.', { tone: 'success' });
     } else if (form.dataset.form === 'bug-comment') {
       await addBugComment(data.id, data.body);
       await rerender();
@@ -1071,39 +1439,52 @@ document.addEventListener('submit', async (event) => {
       await rerender();
       toast(`${moved.key} moved to ${moved.workflow}.`, { tone: 'success' });
     } else if (form.dataset.form === 'bug-workflow') {
-      await updateBug(data.id, { status: data.to }, 'status');
+      const moved = await transitionBug(data.id, {
+        to: data.to,
+        as: data.as,
+        reason: data.reason,
+        duplicate_of: data.duplicate_of,
+      });
       await rerender();
-      toast('Bug moved.', { tone: 'success' });
+      toast(`${moved.key} moved to ${moved.status}.`, { tone: 'success' });
     } else if (form.dataset.form === 'order') {
       await createOrder(data.owner, data.text);
       await rerender();
       toast('Order sent.', { tone: 'success' });
     } else if (form.dataset.form === 'settings-ai') {
       const settings = structuredClone(getState().settings);
-      settings.ai = { ...settings.ai, key: data.key, model: data.model, timeout: Number(data.timeout), status: 'Connected' };
-      await saveSettings(settings); applyAppearance(settings); await rerender(); toast('Settings saved.', { tone: 'success' });
+      settings.ai = { ...settings.ai, key: data.key, model: data.model, timeout: numericSetting(data.timeout, 90), status: 'Connected' };
+      setSettingsFormState(form, false);
+      await commitSettings(settings, 'AI settings saved on this device.');
     } else if (form.dataset.form === 'settings-limits') {
       const settings = structuredClone(getState().settings);
-      settings.aiLimits = { summary: Number(data.summary), progress: Number(data.progress), comment: Number(data.comment), issue: Number(data.issue), benchmark: Number(data.benchmark) };
-      await saveSettings(settings); await rerender(); toast('AI limits saved.', { tone: 'success' });
+      settings.aiLimits = Object.fromEntries(Object.keys(AI_LIMIT_DEFAULTS).map((key) => [key, numericSetting(data[key], AI_LIMIT_DEFAULTS[key])]));
+      setSettingsFormState(form, false);
+      await commitSettings(settings, 'AI limits saved on this device.');
     } else if (form.dataset.form === 'settings-language') {
       const settings = structuredClone(getState().settings);
       settings.language = { primary: data.primary, secondary: data.secondary, rule: data.rule };
-      await saveSettings(settings); await rerender(); toast('Language rules saved.', { tone: 'success' });
+      setSettingsFormState(form, false);
+      await commitSettings(settings, 'Language rules saved on this device.');
     } else if (form.dataset.form === 'settings-dispatch') {
       const settings = structuredClone(getState().settings);
-      const rules = [];
-      for (let i = 0; i < 2; i += 1) if (data[`rule-key-${i}`]) rules.push({ keyword: data[`rule-key-${i}`], owner: data[`rule-owner-${i}`] });
+      const rules = [...form.querySelectorAll('[data-dispatch-rule]')].map((row) => ({
+        keyword: (row.querySelector('input[name^="rule-key-"]')?.value ?? '').trim(),
+        owner: row.querySelector('select[name^="rule-owner-"]')?.value || data.defaultOwner,
+      })).filter((rule) => rule.keyword);
       settings.dispatch = { defaultOwner: data.defaultOwner, rules };
-      await saveSettings(settings); await rerender(); toast('Dispatch rules saved.', { tone: 'success' });
+      setSettingsFormState(form, false);
+      await commitSettings(settings, 'Dispatch rules saved on this device.');
     } else if (form.dataset.form === 'settings-areas') {
       const settings = structuredClone(getState().settings);
-      settings.areas = { options: data.options.split(',').map((value) => value.trim()).filter(Boolean), fallback: data.fallback };
-      await saveSettings(settings); await rerender(); toast('Areas saved.', { tone: 'success' });
+      settings.areas = { options: parseAreaNames(data.options), fallback: String(data.fallback ?? '').trim() || 'NA' };
+      setSettingsFormState(form, false);
+      await commitSettings(settings, 'Areas saved on this device.');
     } else if (form.dataset.form === 'settings-appearance') {
       const settings = structuredClone(getState().settings);
-      settings.appearance = { primary: data.primary, radiusBtn: Number(data.radiusBtn), radiusCard: Number(data.radiusCard), glass: Number(data.glass), enableGlass: Boolean(data.enableGlass) };
-      await saveSettings(settings); applyAppearance(settings); await rerender(); toast('Theme saved.', { tone: 'success' });
+      settings.appearance = appearanceFromForm(form);
+      setSettingsFormState(form, false);
+      await commitSettings(settings, 'Theme saved on this device.', { appearance: true });
     } else if (form.dataset.form === 'page-save') {
       const title = String(data.title ?? '').trim();
       if (!title) {
@@ -1210,7 +1591,7 @@ backdrop.addEventListener('click', () => setDrawer(false));
 nav.addEventListener('click', (event) => { if (event.target.closest('a')) setDrawer(false); });
 document.getElementById('skip-link')?.addEventListener('click', (event) => { event.preventDefault(); main.focus(); main.scrollIntoView(); });
 document.addEventListener('keydown', (event) => {
-  const commentBox = event.target.closest?.('#tskComment, #task-progress-comment');
+  const commentBox = event.target.closest?.('#tskComment, #task-progress-comment, #bgComment');
   if (commentBox && event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
     event.preventDefault();
     if (typeof commentBox.form?.requestSubmit === 'function') commentBox.form.requestSubmit();
