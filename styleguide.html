@@ -312,6 +312,16 @@
               <span class="badge badge-muted badge-count">12</span>
               <span class="badge badge-count toolbar-count">3 in progress · 1 in review · 0 overdue</span>
             </div>
+            <p class="field-help">Priority keeps the dot-and-label shape on the shared badge; severity uses the same tone classes. Both reuse <code>badge-danger</code>, <code>badge-warning</code>, <code>badge-success</code> and <code>badge-muted</code>.</p>
+            <div class="sg-row">
+              <span class="badge badge-danger priority"><span class="badge-dot priority-dot" aria-hidden="true"></span>Highest priority</span>
+              <span class="badge badge-warning priority"><span class="badge-dot priority-dot" aria-hidden="true"></span>Medium priority</span>
+              <span class="badge badge-success priority"><span class="badge-dot priority-dot" aria-hidden="true"></span>Low priority</span>
+              <span class="badge badge-danger">S1 Blocker</span>
+              <span class="badge badge-warning">S2 Critical</span>
+              <span class="badge badge-accent">S3 Major</span>
+              <span class="badge badge-muted">S4 Minor</span>
+            </div>
           </div>
         </div>
       </section>
@@ -909,7 +919,7 @@
             <article class="board-card">
               <a href="#sg-board">Example work item</a>
               <span class="row-meta">T-1 · Amara</span>
-              <div class="board-card-foot"><span class="badge badge-band">New</span><span class="priority priority-warning"><span class="priority-dot" aria-hidden="true"></span>Medium</span></div>
+              <div class="board-card-foot"><span class="badge badge-band">New</span><span class="badge badge-warning priority"><span class="badge-dot priority-dot" aria-hidden="true"></span>Medium</span></div>
               <label class="board-move"><span>Move to…</span><select class="select select-sm" aria-label="Move example work item to"><option selected>To do</option><option>In progress</option><option>Waiting</option><option>Done</option></select></label>
               <div class="row-actions"><button class="btn btn-ghost btn-sm" type="button">Send to QA</button></div>
             </article>
@@ -977,7 +987,8 @@
                   <span class="calendar-weekday">Sun</span>
                 </div>
                 <div class="calendar-grid">
-                  <div class="calendar-day has-items"><span class="calendar-date">2</span><a class="calendar-item calendar-item-task" href="#sg-task-views">T-1 · Example task</a></div>
+                  <div class="calendar-day has-items"><span class="calendar-date">2</span><a class="calendar-item calendar-item-task" href="#sg-task-views">T-1 · Example task</a><a class="calendar-item calendar-item-bug" href="#sg-task-views">WD-1 · Example bug</a></div>
+                  <div class="calendar-day has-items"><span class="calendar-date">3</span><a class="calendar-item calendar-item-project" href="#sg-task-views">TAG · Example project</a><span class="calendar-item calendar-item-event">Weekly review</span></div>
                   <div class="calendar-day"><span class="calendar-date">3</span></div>
                   <div class="calendar-day"><span class="calendar-date">4</span></div>
                   <div class="calendar-day"><span class="calendar-date">5</span></div>

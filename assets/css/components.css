@@ -2671,7 +2671,6 @@ input[type="radio"],
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   white-space: nowrap;
 }
@@ -3018,7 +3017,7 @@ input[type="radio"],
 .calendar-item {
   display: block;
   padding: 1px 4px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--color-accent-soft);
   color: var(--color-accent-strong);
   font-size: var(--font-size-xs);
@@ -3028,9 +3027,27 @@ input[type="radio"],
   white-space: nowrap;
 }
 
-.calendar-item-bug { background: var(--color-danger); color: var(--color-on-danger); }
-.calendar-item-project { background: var(--color-band); color: var(--color-text-secondary); }
-.calendar-item-event { background: var(--color-success-soft); color: var(--color-success); }
+/* Calendar pills share the badge tone tokens; bugs use the soft danger tint,
+   never a solid danger fill. */
+.calendar-item-task {
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+}
+
+.calendar-item-bug {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.calendar-item-project {
+  background: var(--color-band);
+  color: var(--color-text-secondary);
+}
+
+.calendar-item-event {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
 .calendar-more {
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
