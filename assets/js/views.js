@@ -548,9 +548,9 @@ function projectsPage(state, query) {
   const archived = query.get('archived') === '1';
   const editId = query.get('edit') ?? '';
   const chips = [
-    `<a class="chip${!archived ? ' is-active' : ''}" href="#/projects">All</a>`,
-    ...state.projects.filter((p) => !p.archived).map((p) => `<a class="chip${!archived ? '' : ''}" href="${pageUrl('/projects', { project: p.id })}">${esc(p.key)} ${esc(p.name)}</a>`),
-    `<a class="chip${archived ? ' is-active' : ''}" href="${pageUrl('/projects', { archived: 1 })}">Archived (${state.projects.filter((p) => p.archived).length})</a>`,
+    `<a class="chip${!archived ? ' is-active' : ''}" href="#/projects"${!archived ? ' aria-current="page"' : ''}>All</a>`,
+    ...state.projects.filter((p) => !p.archived).map((p) => `<a class="chip" href="${pageUrl('/projects', { project: p.id })}">${esc(p.key)} ${esc(p.name)}</a>`),
+    `<a class="chip${archived ? ' is-active' : ''}" href="${pageUrl('/projects', { archived: 1 })}"${archived ? ' aria-current="page"' : ''}>Archived (${state.projects.filter((p) => p.archived).length})</a>`,
   ];
   const rows = state.projects.filter((project) => Boolean(project.archived) === archived);
   return `
@@ -1013,8 +1013,8 @@ function workItemsBody(state, query, options = {}) {
     <div class="task-toolbar">
       <div class="tabs">${['list', 'board', 'calendar', 'timeline'].map((name) => `<a class="tab" href="${url({ view: name })}"${view === name ? ' aria-current="page"' : ''}>${name[0].toUpperCase() + name.slice(1)}</a>`).join('')}</div>
       <div class="scope-switch">
-        <a class="chip${scope === 'open' ? ' is-active' : ''}" href="${url({ scope: 'open' })}">Open ${openCount}</a>
-        <a class="chip${scope === 'all' ? ' is-active' : ''}" href="${url({ scope: 'all' })}">All ${allCount}</a>
+        <a class="chip${scope === 'open' ? ' is-active' : ''}" href="${url({ scope: 'open' })}"${scope === 'open' ? ' aria-current="page"' : ''}>Open ${openCount}</a>
+        <a class="chip${scope === 'all' ? ' is-active' : ''}" href="${url({ scope: 'all' })}"${scope === 'all' ? ' aria-current="page"' : ''}>All ${allCount}</a>
       </div>
       <span class="toolbar-count">${inProgressTaskCount(rows)} in progress · ${inReviewCount} in review · ${overdue} overdue</span>
     </div>
@@ -1451,7 +1451,7 @@ function paletteCard(preset, currentPreset) {
 }
 
 function appearancePreview() {
-  return `<div class="theme-preview field-wide" role="group" aria-label="Live preview"><span class="theme-preview-label">Live preview</span><span class="btn btn-primary btn-sm" aria-hidden="true">Primary</span><span class="btn btn-secondary btn-sm" aria-hidden="true">Secondary</span><span class="chip is-active" aria-hidden="true">Selected chip</span></div>`;
+  return `<div class="theme-preview field-wide" role="group" aria-label="Live preview"><span class="theme-preview-label">Live preview</span><span class="btn btn-primary btn-sm" aria-hidden="true">Primary</span><span class="btn btn-secondary btn-sm" aria-hidden="true">Secondary</span><span class="chip" aria-pressed="true" aria-hidden="true">Selected chip</span></div>`;
 }
 
 // One save pattern for every settings form: shared dirty/saved text plus a
@@ -2203,7 +2203,7 @@ function pageView(state, route, query) {
       ${tags.length ? `<div><dt>Tags</dt><dd>${tags.map((tag) => `<span class="badge badge-muted">${esc(tag)}</span>`).join(' ')}</dd></div>` : ''}
     </dl>
     <div class="page-workspace">
-      <aside class="page-rail card"><div class="card-head"><h2>Pages</h2></div><div class="card-body"><div class="row-list">${state.pages.map((item) => `<a class="row-item${item.id === page.id ? ' is-active' : ''}" href="#/page/${item.id}"><span class="row-main"><span class="row-title">${esc(item.title)}</span><span class="row-meta">${esc(item.type)} · ${fmt(item.updatedAt)}</span></span></a>`).join('')}</div>${revisionHistory(page, readOnly)}</div></aside>
+      <aside class="page-rail card"><div class="card-head"><h2>Pages</h2></div><div class="card-body"><div class="row-list">${state.pages.map((item) => `<a class="row-item${item.id === page.id ? ' is-active' : ''}" href="#/page/${item.id}"${item.id === page.id ? ' aria-current="page"' : ''}><span class="row-main"><span class="row-title">${esc(item.title)}</span><span class="row-meta">${esc(item.type)} · ${fmt(item.updatedAt)}</span></span></a>`).join('')}</div>${revisionHistory(page, readOnly)}</div></aside>
       <article class="card print-friendly" data-print-region><div class="card-body"><div class="prose" data-page-body>${markdown(shown.body)}</div></div></article>
     </div>`;
 }
@@ -2222,7 +2222,7 @@ function pageEditor(state, route, query) {
     <nav class="breadcrumb"><a href="#/pages">← Pages</a></nav>
     ${pageHead(isNew ? 'New page' : 'Edit page', 'Stored in this account only. Blank titles are rejected. The preview updates as you type.')}
     <div class="page-workspace">
-      <aside class="page-rail card"><div class="card-head"><h2>Pages</h2></div><div class="card-body"><div class="row-list">${state.pages.map((item) => `<a class="row-item${item.id === page?.id ? ' is-active' : ''}" href="#/page/${item.id}"><span class="row-main"><span class="row-title">${esc(item.title)}</span><span class="row-meta">${esc(item.type)}</span></span></a>`).join('')}</div></div></aside>
+      <aside class="page-rail card"><div class="card-head"><h2>Pages</h2></div><div class="card-body"><div class="row-list">${state.pages.map((item) => `<a class="row-item${item.id === page?.id ? ' is-active' : ''}" href="#/page/${item.id}"${item.id === page?.id ? ' aria-current="page"' : ''}><span class="row-main"><span class="row-title">${esc(item.title)}</span><span class="row-meta">${esc(item.type)}</span></span></a>`).join('')}</div></div></aside>
       <section class="card"><div class="card-body"><form class="stack" data-form="page-save" data-page-editor><input type="hidden" name="id" value="${esc(page?.id ?? '')}" /><div class="field"><label for="page-title">Title</label><input class="control" id="page-title" name="title" type="text" value="${esc(page?.title ?? '')}" required aria-required="true" /><p class="field-help">Required. Leading and trailing spaces are trimmed.</p></div><div class="field"><label for="page-project">Project</label><select id="page-project" class="control" name="projectId"><option value="">No project</option>${state.projects.map((p) => option(p.id, projectId, `${p.key} ${p.name}`)).join('')}</select></div><div class="field"><label for="page-tags">Tags</label><input class="control" id="page-tags" name="tags" type="text" value="${esc(page?.tags ?? '')}" placeholder="Comma-separated, optional" /><p class="field-help">Optional. Separate tags with commas.</p></div><div class="page-editor-body"><div class="field page-editor-source"><label for="page-body">Body</label><textarea id="page-body" name="body" rows="18" placeholder="Write markdown…" class="control" data-page-preview-source>${esc(page?.body ?? '')}</textarea><p class="field-help">Markdown: ## heading, - list and **bold**.</p></div><section class="page-editor-preview" aria-label="Markdown preview"><div class="page-editor-preview-head"><span class="card-title">Preview</span><span class="badge badge-muted">Live</span></div><div class="prose" data-page-preview aria-live="polite">${markdown(page?.body ?? '')}</div></section></div><div class="row-actions"><button class="btn btn-primary" type="submit">${isNew ? 'Create page' : 'Save page'}</button><button class="btn btn-ghost" type="button" data-action="ai-polish">AI Polish</button><a class="btn btn-ghost" href="${page ? `#/page/${page.id}` : '#/pages'}">Cancel</a></div></form></div></section>
     </div>`;
 }
@@ -2274,7 +2274,7 @@ function ratingPage(state) {
   const { lineStyle } = ratingPreferences(ratings);
   const styleButton = (value, label) => {
     const active = lineStyle === value;
-    return `<button class="btn ${active ? 'btn-primary' : 'btn-ghost'}" type="button" data-action="rating-line-style" data-style="${value}" aria-pressed="${active}">${label}</button>`;
+    return `<button class="chip" type="button" data-action="rating-line-style" data-style="${value}" aria-pressed="${active}">${label}</button>`;
   };
   return `
     ${pageHead('Rating trend', 'Two weeks at a time — choose products, then copy the chart when you need it.', `<a class="btn btn-ghost" href="#/">${icon('arrow', 16)}Back to Home</a>`)}

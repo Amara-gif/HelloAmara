@@ -218,21 +218,26 @@ function trapTab(event) {
 
 function updateNav(route) {
   const isSettings = route.id === 'settings' || route.id.startsWith('settings-');
+  const nestedSettings = isSettings && route.id !== 'settings';
+  const isProjectDetail = route.id === 'project-detail';
   nav.querySelectorAll('[data-route]').forEach((link) => {
-    if (link.dataset.route === route.nav) link.setAttribute('aria-current', 'page');
+    const selected = link.dataset.route === route.nav
+      && !(nestedSettings && link.dataset.route === 'settings')
+      && !(isProjectDetail && link.dataset.route === 'projects');
+    if (selected) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
   const settingsLink = nav.querySelector('[data-route="settings"]');
-  settingsLink?.classList.toggle('is-section', isSettings && route.id !== 'settings');
+  settingsLink?.classList.toggle('is-section', nestedSettings);
   const settingsNav = nav.querySelector('[data-settings-nav]');
   if (settingsNav) settingsNav.hidden = !isSettings;
-  if (isSettings) {
+  if (nestedSettings) {
     const current = nav.querySelector(`[data-route="${route.id}"]`);
     if (current) current.setAttribute('aria-current', 'page');
-    if (route.id === 'settings') settingsLink?.setAttribute('aria-current', 'page');
   }
-  if (route.id === 'project-detail') {
+  if (isProjectDetail) {
     nav.querySelector('[data-route="projects"]')?.classList.add('is-section');
+    nav.querySelectorAll('[data-project-key]').forEach((link) => link.removeAttribute('aria-current'));
     nav.querySelector(`[data-project-key="${escAttr(route.params.key)}"]`)?.setAttribute('aria-current', 'page');
   }
   updateTaskBadge(nav.querySelector('[data-task-count]'), getState().tasks);

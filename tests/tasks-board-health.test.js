@@ -61,7 +61,7 @@ test('board defaults to all statuses so the Done column shows the demo Done task
     assert.match(done, new RegExp(`>${key} ·`), `${key} is missing from the default Done column`);
   }
   assert.match(done, /<span class="badge badge-muted">5<\/span>/);
-  assert.match(html, /<a class="chip is-active" href="[^"]*scope=all">All \d+<\/a>/);
+  assert.match(html, /<a class="chip is-active" href="[^"]*scope=all" aria-current="page">All \d+<\/a>/);
 
   assert.match(boardColumn(html, 'In Review'), />T-3 ·/);
   const progress = boardColumn(html, 'In Progress');
@@ -79,7 +79,7 @@ test('board scope=open hides Done and makes the Open chip active', () => {
   for (const key of ['T-4', 'T-7', 'T-12', 'T-14', 'T-18']) {
     assert.doesNotMatch(done, new RegExp(`>${key} ·`));
   }
-  assert.match(html, /<a class="chip is-active" href="[^"]*scope=open">Open \d+<\/a>/);
+  assert.match(html, /<a class="chip is-active" href="[^"]*scope=open" aria-current="page">Open \d+<\/a>/);
 });
 
 test('board health caps Done rows, reports lost marks and dropped rows', () => {
