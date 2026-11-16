@@ -2,9 +2,11 @@
    Legacy palette values from the old app are the light-theme defaults.
    CSS cannot read custom properties inside @media, so the literal widths in
    components.css mirror --bp-* exactly. Keep them in sync when changing a breakpoint. */
-:root {
+html {
   color-scheme: light dark;
+}
 
+:root {
   /* Legacy palette */
   --color-text: #1d1d1f;
   --color-text-secondary: #6e6e73;
@@ -170,17 +172,17 @@
     --color-danger: #f2a9a3;
     --color-danger-hover: #f7c2bd;
     --color-on-danger: #2a0b09;
-    --color-overlaseries-3: #f0a3c8;
+    --color-overlay: rgba(3, 5, 9, 0.62);
+    --color-chart-series-3: #f0a3c8;
     --color-chart-series-4: #f5c97b;
     --color-chart-series-5: #79d7b8;
     --color-chart-series-6: #b3a6ee;
     --color-chart-grid: #2a2a31;
-    --color-nav-active: #242138 9, 0.62);
+    --color-nav-active: #242138;
     --color-topbar: rgba(17, 17, 20, 0.82);
     --color-focus: #9bcbf2;
     --color-chart-series-1: #5c9fe0;
     --color-chart-series-2: #8cc3ee;
-    --color-chart-grid: #2a2a31;
 
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 20px 44px -18px rgba(0, 0, 0, 0.65);
