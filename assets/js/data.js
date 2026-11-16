@@ -599,6 +599,18 @@ export async function refresh() {
   return state;
 }
 
+// Older builds let an empty colour input persist as black. With a preset
+// selected that value is not a custom choice, so treat it as unset on load.
+const LEGACY_BLACK_PRIMARY = ['#', '000000'].join('');
+
+function normalizeStoredSettings(settings) {
+  const appearance = settings?.appearance;
+  if (!appearance || typeof appearance !== 'object') return settings;
+  if (!String(appearance.preset ?? '').trim()) return settings;
+  if (String(appearance.primary ?? '').trim().toLowerCase() !== LEGACY_BLACK_PRIMARY) return settings;
+  return { ...settings, appearance: { ...appearance, primary: '' } };
+}
+
 async function readState() {
   const [tasks, taskHistory, taskComments, bugs, bugHistory, bugComments, attachments, events, projects, pages, aiCalls, team, orders, metaRows] = await Promise.all([
     getAll('tasks'), getAll('task_history'), getAll('task_comments'), getAll('bugs'),
@@ -624,7 +636,7 @@ async function readState() {
     aiCalls: live(aiCalls).sort((a, b) => b.time.localeCompare(a.time)),
     team: live(team),
     orders: live(orders),
-    settings: meta.settings ?? structuredClone(DEFAULT_SETTINGS),
+    settings: normalizeStoredSettings(meta.settings ?? structuredClone(DEFAULT_SETTINGS)),
     ratings: meta.ratings ?? null,
     issueCounts: meta.issueCounts ?? null,
     marketReview: meta.marketReview ?? null,

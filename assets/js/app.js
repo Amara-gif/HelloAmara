@@ -9,7 +9,7 @@ import {
   addAttachment, removeAttachment, attachmentObjectUrl, AI_LIMIT_DEFAULTS,
 } from './data.js';
 import { readLocation, routeForPath, groupRoutes, SETTINGS_LINKS } from './routes.js';
-import { renderView, mountView, renderAccountScreen, renderCreateDialog, bugPrefill, canSendToQa, qaOwnerName, markdown, agentBrief, renderAgentTodo, PALETTE_PRESETS, ratingPreferences } from './views.js';
+import { renderView, mountView, renderAccountScreen, renderCreateDialog, bugPrefill, canSendToQa, qaOwnerName, markdown, agentBrief, renderAgentTodo, PALETTE_PRESETS, ratingPreferences, appearancePrimaryHex, isHexColour } from './views.js';
 import { icon } from './icons.js';
 import { copyChartImage } from './chart.js';
 import { updateTaskBadge } from './nav-badge.js';
@@ -296,9 +296,12 @@ function applyAppearance(settings) {
 
 function appearanceFromForm(form) {
   const data = formData(form);
+  const primaryInput = form.querySelector('#theme-primary');
+  const primaryTouched = primaryInput?.dataset.touched === 'true';
+  const primary = String(data.primary ?? '').trim();
   return {
     preset: String(data.preset ?? ''),
-    primary: String(data.primary ?? '').trim(),
+    primary: primaryTouched && isHexColour(primary) ? primary : '',
     radiusBtn: numericSetting(data.radiusBtn, 8),
     radiusCard: numericSetting(data.radiusCard, 16),
     glass: numericSetting(data.glass, 0.25),
@@ -306,24 +309,9 @@ function appearanceFromForm(form) {
   };
 }
 
-function cssColourToInputValue(value) {
-  const text = String(value ?? '').trim();
-  if (!text) return '';
-  if (/^#[0-9a-f]{6}$/i.test(text)) return text;
-  const probe = document.createElement('span');
-  probe.style.color = text;
-  document.body.append(probe);
-  const computed = getComputedStyle(probe).color;
-  probe.remove();
-  const match = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/i.exec(computed);
-  if (!match) return '';
-  return `#${[1, 2, 3].map((index) => Number(match[index]).toString(16).padStart(2, '0')).join('')}`;
-}
-
 function syncAppearanceForm(form) {
   if (!form) return;
   const appearance = appearanceFromForm(form);
-  const root = document.documentElement;
   applyAppearance({ appearance });
   const preset = PALETTE_BY_ID.get(appearance.preset);
   form.querySelectorAll('[data-palette]').forEach((card) => {
@@ -337,8 +325,8 @@ function syncAppearanceForm(form) {
   });
   const primaryInput = form.querySelector('#theme-primary');
   if (primaryInput && preset) {
-    const resolved = cssColourToInputValue(getComputedStyle(root).getPropertyValue(preset.primary));
-    if (resolved) primaryInput.value = resolved;
+    primaryInput.value = appearancePrimaryHex({ preset: preset.id });
+    delete primaryInput.dataset.touched;
   }
 }
 
@@ -1285,7 +1273,10 @@ document.addEventListener('input', (event) => {
   const form = event.target.closest('form[data-settings-form]');
   if (form) markSettingsDirty(form);
   if (form?.dataset.form === 'settings-appearance') {
-    if (event.target.name === 'primary') form.querySelector('[data-theme-preset]').value = '';
+    if (event.target.name === 'primary') {
+      form.querySelector('[data-theme-preset]').value = '';
+      event.target.dataset.touched = 'true';
+    }
     syncAppearanceForm(form);
   }
 });
@@ -1313,7 +1304,13 @@ document.addEventListener('change', async (event) => {
   }
   const settingsForm = event.target.closest('form[data-settings-form]');
   if (settingsForm) markSettingsDirty(settingsForm);
-  if (settingsForm?.dataset.form === 'settings-appearance') syncAppearanceForm(settingsForm);
+  if (settingsForm?.dataset.form === 'settings-appearance') {
+    if (event.target.name === 'primary') {
+      settingsForm.querySelector('[data-theme-preset]').value = '';
+      event.target.dataset.touched = 'true';
+    }
+    syncAppearanceForm(settingsForm);
+  }
   const selectAllBugs = event.target.closest('[data-select-all-bugs]');
   if (selectAllBugs) {
     document.querySelectorAll('[data-bug-select]').forEach((box) => { box.checked = selectAllBugs.checked; });

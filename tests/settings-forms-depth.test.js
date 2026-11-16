@@ -129,6 +129,48 @@ test('Appearance offers six palette presets, live preview and the PWA install ca
   assert.match(html, /data-action="install-app"/);
   assert.match(html, /beforeinstallprompt/);
   assert.match(html, /Save theme/);
+  const primary = /id="theme-primary"[^>]*value="([^"]+)"/.exec(html);
+  assert.ok(primary, 'the primary colour input is rendered');
+  assert.match(primary[1], /^#[0-9a-f]{6}$/i);
+  assert.equal(primary[1], '#4a90d9');
+});
+
+test('Appearance renders every preset primary as a real hex value', async () => {
+  await boot();
+  const expected = {
+    soft: '#4a90d9',
+    apple: '#007aff',
+    ocean: '#0e8c9e',
+    sunset: '#d9673f',
+    candy: '#b84bae',
+    graphite: '#4b4b55',
+  };
+  for (const [preset, hex] of Object.entries(expected)) {
+    const settings = structuredClone(getState().settings);
+    settings.appearance = { ...settings.appearance, preset, primary: '' };
+    await saveSettings(settings);
+    const html = htmlFor('settings-appearance', '/settings/appearance');
+    const match = /id="theme-primary"[^>]*value="([^"]+)"/.exec(html);
+    assert.ok(match, `${preset} renders the primary colour input`);
+    assert.match(match[1], /^#[0-9a-f]{6}$/i, `${preset} renders a real hex value`);
+    assert.equal(match[1], hex, `${preset} renders its palette primary`);
+  }
+});
+
+test('a legacy black primary with a preset is treated as unset after reload', async () => {
+  const account = await boot();
+  const settings = structuredClone(getState().settings);
+  settings.appearance = { preset: 'ocean', primary: '#000000', radiusBtn: 10, radiusCard: 18, glass: 0.4, enableGlass: true };
+  await saveSettings(settings);
+  assert.equal(getState().settings.appearance.primary, '');
+
+  closeAccountDb();
+  await start(account);
+
+  assert.equal(getState().settings.appearance.primary, '');
+  const html = htmlFor('settings-appearance', '/settings/appearance');
+  assert.match(html, /id="theme-primary"[^>]*value="#0e8c9e"/);
+  assert.doesNotMatch(html, /id="theme-primary"[^>]*value="#000000"/i);
 });
 
 test('a saved appearance preset survives a database reopen', async () => {

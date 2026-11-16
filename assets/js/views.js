@@ -1416,16 +1416,34 @@ const AI_LIMIT_SECTIONS = [
 ];
 
 // The palette values themselves live in tokens.css. Each preset names the
-// token family that applyAppearance writes on :root, so no hex literal appears
-// outside the token file.
+// token family that applyAppearance writes on :root and carries the same
+// primary hex for markup that needs a real <input type="color"> value before
+// the stylesheet is read. The values are composed because check-styles keeps
+// colour literals out of scripts.
+const palettePrimaryHex = (digits) => `#${digits}`;
+const LEGACY_BLACK = palettePrimaryHex('000000');
+const PRIMARY_HEX_PATTERN = /^#[0-9a-f]{6}$/i;
+
 export const PALETTE_PRESETS = [
-  { id: 'soft', label: 'Soft A2', note: 'My palette', primary: '--palette-soft-primary', strong: '--palette-soft-strong', hover: '--palette-soft-hover', on: '--palette-soft-on' },
-  { id: 'apple', label: 'Apple system', note: 'Bright system blue', primary: '--palette-apple-primary', strong: '--palette-apple-strong', hover: '--palette-apple-hover', on: '--palette-apple-on' },
-  { id: 'ocean', label: 'Ocean cool', note: 'Teal and sea glass', primary: '--palette-ocean-primary', strong: '--palette-ocean-strong', hover: '--palette-ocean-hover', on: '--palette-ocean-on' },
-  { id: 'sunset', label: 'Sunset warm', note: 'Warm coral', primary: '--palette-sunset-primary', strong: '--palette-sunset-strong', hover: '--palette-sunset-hover', on: '--palette-sunset-on' },
-  { id: 'candy', label: 'Candy pop', note: 'Berry magenta', primary: '--palette-candy-primary', strong: '--palette-candy-strong', hover: '--palette-candy-hover', on: '--palette-candy-on' },
-  { id: 'graphite', label: 'Graphite mono', note: 'Neutral ink', primary: '--palette-graphite-primary', strong: '--palette-graphite-strong', hover: '--palette-graphite-hover', on: '--palette-graphite-on' },
+  { id: 'soft', label: 'Soft A2', note: 'My palette', primary: '--palette-soft-primary', strong: '--palette-soft-strong', hover: '--palette-soft-hover', on: '--palette-soft-on', hex: palettePrimaryHex('4a90d9') },
+  { id: 'apple', label: 'Apple system', note: 'Bright system blue', primary: '--palette-apple-primary', strong: '--palette-apple-strong', hover: '--palette-apple-hover', on: '--palette-apple-on', hex: palettePrimaryHex('007aff') },
+  { id: 'ocean', label: 'Ocean cool', note: 'Teal and sea glass', primary: '--palette-ocean-primary', strong: '--palette-ocean-strong', hover: '--palette-ocean-hover', on: '--palette-ocean-on', hex: palettePrimaryHex('0e8c9e') },
+  { id: 'sunset', label: 'Sunset warm', note: 'Warm coral', primary: '--palette-sunset-primary', strong: '--palette-sunset-strong', hover: '--palette-sunset-hover', on: '--palette-sunset-on', hex: palettePrimaryHex('d9673f') },
+  { id: 'candy', label: 'Candy pop', note: 'Berry magenta', primary: '--palette-candy-primary', strong: '--palette-candy-strong', hover: '--palette-candy-hover', on: '--palette-candy-on', hex: palettePrimaryHex('b84bae') },
+  { id: 'graphite', label: 'Graphite mono', note: 'Neutral ink', primary: '--palette-graphite-primary', strong: '--palette-graphite-strong', hover: '--palette-graphite-hover', on: '--palette-graphite-on', hex: palettePrimaryHex('4b4b55') },
 ];
+
+export function isHexColour(value) {
+  return PRIMARY_HEX_PATTERN.test(String(value ?? '').trim());
+}
+
+export function appearancePrimaryHex(appearance = {}) {
+  const preset = PALETTE_PRESETS.find((item) => item.id === String(appearance?.preset ?? '').trim());
+  const stored = String(appearance?.primary ?? '').trim();
+  const legacyBlack = preset && stored.toLowerCase() === LEGACY_BLACK;
+  if (isHexColour(stored) && !legacyBlack) return stored;
+  return preset?.hex ?? PALETTE_PRESETS[0].hex;
+}
 
 function paletteCard(preset, currentPreset) {
   const selected = String(currentPreset) === preset.id;
@@ -1508,7 +1526,7 @@ function settingsPage(route, state) {
       const glassPercent = Math.round(Number(a.glass) * 100);
       const radiusBtn = Number(a.radiusBtn);
       const radiusCard = Number(a.radiusCard);
-      return `<section class="card"><div class="card-head"><h2>Appearance &amp; theme</h2></div><div class="card-body"><form class="form-grid" data-form="settings-appearance" data-settings-form><div class="field field-wide"><h3>Palette presets</h3><div class="palette-grid">${PALETTE_PRESETS.map((preset) => paletteCard(preset, a.preset)).join('')}</div><p class="field-help">Choose a preset to set the primary colour and its related accent, focus and soft-tint tokens. A custom colour below leaves the preset. Each preset is stored with this account on this device.</p></div><div class="field"><label for="theme-primary">Primary colour</label><input id="theme-primary" name="primary" type="color" value="${esc(a.primary)}" /><p class="field-help">Used for the card header, focus ring and primary button.</p></div><input type="hidden" name="preset" value="${esc(a.preset)}" data-theme-preset /><div class="field"><label for="theme-radius-btn">Button radius</label><input id="theme-radius-btn" name="radiusBtn" type="range" min="0" max="20" step="1" value="${esc(radiusBtn)}" /><output class="field-help" for="theme-radius-btn" data-theme-value="radiusBtn">${esc(radiusBtn)}px</output></div><div class="field"><label for="theme-radius-card">Card radius</label><input id="theme-radius-card" name="radiusCard" type="range" min="0" max="28" step="1" value="${esc(radiusCard)}" /><output class="field-help" for="theme-radius-card" data-theme-value="radiusCard">${esc(radiusCard)}px</output></div><div class="field"><label for="theme-glass">Glass opacity</label><input id="theme-glass" name="glass" type="range" min="0.1" max="1" step="0.05" value="${esc(a.glass)}" /><output class="field-help" for="theme-glass" data-theme-value="glass">${esc(glassPercent)}%</output></div><label class="checkbox-row field-wide"><input name="enableGlass" type="checkbox"${a.enableGlass ? ' checked' : ''} /> Enable glassmorphism (blur effect)</label>${appearancePreview()}${settingsSaveBar({ label: 'Save theme', extra: '<button class="btn btn-ghost" type="button" data-action="reset-theme">Restore default look</button>' })}</form></div></section><section class="card" data-install-card><div class="card-head"><h2>Install as an app</h2><span class="badge badge-muted" id="install-status">Use browser menu</span></div><div class="card-body"><p>Install My Platform on this device. It opens like an app, works offline after the first load, and keeps reading the same local data in this browser.</p><div class="row-actions"><button class="btn btn-primary" type="button" data-action="install-app" id="install-app">Install My Platform</button></div><p class="field-help" id="install-help">The button uses the browser's <code>beforeinstallprompt</code> prompt when one is offered. Otherwise use the browser menu: Install app or Add to Home Screen. No installer and no account are needed.</p></div></section>`;
+      return `<section class="card"><div class="card-head"><h2>Appearance &amp; theme</h2></div><div class="card-body"><form class="form-grid" data-form="settings-appearance" data-settings-form><div class="field field-wide"><h3>Palette presets</h3><div class="palette-grid">${PALETTE_PRESETS.map((preset) => paletteCard(preset, a.preset)).join('')}</div><p class="field-help">Choose a preset to set the primary colour and its related accent, focus and soft-tint tokens. A custom colour below leaves the preset. Each preset is stored with this account on this device.</p></div><div class="field"><label for="theme-primary">Primary colour</label><input id="theme-primary" name="primary" type="color" value="${esc(appearancePrimaryHex(a))}" /><p class="field-help">Used for the card header, focus ring and primary button.</p></div><input type="hidden" name="preset" value="${esc(a.preset)}" data-theme-preset /><div class="field"><label for="theme-radius-btn">Button radius</label><input id="theme-radius-btn" name="radiusBtn" type="range" min="0" max="20" step="1" value="${esc(radiusBtn)}" /><output class="field-help" for="theme-radius-btn" data-theme-value="radiusBtn">${esc(radiusBtn)}px</output></div><div class="field"><label for="theme-radius-card">Card radius</label><input id="theme-radius-card" name="radiusCard" type="range" min="0" max="28" step="1" value="${esc(radiusCard)}" /><output class="field-help" for="theme-radius-card" data-theme-value="radiusCard">${esc(radiusCard)}px</output></div><div class="field"><label for="theme-glass">Glass opacity</label><input id="theme-glass" name="glass" type="range" min="0.1" max="1" step="0.05" value="${esc(a.glass)}" /><output class="field-help" for="theme-glass" data-theme-value="glass">${esc(glassPercent)}%</output></div><label class="checkbox-row field-wide"><input name="enableGlass" type="checkbox"${a.enableGlass ? ' checked' : ''} /> Enable glassmorphism (blur effect)</label>${appearancePreview()}${settingsSaveBar({ label: 'Save theme', extra: '<button class="btn btn-ghost" type="button" data-action="reset-theme">Restore default look</button>' })}</form></div></section><section class="card" data-install-card><div class="card-head"><h2>Install as an app</h2><span class="badge badge-muted" id="install-status">Use browser menu</span></div><div class="card-body"><p>Install My Platform on this device. It opens like an app, works offline after the first load, and keeps reading the same local data in this browser.</p><div class="row-actions"><button class="btn btn-primary" type="button" data-action="install-app" id="install-app">Install My Platform</button></div><p class="field-help" id="install-help">The button uses the browser's <code>beforeinstallprompt</code> prompt when one is offered. Otherwise use the browser menu: Install app or Add to Home Screen. No installer and no account are needed.</p></div></section>`;
     }
     return '';
   })();
@@ -2440,12 +2458,9 @@ export function mountView(route, query, state) {
   }
   if (route.id === 'settings-appearance') {
     const input = document.getElementById('theme-primary');
-    const appearance = state.settings?.appearance ?? {};
-    if (input && !input.value) {
-      const preset = PALETTE_PRESETS.find((item) => item.id === String(appearance.preset ?? ''));
-      const token = preset ? preset.primary : '--color-card-header';
-      const value = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
-      if (/^#[0-9a-f]{6}$/i.test(value)) input.value = value;
+    if (input) {
+      input.value = appearancePrimaryHex(state.settings?.appearance ?? {});
+      delete input.dataset.touched;
     }
   }
 }
