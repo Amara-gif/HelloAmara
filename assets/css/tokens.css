@@ -126,6 +126,15 @@ html {
   --shadow-lg: 0 18px 40px -18px rgba(29, 29, 31, 0.3);
 
   --tap-size: 44px;
+
+  /* Control sizes are theme-independent, so they live only in the light :root. */
+  --control-height: var(--tap-size);
+  --control-height-sm: 34px;
+  --control-pad-y: var(--space-2);
+  --control-pad-x: var(--space-3);
+  --control-font-size: var(--font-size-base);
+  --control-font-size-sm: var(--font-size-sm);
+
   --sidebar-width: 264px;
   --topbar-height: 60px;
   --content-max: 1120px;

@@ -7,6 +7,15 @@ const styleguide = readFileSync(new URL('../styleguide.html', import.meta.url), 
 
 const DECLARATION = /^--[a-z0-9-]+\s*:\s*\S(?:[\s\S]*\S)?\s*;$/i;
 
+const CONTROL_TOKENS = [
+  '--control-height',
+  '--control-height-sm',
+  '--control-pad-y',
+  '--control-pad-x',
+  '--control-font-size',
+  '--control-font-size-sm',
+];
+
 function stripComments(source) {
   return source.replace(/\/\*[\s\S]*?\*\//g, '');
 }
@@ -97,6 +106,31 @@ test('the dark theme restores the overlay, series 3 and nav-active tokens', () =
   assert.equal(darkTokens.get('--color-chart-series-3'), '#f0a3c8');
   assert.equal(darkTokens.get('--color-nav-active'), '#242138');
   assert.equal(darkTokens.get('--color-chart-grid'), '#2a2a31');
+});
+
+test('the control-size tokens are declared once each in the light :root block', () => {
+  const lightTokens = parseBlock(blocks[0] ?? '', 'light :root');
+  const clean = stripComments(css);
+
+  for (const name of CONTROL_TOKENS) {
+    assert.ok(lightTokens.has(name), `light :root is missing ${name}`);
+    const declarations = [...clean.matchAll(new RegExp(`${name}\\s*:`, 'g'))];
+    assert.equal(declarations.length, 1, `expected exactly one ${name} declaration`);
+  }
+
+  assert.equal(lightTokens.get('--control-height'), 'var(--tap-size)');
+});
+
+test('the styleguide layout section lists the control-size tokens', () => {
+  const styleguideJs = readFileSync(new URL('../assets/js/styleguide.js', import.meta.url), 'utf8');
+  const layoutList = styleguideJs.match(/renderTokenList\(\s*['"]sg-layout['"][\s\S]*?\);/);
+
+  assert.ok(layoutList, 'styleguide.js must render the sg-layout token list');
+  assert.match(
+    layoutList[0],
+    /['"]--control-['"]/,
+    'styleguide.js must include the --control-* tokens in the sg-layout list',
+  );
 });
 
 test('styleguide colour swatches do not expose the corrupt token name', () => {
