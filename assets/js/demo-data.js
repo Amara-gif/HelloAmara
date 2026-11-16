@@ -1,5 +1,5 @@
 // Demo rows for the Test account. Dates are relative to the day the demo is seeded.
-export const DEMO_VERSION = '2026-11-16.2';
+export const DEMO_VERSION = '2026-11-16.3';
 
 const pad = (n) => String(n).padStart(2, '0');
 const dayIso = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -274,6 +274,30 @@ const issueCounts = [
   { category: 'Packaging', count: 2 },
 ];
 
+// Market Review tool tabs read only these local demo rows. They are saved with
+// the demo meta, never fetched from a scraper or product API.
+export const MARKET_REVIEW_DEMO = {
+  products: [
+    { id: 'mrp1', name: 'Roselite', asin: 'B0MR7RSL01', category: 'After Sales', rating: 4.4, reviews: 1842, openIssues: 4, status: 'Tracking' },
+    { id: 'mrp2', name: 'Miramar', asin: 'B0MR7MRM02', category: 'DVT build', rating: 4.1, reviews: 926, openIssues: 2, status: 'Tracking' },
+    { id: 'mrp3', name: 'Hello Amara', asin: 'B0MR7TAG03', category: 'Workspace', rating: 4.6, reviews: 517, openIssues: 1, status: 'Tracking' },
+    { id: 'mrp4', name: 'Market Review', asin: 'B0MR7MR04', category: 'Review sample', rating: 4.3, reviews: 2048, openIssues: 2, status: 'Tracking' },
+    { id: 'mrp5', name: 'Accessory', asin: 'B0MR7ACC05', category: 'Accessory', rating: 4.2, reviews: 311, openIssues: 0, status: 'Paused' },
+  ].map((row, i) => ({ ...row, updatedAt: stamp(-i), deletedAt: null })),
+  issues: [
+    { id: 'mri1', key: 'MRI-1', product: 'Roselite', category: 'Display', summary: 'Fingerprint smudges after normal use', severity: 'S3 Major', status: 'Open', owner: 'Delphine Roth', found: offsetDate(-9) },
+    { id: 'mri2', key: 'MRI-2', product: 'Roselite', category: 'Noise', summary: 'Clicks when the fan starts', severity: 'S3 Major', status: 'In progress', owner: 'Worker A', found: offsetDate(-8) },
+    { id: 'mri3', key: 'MRI-3', product: 'Roselite', category: 'Battery', summary: 'Run time drops below the claimed figure', severity: 'S2 Critical', status: 'Open', owner: 'Amara', found: offsetDate(-7) },
+    { id: 'mri4', key: 'MRI-4', product: 'Miramar', category: 'Battery', summary: 'Supplier cannot confirm the cell allocation', severity: 'S2 Critical', status: 'Waiting', owner: 'Amara', found: offsetDate(-6) },
+    { id: 'mri5', key: 'MRI-5', product: 'Miramar', category: 'BFT', summary: 'BFT station block still remains', severity: 'S3 Major', status: 'In progress', owner: 'Worker A', found: offsetDate(-5) },
+    { id: 'mri6', key: 'MRI-6', product: 'Hello Amara', category: 'Packaging', summary: 'Retail box arrives dented', severity: 'S4 Minor', status: 'Open', owner: 'Steward', found: offsetDate(-4) },
+    { id: 'mri7', key: 'MRI-7', product: 'Market Review', category: 'Supplier', summary: 'Review export is missing the ASIN column', severity: 'S3 Major', status: 'Triaged', owner: 'Worker C', found: offsetDate(-3) },
+    { id: 'mri8', key: 'MRI-8', product: 'Accessory', category: 'Display', summary: 'Case creaks at the hinge', severity: 'S4 Minor', status: 'Closed', owner: 'QA', found: offsetDate(-12) },
+    { id: 'mri9', key: 'MRI-9', product: 'Roselite', category: 'Setup', summary: 'Difficult or long first-time setup', severity: 'S3 Major', status: 'Waiting', owner: 'Worker B', found: offsetDate(-2) },
+    { id: 'mri10', key: 'MRI-10', product: 'Market Review', category: 'Firmware', summary: 'Rating sync lags one day behind', severity: 'S4 Minor', status: 'Open', owner: 'Worker C', found: offsetDate(-1) },
+  ].map((row, i) => ({ ...row, updatedAt: stamp(-i), deletedAt: null })),
+};
+
 export const demoSettings = {
   ai: { status: 'Connected', model: 'deepseek-v4-pro', timeout: 90, key: 'sk-demo-••••-2c13' },
   aiLimits: { summary: 12, progress: 8, comment: 6, issue: 40, benchmark: 10 },
@@ -286,6 +310,6 @@ export const demoSettings = {
 export function buildDemoData() {
   return {
     stores: { projects, tasks, task_history: taskHistory, task_comments: taskComments, bugs, bug_history: bugHistory, bug_comments: bugComments, events, pages, ai_calls: aiCalls, team, orders },
-    meta: { seedVersion: DEMO_VERSION, settings: demoSettings, ratings, issueCounts },
+    meta: { seedVersion: DEMO_VERSION, settings: demoSettings, ratings, issueCounts, marketReview: MARKET_REVIEW_DEMO },
   };
 }

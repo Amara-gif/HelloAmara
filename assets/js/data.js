@@ -289,6 +289,7 @@ async function readState() {
     settings: meta.settings ?? structuredClone(DEFAULT_SETTINGS),
     ratings: meta.ratings ?? null,
     issueCounts: meta.issueCounts ?? null,
+    marketReview: meta.marketReview ?? null,
     seeded: meta.seedVersion ?? null,
     persistentStorage: {
       supported,

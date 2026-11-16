@@ -2,6 +2,7 @@ import { SETTINGS_LINKS } from './routes.js';
 import { icon } from './icons.js';
 import { renderBarChart, renderLineChart, renderParetoChart, renderDonutChart } from './chart.js';
 import { occurrences, occursOn } from './schedule.js';
+import { MARKET_REVIEW_DEMO } from './demo-data.js';
 import {
   TASK_WORKFLOW_STATUSES,
   TASK_WAIVER_STATUSES,
@@ -46,7 +47,7 @@ const STATUS_TONE = {
   'In progress': 'accent', Fixed: 'accent',
   Waiting: 'warning', Reopened: 'warning', Triaged: 'warning',
   'Wont fix': 'muted', Rejected: 'danger', Duplicate: 'muted', Deferred: 'muted',
-  New: 'band', 'To do': 'band', 'To Do': 'band',
+  New: 'band', Open: 'band', 'To do': 'band', 'To Do': 'band',
 };
 const statusBadge = (status) => `<span class="badge badge-${STATUS_TONE[status] ?? 'muted'}">${esc(status)}</span>`;
 const STORAGE_TONE = { Granted: 'success', Denied: 'warning', Unsupported: 'muted' };
@@ -1365,6 +1366,227 @@ function projectPagesTab(pages) {
   </section>`;
 }
 
+// Market Review tool tabs. The list is local demo data saved with the demo meta;
+// no product API, scraper, CoreMail or Mega Database call is made from these tabs.
+const MR_PROJECT_TABS = [
+  { id: 'products', label: 'Products' },
+  { id: 'review-update', label: 'Review Update' },
+  { id: 'find-user-voices', label: 'Find user voices' },
+  { id: 'daily-digest', label: 'Daily Digest' },
+  { id: 'issue-workbench', label: 'Issue Workbench' },
+  { id: 'pqa-tracker', label: 'PQA Tracker' },
+  { id: 'report-deck', label: 'Report Deck' },
+  { id: 'issue-review', label: 'Issue Review' },
+  { id: 'analysis-report', label: 'Analysis Report' },
+];
+const MR_UNAVAILABLE_TAB_IDS = new Set(['find-user-voices', 'daily-digest', 'issue-workbench', 'pqa-tracker', 'report-deck']);
+
+function mrProductRows(state) {
+  const rows = state.marketReview?.products;
+  return Array.isArray(rows) && rows.length ? rows : MARKET_REVIEW_DEMO.products;
+}
+
+function mrIssueRows(state) {
+  const rows = state.marketReview?.issues;
+  return Array.isArray(rows) && rows.length ? rows : MARKET_REVIEW_DEMO.issues;
+}
+
+function mrIssueCategoryRows(issues) {
+  const counts = new Map();
+  for (const issue of issues) {
+    const category = String(issue.category ?? '').trim() || 'Other';
+    counts.set(category, (counts.get(category) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
+}
+
+function mrSeverityBadge(severity) {
+  const tone = String(severity ?? '').startsWith('S1') ? 'danger'
+    : String(severity ?? '').startsWith('S2') ? 'warning'
+      : String(severity ?? '').startsWith('S3') ? 'accent' : 'muted';
+  return `<span class="badge badge-${tone}">${esc(severity)}</span>`;
+}
+
+function projectProductsTab(state, project) {
+  const products = mrProductRows(state);
+  const issues = mrIssueRows(state);
+  const open = issues.filter((issue) => issue.status !== 'Closed').length;
+  const average = products.length
+    ? (products.reduce((sum, row) => sum + (Number(row.rating) || 0), 0) / products.length).toFixed(1)
+    : '—';
+  return `<div class="stack">
+    <section class="card">
+      <div class="card-head"><h2>Products</h2><span class="badge badge-muted">Local demo catalogue</span></div>
+      <div class="card-body">
+        <p class="lede">Local demo products for ${esc(project.name)}. The catalogue is read from this device only; this tab makes no product API or scraper request.</p>
+        <div class="stat-grid">
+          <div class="stat"><strong>${products.length}</strong><span>Products tracked</span></div>
+          <div class="stat"><strong>${average}</strong><span>Average rating</span></div>
+          <div class="stat"><strong>${issues.length}</strong><span>Review issues</span></div>
+          <div class="stat"><strong>${open}</strong><span>Open issues</span></div>
+        </div>
+        <div class="table-wrap"><table class="table table-stack">
+          <thead><tr><th>Product</th><th>Category</th><th>Rating</th><th>Reviews</th><th>Open issues</th><th>Status</th><th>Updated</th></tr></thead>
+          <tbody>${products.map((product) => {
+            const rating = Number(product.rating);
+            return `<tr data-mr-product="${esc(product.id ?? product.name)}">
+            <td data-label="Product"><span class="table-title">${esc(product.name)}</span><span class="row-meta">${esc(product.asin ?? '')}</span></td>
+            <td data-label="Category">${esc(product.category ?? '—')}</td>
+            <td data-label="Rating"><span class="badge badge-success">${Number.isFinite(rating) ? rating.toFixed(1) : '—'}</span></td>
+            <td data-label="Reviews">${esc(product.reviews ?? '—')}</td>
+            <td data-label="Open issues">${esc(product.openIssues ?? 0)}</td>
+            <td data-label="Status"><span class="badge badge-${product.status === 'Paused' ? 'muted' : 'accent'}">${esc(product.status ?? 'Tracking')}</span></td>
+            <td data-label="Updated">${fmtStamp(product.updatedAt)}</td>
+          </tr>`;
+          }).join('') || `<tr><td colspan="7">${empty('No local products yet.')}</td></tr>`}</tbody>
+        </table></div>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Local-only behaviour</h2><span class="badge badge-muted">No network</span></div>
+      <div class="card-body"><p class="field-help">Products come from the demo meta stored with this account's IndexedDB. Nothing is fetched, and saving a product is not part of this local shell.</p></div>
+    </section>
+  </div>`;
+}
+
+function projectIssueReviewTab(state, project) {
+  const issues = mrIssueRows(state);
+  const categories = mrIssueCategoryRows(issues);
+  const open = issues.filter((issue) => issue.status !== 'Closed').length;
+  const critical = issues.filter((issue) => String(issue.severity ?? '').startsWith('S1') || String(issue.severity ?? '').startsWith('S2')).length;
+  const products = new Set(issues.map((issue) => issue.product)).size;
+  return `<div class="detail-grid">
+    <div class="detail-main">
+      <section class="card">
+        <div class="card-head"><h2>Issue Review</h2><span class="badge badge-muted">${issues.length} local demo issues</span></div>
+        <div class="card-body">
+          <p class="lede">Issue rows saved with the ${esc(project.name)} demo. Filtering and review actions stay local; there is no issue API call.</p>
+          <div class="table-wrap"><table class="table table-stack">
+            <thead><tr><th>Key</th><th>Product</th><th>Category</th><th>Summary</th><th>Severity</th><th>Status</th><th>Owner</th><th>Found</th></tr></thead>
+            <tbody>${issues.map((issue) => `<tr data-mr-issue="${esc(issue.key ?? issue.id)}">
+              <td data-label="Key"><span class="key-link">${esc(issue.key ?? issue.id)}</span></td>
+              <td data-label="Product">${esc(issue.product)}</td>
+              <td data-label="Category">${esc(issue.category)}</td>
+              <td data-label="Summary"><span class="table-title">${esc(issue.summary)}</span></td>
+              <td data-label="Severity">${mrSeverityBadge(issue.severity)}</td>
+              <td data-label="Status">${statusBadge(issue.status)}</td>
+              <td data-label="Owner"><span class="assignee">${avatar(issue.owner)}${esc(issue.owner)}</span></td>
+              <td data-label="Found">${fmt(issue.found)}</td>
+            </tr>`).join('') || `<tr><td colspan="8">${empty('No local issues yet.')}</td></tr>`}</tbody>
+          </table></div>
+        </div>
+      </section>
+    </div>
+    <aside class="detail-side">
+      <section class="card">
+        <div class="card-head"><h2>Issue snapshot</h2></div>
+        <div class="card-body"><div class="stat-grid">
+          <div class="stat"><strong>${open}</strong><span>Open</span></div>
+          <div class="stat"><strong>${critical}</strong><span>S1/S2</span></div>
+          <div class="stat"><strong>${products}</strong><span>Products</span></div>
+          <div class="stat"><strong>${categories.length}</strong><span>Categories</span></div>
+        </div></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Issues by category</h2><span class="badge badge-muted">Local</span></div>
+        <div class="card-body">
+          <div class="chart-box" id="mr-issue-chart"></div>
+          <div class="bar-list">${categories.map((row) => `<div class="bar-row"><span>${esc(row.category)}</span><span class="bar-track" aria-hidden="true"><span class="bar-fill" data-bar="${row.count}" data-total="${issues.length}"></span></span><strong>${row.count}</strong></div>`).join('') || empty('No categories yet.')}</div>
+        </div>
+      </section>
+    </aside>
+  </div>`;
+}
+
+function projectAnalysisReportTab(state, project) {
+  const rows = paretoSeries(state);
+  const issues = mrIssueRows(state);
+  const categories = mrIssueCategoryRows(issues);
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
+  let cumulative = 0;
+  return `<div class="detail-grid">
+    <div class="detail-main">
+      <section class="card">
+        <div class="card-head"><h2>Issue Pareto</h2><span class="badge badge-muted">Local demo chart</span></div>
+        <div class="card-body">
+          <p class="lede">The ${esc(project.name)} analysis grid uses saved demo counts and local work-item modules. No analysis endpoint, PDF or PPTX export is called.</p>
+          <div class="chart-box" id="mr-analysis-pareto"></div>
+          <p class="row-meta">Ordered high to low; the line is cumulative share. Total ${total} issues.</p>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Issue mix</h2><span class="badge badge-muted">${rows.length} categories</span></div>
+        <div class="card-body"><div class="table-wrap"><table class="table table-stack">
+          <thead><tr><th>Category</th><th>Issues</th><th>Share</th><th>Cumulative</th></tr></thead>
+          <tbody>${rows.map((row) => {
+            cumulative += row.value;
+            return `<tr><td data-label="Category"><span class="table-title">${esc(row.label)}</span></td><td data-label="Issues">${row.value}</td><td data-label="Share">${total ? Math.round((row.value / total) * 100) : 0}%</td><td data-label="Cumulative">${total ? Math.round((cumulative / total) * 100) : 0}%</td></tr>`;
+          }).join('') || `<tr><td colspan="4">${empty('No analysis rows yet.')}</td></tr>`}</tbody>
+        </table></div></div>
+      </section>
+    </div>
+    <aside class="detail-side">
+      <section class="card">
+        <div class="card-head"><h2>Snapshot</h2></div>
+        <div class="card-body"><dl class="details compact">
+          <div><dt>Analysis issues</dt><dd>${total}</dd></div>
+          <div><dt>Local issue rows</dt><dd>${issues.length}</dd></div>
+          <div><dt>Categories</dt><dd>${categories.length}</dd></div>
+          <div><dt>Source</dt><dd>IndexedDB demo meta</dd></div>
+        </dl></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>What is local</h2><span class="badge badge-muted">No fetch</span></div>
+        <div class="card-body"><p class="field-help">Pareto counts, the issue table and the product list all read from this device. Summary save, snapshot save and PDF/PPTX export are not ported.</p></div>
+      </section>
+    </aside>
+  </div>`;
+}
+
+function projectReviewUpdateTab(project) {
+  return `<div class="detail-grid">
+    <div class="detail-main">
+      <section class="card" data-mr-tab="review-update">
+        <div class="card-head"><h2>Review Update</h2><span class="badge badge-warning">Blocked on owner decision</span></div>
+        <div class="card-body">
+          <p class="lede">The Amazon scraper is blocked on the owner's decision. My Platform does not run a review scrape, start a job or make a network request from this tab.</p>
+          <p class="field-help">The build brief leaves the scraping method open. There is no fake run and no live job log here until the owner approves a specific no-install method.</p>
+          <dl class="details compact">
+            <div><dt>Scraper</dt><dd>Blocked on owner decision</dd></div>
+            <div><dt>Network requests</dt><dd>None</dd></div>
+            <div><dt>Local alternative</dt><dd>Products and Issue Review demo rows</dd></div>
+            <div><dt>Project</dt><dd>${esc(project.name)}</dd></div>
+          </dl>
+          <div class="row-actions">
+            <a class="btn btn-ghost btn-sm" href="#/project/${esc(project.key)}?tab=products">Open local Products</a>
+            <a class="btn btn-ghost btn-sm" href="#/project/${esc(project.key)}?tab=issue-review">Open local Issue Review</a>
+          </div>
+        </div>
+      </section>
+    </div>
+    <aside class="detail-side">
+      <section class="card">
+        <div class="card-head"><h2>Out of scope</h2></div>
+        <div class="card-body"><p class="field-help">Scraper, Mega Database and CoreMail stay out of this task. Their controls are not shown here so the shell cannot look like a working run.</p></div>
+      </section>
+    </aside>
+  </div>`;
+}
+
+function projectUnavailableTab(project, tabId) {
+  const tab = MR_PROJECT_TABS.find((item) => item.id === tabId);
+  const label = tab?.label ?? 'This tool';
+  return `<section class="card" data-mr-tab="${esc(tabId)}">
+    <div class="card-head"><h2>${esc(label)}</h2><span class="badge badge-muted">Not available in My Platform yet</span></div>
+    <div class="card-body">
+      <p class="lede">${esc(label)} is not available in My Platform yet. This local shell makes no network request and has no fake data or run action.</p>
+      <p class="field-help">Use Products, Issue Review and Analysis Report for the local demo data on ${esc(project.key)} ${esc(project.name)}.</p>
+    </div>
+  </section>`;
+}
+
 // The old WorkDesk showed the xBuild Rule Book and report for TAG only. They stay
 // local placeholders here: no scraper, file fetch or /api/tools/xbuild call.
 const TAG_PROJECT_TABS = [
@@ -1375,6 +1597,24 @@ const PROJECT_TAB_ALIASES = {
   'rule-book': 'xbuild-standard',
   rulebook: 'xbuild-standard',
   xbuild: 'xbuild-report',
+  product: 'products',
+  products: 'products',
+  'review': 'review-update',
+  'review-update': 'review-update',
+  review_update: 'review-update',
+  'voices': 'find-user-voices',
+  'user-voices': 'find-user-voices',
+  find_user_voices: 'find-user-voices',
+  'analysis': 'analysis-report',
+  'analysis-report': 'analysis-report',
+  analysis_report: 'analysis-report',
+  'report': 'analysis-report',
+  'issues': 'issue-review',
+  issue_review: 'issue-review',
+  daily_digest: 'daily-digest',
+  issue_workbench: 'issue-workbench',
+  pqa_tracker: 'pqa-tracker',
+  report_deck: 'report-deck',
 };
 
 function projectTabItems(project) {
@@ -1386,6 +1626,9 @@ function projectTabItems(project) {
   ];
   if (project.key === 'TAG') {
     items.push(...TAG_PROJECT_TABS.map((tab) => ({ ...tab, href: `#/project/${project.key}?tab=${tab.id}` })));
+  }
+  if (project.key === 'MR') {
+    items.push(...MR_PROJECT_TABS.map((tab) => ({ ...tab, href: `#/project/${project.key}?tab=${tab.id}` })));
   }
   return items;
 }
@@ -1470,9 +1713,14 @@ function projectPage(state, route, query) {
   const body = tab === 'work' ? workItemsBody(state, query, { path: `/project/${project.key}`, projectId: project.id, tab: 'work' })
     : tab === 'modules' ? projectModulesTab(project, tasks)
       : tab === 'pages' ? projectPagesTab(pages)
-        : tab === 'xbuild-standard' ? projectRuleBookTab(project, pages)
-          : tab === 'xbuild-report' ? projectXbuildReportTab(project)
-            : projectOverview(state, project, tasks, pages, open);
+        : tab === 'products' ? projectProductsTab(state, project)
+          : tab === 'review-update' ? projectReviewUpdateTab(project)
+            : tab === 'issue-review' ? projectIssueReviewTab(state, project)
+              : tab === 'analysis-report' ? projectAnalysisReportTab(state, project)
+                : MR_UNAVAILABLE_TAB_IDS.has(tab) ? projectUnavailableTab(project, tab)
+                  : tab === 'xbuild-standard' ? projectRuleBookTab(project, pages)
+                    : tab === 'xbuild-report' ? projectXbuildReportTab(project)
+                      : projectOverview(state, project, tasks, pages, open);
   return `
     <nav class="breadcrumb"><a href="#/projects">← Projects</a></nav>
     ${pageHead(project.name, project.description, `<span class="badge badge-${project.archived ? 'muted' : 'accent'}">${esc(project.archived ? 'Archived' : project.status)}</span>`)}
@@ -1618,6 +1866,26 @@ export function mountView(route, query, state) {
         values: rows.map((row) => row.count),
         title: 'Project work items by status',
       });
+    }
+    if (project && project.key === 'MR') {
+      const mrIssueChart = document.getElementById('mr-issue-chart');
+      if (mrIssueChart) {
+        const categories = mrIssueCategoryRows(mrIssueRows(state));
+        renderBarChart(mrIssueChart, {
+          labels: categories.map((row) => row.category),
+          values: categories.map((row) => row.count),
+          title: 'Market Review demo issues by category',
+        });
+      }
+      const mrParetoChart = document.getElementById('mr-analysis-pareto');
+      if (mrParetoChart) {
+        const series = paretoSeries(state);
+        renderParetoChart(mrParetoChart, {
+          labels: series.map((row) => row.label),
+          values: series.map((row) => row.value),
+          title: 'Market Review issue Pareto from local demo data',
+        });
+      }
     }
     const bars = [...document.querySelectorAll('[data-bar]')];
     const max = Math.max(...bars.map((bar) => Number(bar.dataset.bar)), 1);
