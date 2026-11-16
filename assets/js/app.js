@@ -321,10 +321,10 @@ async function submitCreate() {
       await rerender();
       toast(`Bug ${bug.key} reported.`, { tone: 'success' });
     } else {
-      await createEvent(data);
+      const event = await createEvent(data);
       createClose?.();
-      await rerender();
-      toast('Event added to the calendar.', { tone: 'success' });
+      navigate('/calendar', { m: String(event.date).slice(0, 7) });
+      toast(`Event "${event.title}" added to the calendar.`, { tone: 'success' });
     }
     return true;
   } catch (error) {

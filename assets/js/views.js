@@ -782,17 +782,22 @@ export function renderCreateDialog(state) {
     </div>
     <form class="form-grid create-panel" data-create-panel="task" data-form="create-task">
       <div class="field field-wide"><label for="create-task-title">Title</label><input id="create-task-title" name="title" type="text" required /></div>
-      <div class="field"><label for="create-task-project">Project</label><select id="create-task-project" class="select" name="projectId"><option value="">(Dispatcher picks)</option>${state.projects.filter((p) => !p.archived).map((p) => option(p.id, '', `${p.key} ${p.name}`)).join('')}</select></div>
       <div class="field"><label for="create-task-type">Type</label><select id="create-task-type" class="select" name="type">${['Task', 'Story', 'Epic', 'Sub-task', 'Improvement', 'Bug'].map((value) => option(value, 'Task')).join('')}</select></div>
+      <div class="field"><label for="create-task-project">Project</label><select id="create-task-project" class="select" name="projectId"><option value="">(Dispatcher picks)</option>${state.projects.filter((p) => !p.archived).map((p) => option(p.id, '', `${p.key} ${p.name}`)).join('')}</select></div>
       <div class="field"><label for="create-task-priority">Priority</label><select id="create-task-priority" class="select" name="priority">${['Highest', 'High', 'Medium', 'Low', 'Lowest'].map((value) => option(value, 'Medium')).join('')}</select></div>
+      <div class="field"><label for="create-task-start">Start</label><input id="create-task-start" name="start" type="date" /></div>
       <div class="field"><label for="create-task-due">Due</label><input id="create-task-due" name="due" type="date" /></div>
+      <div class="field"><label for="create-task-expected">Expected</label><input id="create-task-expected" name="expected" type="text" /></div>
+      <div class="field"><label for="create-task-actual">Actual</label><input id="create-task-actual" name="actual" type="text" /></div>
       <div class="field field-wide"><label for="create-task-description">Description</label><textarea id="create-task-description" name="description" rows="3"></textarea></div>
     </form>
     <form class="form-grid create-panel" data-create-panel="bug" data-form="create-bug" hidden>
       <div class="field field-wide"><label for="create-bug-title">Title</label><input id="create-bug-title" name="title" type="text" required /></div>
-      <div class="field"><label for="create-bug-severity">Severity</label><select id="create-bug-severity" class="select" name="severity">${['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'].map((value) => option(value, 'S3 Major')).join('')}</select></div>
+      <div class="field"><label for="create-bug-severity">Severity</label><select id="create-bug-severity" class="select" name="severity" required>${['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'].map((value) => option(value, 'S3 Major')).join('')}</select></div>
+      <div class="field"><label for="create-bug-priority">Priority</label><select id="create-bug-priority" class="select" name="priority">${['Highest', 'High', 'Medium', 'Low', 'Lowest'].map((value) => option(value, 'Medium')).join('')}</select></div>
       <div class="field"><label for="create-bug-component">Component</label><select id="create-bug-component" class="select" name="component">${['work desk', 'tasks page', 'bugs page', 'calendar', 'settings', 'chart studio', 'other'].map((value) => option(value, 'other')).join('')}</select></div>
       <div class="field field-wide"><label for="create-bug-repro">Steps to reproduce</label><textarea id="create-bug-repro" name="repro" rows="3" required></textarea></div>
+      <div class="field field-wide"><label for="create-bug-description">Description</label><textarea id="create-bug-description" name="description" rows="3"></textarea></div>
     </form>
     <form class="form-grid create-panel" data-create-panel="event" data-form="create-event" hidden>
       <div class="field field-wide"><label for="create-event-title">What</label><input id="create-event-title" name="title" type="text" required /></div>
@@ -800,6 +805,9 @@ export function renderCreateDialog(state) {
       <div class="field"><label for="create-event-time">Start time</label><input id="create-event-time" name="time" type="time" /></div>
       <div class="field"><label for="create-event-kind">Kind</label><select id="create-event-kind" class="select" name="kind">${['Meeting', 'Reminder', 'Task', 'Deadline', 'Other'].map((value) => option(value, 'Reminder')).join('')}</select></div>
       <div class="field"><label for="create-event-link">Meeting link</label><input id="create-event-link" name="link" type="url" /></div>
+      <div class="field"><label for="create-event-repeat">Repeat</label><select id="create-event-repeat" class="select" name="repeat">${[['', 'Does not repeat'], ['daily', 'Daily'], ['weekdays', 'Weekdays'], ['weekly', 'Weekly'], ['monthly', 'Monthly'], ['yearly', 'Yearly']].map(([value, label]) => option(value, '', label)).join('')}</select></div>
+      <div class="field"><label for="create-event-remind">Remind</label><select id="create-event-remind" class="select" name="remind">${[['0', 'At start time'], ['5', '5 minutes before'], ['15', '15 minutes before'], ['30', '30 minutes before'], ['60', '1 hour before'], ['1440', '1 day before']].map(([value, label]) => option(value, '5', label)).join('')}</select></div>
+      <div class="field"><label for="create-event-project">Project</label><select id="create-event-project" class="select" name="projectId"><option value="">No project</option>${state.projects.filter((p) => !p.archived).map((p) => option(p.id, '', `${p.key} ${p.name}`)).join('')}</select></div>
       <div class="field field-wide"><label for="create-event-note">Note</label><textarea id="create-event-note" name="note" rows="2"></textarea></div>
     </form>
   </div>`;

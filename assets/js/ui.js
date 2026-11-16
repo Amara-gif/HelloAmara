@@ -117,9 +117,21 @@ export function openModal({
   };
 
   cancel.addEventListener('click', close);
-  confirm.addEventListener('click', () => {
-    if (onConfirm && onConfirm() === false) return;
-    close();
+  confirm.addEventListener('click', async () => {
+    if (!onConfirm) {
+      close();
+      return;
+    }
+    confirm.disabled = true;
+    try {
+      // Await so async validation can keep the dialog open by returning false.
+      if ((await onConfirm()) === false) return;
+      close();
+    } catch {
+      // The caller reports the failure; keep the dialog open for a retry.
+    } finally {
+      confirm.disabled = false;
+    }
   });
   backdrop.addEventListener('click', (event) => {
     if (event.target === backdrop) close();
