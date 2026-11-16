@@ -3,7 +3,7 @@ import {
   start, getState, refresh, resetDemo, createTask, updateTask, addTaskComment,
   transitionTask, reviewTask,
   createBug, updateBug, addBugComment, createEvent, deleteEvent, createPage,
-  updatePage, softDeletePage, createProject, updateProject, softDeleteProject,
+  updatePage, softDeletePage, softDeletePages, createProject, updateProject, softDeleteProject,
   reorderProjects, createOrder, closeOrder, saveSettings, restoreQaMark,
 } from './data.js';
 import { readLocation, routeForPath, groupRoutes, SETTINGS_LINKS } from './routes.js';
@@ -307,6 +307,20 @@ function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
 
+function syncPageSelection() {
+  const boxes = [...main.querySelectorAll('[data-page-select]')];
+  const selected = boxes.filter((box) => box.checked).length;
+  const selectAll = main.querySelector('[data-select-all-pages]');
+  if (selectAll) {
+    selectAll.checked = boxes.length > 0 && selected === boxes.length;
+    selectAll.indeterminate = selected > 0 && selected < boxes.length;
+  }
+  const button = main.querySelector('[data-action="delete-selected-pages"]');
+  if (button) button.disabled = selected === 0;
+  const count = main.querySelector('[data-page-selection-count]');
+  if (count) count.textContent = `${selected} selected`;
+}
+
 function openCreateDialog(preset = {}) {
   const options = typeof preset === 'string' ? { tab: preset } : (preset ?? {});
   const state = getState();
@@ -596,6 +610,24 @@ document.addEventListener('click', async (event) => {
     });
   } else if (action === 'delete-page') {
     openModal({ title: 'Delete this page?', message: 'The page is soft-deleted on this device. Other versions stay in the account.', confirmLabel: 'Delete', tone: 'danger', onConfirm: async () => { await softDeletePage(id); render(); toast('Page deleted.', { tone: 'success' }); } });
+  } else if (action === 'delete-selected-pages') {
+    const ids = [...main.querySelectorAll('[data-page-select]:checked')].map((box) => box.value);
+    if (!ids.length) {
+      syncPageSelection();
+      toast('Select at least one page first.', { tone: 'danger' });
+      return;
+    }
+    openModal({
+      title: `Delete ${ids.length} page${ids.length === 1 ? '' : 's'}?`,
+      message: 'The selected pages are soft-deleted on this device. Their rows stay recoverable in the local database.',
+      confirmLabel: `Delete ${ids.length}`,
+      tone: 'danger',
+      onConfirm: async () => {
+        await softDeletePages(ids);
+        render();
+        toast(`${ids.length} page${ids.length === 1 ? '' : 's'} deleted.`, { tone: 'success' });
+      },
+    });
   } else if (action === 'delete-event') {
     openModal({ title: 'Delete this event?', message: 'This removes the event from this device.', confirmLabel: 'Delete', tone: 'danger', onConfirm: async () => { await deleteEvent(id); render(); toast('Event deleted.', { tone: 'success' }); } });
   } else if (action === 'enable-reminders') {
@@ -636,6 +668,15 @@ document.addEventListener('click', async (event) => {
 });
 
 document.addEventListener('change', async (event) => {
+  if (event.target.closest('[data-select-all-pages]')) {
+    for (const box of main.querySelectorAll('[data-page-select]')) box.checked = event.target.checked;
+    syncPageSelection();
+    return;
+  }
+  if (event.target.closest('[data-page-select]')) {
+    syncPageSelection();
+    return;
+  }
   const move = event.target.closest('[data-move-task]');
   if (move) {
     const status = move.value;
@@ -740,7 +781,7 @@ document.addEventListener('submit', async (event) => {
       settings.appearance = { primary: data.primary, radiusBtn: Number(data.radiusBtn), radiusCard: Number(data.radiusCard), glass: Number(data.glass), enableGlass: Boolean(data.enableGlass) };
       await saveSettings(settings); applyAppearance(settings); await rerender(); toast('Theme saved.', { tone: 'success' });
     } else if (form.dataset.form === 'page-save') {
-      const page = data.id ? await updatePage(data.id, { title: data.title, projectId: data.projectId, body: data.body }) : await createPage(data);
+      const page = data.id ? await updatePage(data.id, { title: data.title, projectId: data.projectId, tags: data.tags, body: data.body }) : await createPage(data);
       navigate(`/page/${page.id}`);
       toast('Page saved.', { tone: 'success' });
     } else if (form.dataset.form === 'bug-create') {

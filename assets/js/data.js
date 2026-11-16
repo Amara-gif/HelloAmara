@@ -542,11 +542,17 @@ export async function deleteEvent(id) {
   state = await readState();
 }
 
+export function normalizePageTags(value) {
+  const list = Array.isArray(value) ? value : String(value ?? '').split(',');
+  return list.map((tag) => String(tag).trim()).filter(Boolean).join(', ');
+}
+
 export async function createPage(input) {
   const now = nowIso();
   const page = {
     id: newId('page'), title: input.title, type: input.type || 'Page',
     projectId: input.projectId || '', taskId: input.taskId || '', author: 'Amara',
+    tags: normalizePageTags(input.tags),
     body: input.body || '', createdAt: now, updatedAt: now, deletedAt: null,
   };
   await putRecord('pages', page);
@@ -557,17 +563,27 @@ export async function createPage(input) {
 export async function updatePage(id, input) {
   const page = state.pages.find((row) => row.id === id);
   if (!page) throw new Error('Page not found.');
-  const updated = { ...page, ...input, updatedAt: nowIso() };
+  const patch = 'tags' in input ? { ...input, tags: normalizePageTags(input.tags) } : input;
+  const updated = { ...page, ...patch, updatedAt: nowIso() };
   await putRecord('pages', updated);
   state = await readState();
   return updated;
 }
 
-export async function softDeletePage(id) {
-  const page = state.pages.find((row) => row.id === id);
-  if (!page) return;
-  await putRecord('pages', { ...page, deletedAt: nowIso(), updatedAt: nowIso() });
+// Batch soft delete keeps one readState pass for a multi-row selection.
+export async function softDeletePages(ids) {
+  const wanted = new Set((Array.isArray(ids) ? ids : [ids]).map((id) => String(id ?? '')).filter(Boolean));
+  if (!wanted.size) return [];
+  const rows = state.pages.filter((page) => wanted.has(page.id));
+  if (!rows.length) return [];
+  const now = nowIso();
+  await putRecords('pages', rows.map((page) => ({ ...page, deletedAt: now, updatedAt: now })));
   state = await readState();
+  return rows.map((page) => page.id);
+}
+
+export async function softDeletePage(id) {
+  await softDeletePages([id]);
 }
 
 export async function createProject(input) {

@@ -39,6 +39,7 @@ const pageUrl = (path, params = {}) => {
   return `#${path}${search.toString() ? `?${search}` : ''}`;
 };
 const option = (value, current, label) => `<option value="${esc(value)}"${String(value) === String(current) ? ' selected' : ''}>${esc(label ?? value)}</option>`;
+const pageTags = (value) => (Array.isArray(value) ? value : String(value ?? '').split(',')).map((tag) => String(tag).trim()).filter(Boolean);
 const initials = (name) => String(name || '?').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 const avatar = (name, size = '') => `<span class="avatar ${size}" title="${esc(name)}">${esc(String(name).startsWith('Test') ? 'T' : initials(name))}</span>`;
 
@@ -437,7 +438,7 @@ function pagesPage(state, query) {
   const projectFilter = query.get('project') ?? '';
   const rows = state.pages.filter((page) => {
     const project = projectOf(state, page.projectId);
-    const haystack = `${page.title} ${page.body} ${project?.name ?? ''}`.toLowerCase();
+    const haystack = `${page.title} ${page.body} ${pageTags(page.tags).join(' ')} ${project?.name ?? ''}`.toLowerCase();
     return (!q || haystack.includes(q)) && (!projectFilter || page.projectId === projectFilter);
   });
   const projectOptions = state.projects.map((p) => option(p.id, projectFilter, `${p.key} ${p.name}`)).join('');
@@ -449,14 +450,19 @@ function pagesPage(state, query) {
       <button class="btn btn-sm" type="submit">Search</button>
       <span class="toolbar-count">${rows.length} Pages</span>
     </form>
+    <div class="row-actions" data-page-selection>
+      <button class="btn btn-danger btn-sm" type="button" data-action="delete-selected-pages" disabled>Delete selected</button>
+      <span class="text-muted text-sm" data-page-selection-count>0 selected</span>
+    </div>
     <div class="table-wrap">
       <table class="table table-stack">
-        <thead><tr><th>Page</th><th>Type</th><th>Linked to</th><th>Project</th><th>Updated</th><th>Actions</th></tr></thead>
+        <thead><tr><th><input type="checkbox" data-select-all-pages aria-label="Select all pages" /></th><th>Page</th><th>Type</th><th>Linked to</th><th>Project</th><th>Updated</th><th>Actions</th></tr></thead>
         <tbody>
           ${rows.map((page) => {
             const task = state.tasks.find((row) => row.id === page.taskId);
             const project = projectOf(state, page.projectId);
             return `<tr>
+              <td data-label="Select"><input type="checkbox" data-page-select value="${esc(page.id)}" aria-label="Select ${esc(page.title)}" /></td>
               <td data-label="Page"><a class="table-title" href="#/page/${page.id}">${esc(page.title)}</a></td>
               <td data-label="Type"><span class="badge badge-${page.type === 'Snapshot' ? 'accent' : 'muted'}">${esc(page.type)}</span></td>
               <td data-label="Linked to">${task ? `<a class="mono-link" href="#/task/${task.id}">${esc(task.title)}</a>` : '—'}</td>
@@ -464,7 +470,7 @@ function pagesPage(state, query) {
               <td data-label="Updated">${fmtStamp(page.updatedAt)}</td>
               <td data-label="Actions"><a class="btn btn-ghost btn-sm" href="#/page/${page.id}/edit">Edit</a> <button class="btn btn-ghost btn-sm" type="button" data-action="delete-page" data-id="${page.id}">Delete</button></td>
             </tr>`;
-          }).join('') || `<tr><td colspan="6">${empty('No Page matches. Start a new one.')}</td></tr>`}
+          }).join('') || `<tr><td colspan="7">${empty('No Page matches. Start a new one.')}</td></tr>`}
         </tbody>
       </table>
     </div>`;
@@ -1734,12 +1740,19 @@ function pageView(state, route) {
   if (!page) return notFound(`/page/${route.params.id}`);
   const project = projectOf(state, page.projectId);
   const task = state.tasks.find((row) => row.id === page.taskId);
+  const tags = pageTags(page.tags);
   return `
     <nav class="breadcrumb"><a href="#/pages">← Pages</a></nav>
-    ${pageHead(page.title, `${page.type} · ${page.author} · ${fmtStamp(page.updatedAt)}${project ? ` · ${project.key} ${project.name}` : ''}${task ? ` · ${task.key}` : ''}`, `<div class="row-actions"><a class="btn btn-ghost btn-sm" href="#/page/${page.id}/edit">Edit</a><button class="btn btn-ghost btn-sm" type="button" data-action="print">Print</button></div>`)}
+    ${pageHead(page.title, `${page.type}${task ? ` · ${task.key}` : ''}`, `<div class="row-actions"><a class="btn btn-ghost btn-sm" href="#/page/${page.id}/edit">Edit</a><button class="btn btn-ghost btn-sm" type="button" data-action="print">Print</button></div>`)}
+    <dl class="details compact page-meta">
+      <div><dt>Author</dt><dd>${esc(page.author || 'Unknown author')}</dd></div>
+      <div><dt>Date</dt><dd>${fmtStamp(page.updatedAt)}</dd></div>
+      <div><dt>Project</dt><dd>${project ? `<a class="mono-link" href="#/project/${encodeURIComponent(project.key)}?tab=pages">${esc(project.key)} ${esc(project.name)}</a>` : 'No project'}</dd></div>
+      ${tags.length ? `<div><dt>Tags</dt><dd>${tags.map((tag) => `<span class="badge badge-muted">${esc(tag)}</span>`).join(' ')}</dd></div>` : ''}
+    </dl>
     <div class="page-workspace">
       <aside class="page-rail card"><div class="card-head"><h2>Pages</h2></div><div class="card-body"><div class="row-list">${state.pages.map((item) => `<a class="row-item${item.id === page.id ? ' is-active' : ''}" href="#/page/${item.id}"><span class="row-main"><span class="row-title">${esc(item.title)}</span><span class="row-meta">${esc(item.type)} · ${fmt(item.updatedAt)}</span></span></a>`).join('')}</div></div></aside>
-      <article class="card"><div class="card-body"><div class="prose">${markdown(page.body)}</div></div></article>
+      <article class="card print-friendly" data-print-region><div class="card-body"><div class="prose">${markdown(page.body)}</div></div></article>
     </div>`;
 }
 
@@ -1752,7 +1765,7 @@ function pageEditor(state, route) {
     ${pageHead(isNew ? 'New page' : 'Edit page', 'Stored in this account only. Blank titles are rejected.')}
     <div class="page-workspace">
       <aside class="page-rail card"><div class="card-head"><h2>Pages</h2></div><div class="card-body"><div class="row-list">${state.pages.map((item) => `<a class="row-item${item.id === page?.id ? ' is-active' : ''}" href="#/page/${item.id}"><span class="row-main"><span class="row-title">${esc(item.title)}</span><span class="row-meta">${esc(item.type)}</span></span></a>`).join('')}</div></div></aside>
-      <section class="card"><div class="card-body"><form class="stack" data-form="page-save"><input type="hidden" name="id" value="${esc(page?.id ?? '')}" /><div class="field"><label for="page-title">Title</label><input id="page-title" name="title" type="text" value="${esc(page?.title ?? '')}" required /></div><div class="field"><label for="page-project">Project</label><select id="page-project" class="select" name="projectId"><option value="">No project</option>${state.projects.map((p) => option(p.id, page?.projectId ?? '', `${p.key} ${p.name}`)).join('')}</select></div><div class="field"><label for="page-body">Body</label><textarea id="page-body" name="body" rows="16" placeholder="Write markdown…">${esc(page?.body ?? '')}</textarea></div><div class="row-actions"><button class="btn btn-primary" type="submit">${isNew ? 'Create page' : 'Save page'}</button><a class="btn btn-ghost" href="${page ? `#/page/${page.id}` : '#/pages'}">Cancel</a></div></form></div></section>
+      <section class="card"><div class="card-body"><form class="stack" data-form="page-save"><input type="hidden" name="id" value="${esc(page?.id ?? '')}" /><div class="field"><label for="page-title">Title</label><input id="page-title" name="title" type="text" value="${esc(page?.title ?? '')}" required /></div><div class="field"><label for="page-project">Project</label><select id="page-project" class="select" name="projectId"><option value="">No project</option>${state.projects.map((p) => option(p.id, page?.projectId ?? '', `${p.key} ${p.name}`)).join('')}</select></div><div class="field"><label for="page-tags">Tags</label><input id="page-tags" name="tags" type="text" value="${esc(page?.tags ?? '')}" placeholder="Comma-separated, optional" /><p class="field-help">Optional. Separate tags with commas.</p></div><div class="field"><label for="page-body">Body</label><textarea id="page-body" name="body" rows="16" placeholder="Write markdown…">${esc(page?.body ?? '')}</textarea></div><div class="row-actions"><button class="btn btn-primary" type="submit">${isNew ? 'Create page' : 'Save page'}</button><a class="btn btn-ghost" href="${page ? `#/page/${page.id}` : '#/pages'}">Cancel</a></div></form></div></section>
     </div>`;
 }
 

@@ -97,6 +97,17 @@ function goRoute(path, key, state) {
 export function routeForPath(path, state) {
   const exact = ROUTE_LIST.find((route) => route.path === path);
   if (exact) return exact;
+  // Legacy /note/:id links are aliases of the Pages view.
+  const noteParams = matchPattern('/note/:id', path);
+  if (noteParams) {
+    return {
+      ...ROUTES['page-view'],
+      id: 'page-view',
+      params: noteParams,
+      path: `/page/${encodeURIComponent(noteParams.id)}`,
+      redirectFrom: path,
+    };
+  }
   const goParams = matchPattern(ROUTES.go.pattern, path);
   if (goParams) return goRoute(path, goParams.key, state);
   const dynamic = ROUTE_LIST.filter((route) => route.pattern && route.id !== 'go').sort((a, b) => b.pattern.length - a.pattern.length);

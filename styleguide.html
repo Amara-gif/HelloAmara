@@ -523,6 +523,34 @@
         </div>
       </section>
 
+      <section class="section" aria-labelledby="sg-print-title">
+        <div class="section-head">
+          <h2 id="sg-print-title">Printable page</h2>
+          <p>
+            Page view marks its body with <code>.print-friendly</code>. Under
+            <code>@media print</code> the app chrome and page rail are hidden, and the page body
+            prints without its card border or shadow.
+          </p>
+        </div>
+        <article class="card print-friendly">
+          <div class="card-body">
+            <dl class="details compact page-meta">
+              <div><dt>Author</dt><dd>Amara</dd></div>
+              <div><dt>Date</dt><dd>Nov 16, 4:00 PM</dd></div>
+              <div><dt>Project</dt><dd>TAG Hello Amara</dd></div>
+              <div><dt>Tags</dt><dd><span class="badge badge-muted">Example</span> <span class="badge badge-muted">Print</span></dd></div>
+            </dl>
+            <div class="prose">
+              <h2>Example printable body</h2>
+              <p>Markdown content stays readable when the page is sent to the printer.</p>
+            </div>
+            <div class="row-actions">
+              <button class="btn btn-ghost" type="button" data-demo="print">Print</button>
+            </div>
+          </div>
+        </article>
+      </section>
+
       <section class="section" aria-labelledby="sg-feedback-title">
         <div class="section-head">
           <h2 id="sg-feedback-title">Toasts and dialogs</h2>

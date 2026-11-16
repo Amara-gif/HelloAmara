@@ -119,6 +119,7 @@ function setupDemos() {
   document.querySelector('[data-demo="toast"]')?.addEventListener('click', () => {
     toast('Saved on this device. Nothing was uploaded.', { tone: 'success' });
   });
+  document.querySelector('[data-demo="print"]')?.addEventListener('click', () => window.print());
 
   document.querySelector('[data-demo="dialog"]')?.addEventListener('click', () => {
     openModal({
