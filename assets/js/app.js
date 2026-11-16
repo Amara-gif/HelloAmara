@@ -7,7 +7,7 @@ import {
   closeOrder, saveSettings, restoreQaMark,
 } from './data.js';
 import { readLocation, routeForPath, groupRoutes, SETTINGS_LINKS } from './routes.js';
-import { renderView, mountView, renderAccountScreen, renderCreateDialog, canSendToQa, qaOwnerName } from './views.js';
+import { renderView, mountView, renderAccountScreen, renderCreateDialog, bugPrefill, canSendToQa, qaOwnerName } from './views.js';
 import { icon } from './icons.js';
 import { updateTaskBadge } from './nav-badge.js';
 import { openModal, toast } from './ui.js';
@@ -37,6 +37,7 @@ let sidebarPinned = readPreference(SIDEBAR_PIN_KEY);
 let lastFocused = null;
 let createTab = 'task';
 let createClose = null;
+let openedBugNewHash = null;
 let reminderTimer = null;
 const notifiedReminders = new Set();
 
@@ -254,6 +255,15 @@ function render() {
   updateNav(route);
   applyAppearance(state.settings);
   mountView(route, query, state);
+  if (route.id === 'bug-new') {
+    const hash = window.location.hash;
+    if (openedBugNewHash !== hash) {
+      openedBugNewHash = hash;
+      openCreateDialog(bugPrefill(query));
+    }
+  } else {
+    openedBugNewHash = null;
+  }
   setDrawer(false);
   if (accountButton) accountButton.textContent = state.account.name;
   if (storageStatus) storageStatus.textContent = state.persistentStorage?.status ?? 'Unsupported';
@@ -367,7 +377,10 @@ async function submitCreate() {
     } else if (createTab === 'bug') {
       const bug = await createBug(data);
       createClose?.();
-      await rerender();
+      // The report-a-bug route auto-opens this dialog; leave it so a re-render
+      // cannot open the dialog again before the new bug is shown.
+      if (readLocation().path === '/bugs/new') navigate(`/bug/${bug.id}`);
+      else await rerender();
       toast(`Bug ${bug.key} reported.`, { tone: 'success' });
     } else {
       const event = await createEvent(data);
@@ -542,6 +555,7 @@ document.addEventListener('click', async (event) => {
   if (action === 'agenda-row') { event.preventDefault(); openAgendaDialog(actionEl); }
   else if (action === 'switch-account') { clearActiveAccount(); window.location.reload(); }
   else if (action === 'open-create') openCreateDialog();
+  else if (action === 'open-bug-form') openCreateDialog(bugPrefill(readLocation().query));
   else if (action === 'new-subtask') {
     const parent = getState().tasks.find((row) => row.id === id);
     openCreateDialog({ tab: 'task', parentId: id, projectId: parent?.projectId || '', type: 'Sub-task' });

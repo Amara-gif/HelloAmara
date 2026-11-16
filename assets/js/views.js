@@ -10,6 +10,8 @@ import {
   taskWorkflowTargets,
   attachmentsFingerprint,
   taskReviewFingerprint,
+  BUG_SEVERITIES,
+  normalizeBugSeverity,
 } from './data.js';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
@@ -1023,7 +1025,7 @@ function calendarPage(state, query) {
 }
 
 const BUG_STATUSES = ['New', 'Triaged', 'In progress', 'Fixed', 'Verified', 'Closed', 'Reopened', 'Duplicate', 'Wont fix', 'Deferred', 'Rejected'];
-const BUG_SEVERITIES = ['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'];
+const BUG_COMPONENTS = ['work desk', 'inbox', 'bugs page', 'tasks page', 'overview', 'calendar', 'chat', 'settings', 'scraper', 'pipeline', 'report deck', 'chart studio', 'other'];
 const BUG_SORT_OPTIONS = [
   ['smart', 'Smart order'],
   ['newest', 'Newest'],
@@ -1334,9 +1336,32 @@ function pageEditor(state, route) {
     </div>`;
 }
 
-function bugNew(state) {
-  return `${pageHead('Report a bug', 'A short report is enough. The key and SLA due date are added automatically.')}
-    <section class="card"><div class="card-body"><form class="form-grid" data-form="bug-create"><div class="field field-wide"><label for="bug-title">Title</label><input id="bug-title" name="title" type="text" required /></div><div class="field"><label for="bug-severity">Severity</label><select id="bug-severity" class="select" name="severity">${['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'].map((value) => option(value, 'S3 Major')).join('')}</select></div><div class="field"><label for="bug-priority">Priority</label><select id="bug-priority" class="select" name="priority">${['Highest', 'High', 'Medium', 'Low', 'Lowest'].map((value) => option(value, 'Medium')).join('')}</select></div><div class="field"><label for="bug-component">Component</label><select id="bug-component" class="select" name="component">${['work desk', 'tasks page', 'bugs page', 'calendar', 'settings', 'chart studio', 'other'].map((value) => option(value, 'other')).join('')}</select></div><div class="field"><label for="bug-assignee">Assignee</label><select id="bug-assignee" class="select" name="assignee">${state.team.map((agent) => option(agent.name, 'Dispatcher', agent.name)).join('')}</select></div><div class="field field-wide"><label for="bug-repro">Steps to reproduce</label><textarea id="bug-repro" name="repro" rows="3" required></textarea></div><div class="field field-wide"><label for="bug-description">Description</label><textarea id="bug-description" name="description" rows="3"></textarea></div><div class="field"><label for="bug-expected">Expected</label><input id="bug-expected" name="expected" type="text" /></div><div class="field"><label for="bug-actual">Actual</label><input id="bug-actual" name="actual" type="text" /></div><div class="field field-wide"><label for="bug-environment">Environment</label><input id="bug-environment" name="environment" type="text" /></div><button class="btn btn-primary" type="submit">Create bug</button></form></div></section>`;
+// Report-a-bug links carry the short form values in the query: t, d,
+// component and severity. The dialog gets the same normalized shape.
+export function bugPrefill(query) {
+  const read = (key) => {
+    if (!query) return '';
+    if (typeof query.get === 'function') return query.get(key) ?? '';
+    return query[key] ?? '';
+  };
+  return {
+    tab: 'bug',
+    title: read('t'),
+    description: read('d'),
+    component: String(read('component') ?? '').trim() || 'other',
+    severity: normalizeBugSeverity(read('severity')),
+  };
+}
+
+function bugNew() {
+  return `${pageHead('Report a bug', 'The key and SLA due date are added automatically when you create the bug.')}
+    <section class="card"><div class="card-body"><div class="stack">
+      <p class="lede">Open the bug form to add a title, severity, component, steps to reproduce and an optional description.</p>
+      <div class="row-actions">
+        <button class="btn btn-primary" type="button" data-action="open-bug-form">${icon('bug', 16)}Open the bug form</button>
+        <a class="btn btn-ghost" href="#/bugs">Back to Bugs</a>
+      </div>
+    </div></div></section>`;
 }
 
 function ratingPage(state) {
@@ -1395,7 +1420,7 @@ export function renderView(route, query, state) {
     case 'page-view': return pageView(state, route);
     case 'page-edit':
     case 'page-new': return pageEditor(state, route);
-    case 'bug-new': return bugNew(state);
+    case 'bug-new': return bugNew();
     case 'rating-trend': return ratingPage(state);
     case 'go': return notFound(route.path);
     default: return notFound(route.path);
@@ -1481,6 +1506,11 @@ export function renderCreateDialog(state, preset = {}) {
   const eventProject = options.projectId || linked?.projectId || '';
   const eventTitle = options.title || (linked ? `${linked.key} · ${linked.title}` : '');
   const eventDate = options.date || dateOnly(linked?.due) || today();
+  const bugTitle = options.title ?? options.t ?? '';
+  const bugDescription = options.description ?? options.d ?? '';
+  const bugSeverity = normalizeBugSeverity(options.severity);
+  const bugComponent = String(options.component ?? '').trim() || 'other';
+  const bugComponents = BUG_COMPONENTS.includes(bugComponent) ? BUG_COMPONENTS : [...BUG_COMPONENTS, bugComponent];
   const tabButton = (name, label) => `<button class="tab" type="button" role="tab" aria-selected="${activeTab === name}" data-create-tab="${name}">${label}</button>`;
   const panelHidden = (name) => (activeTab === name ? '' : ' hidden');
   return `<div class="create-dialog">
@@ -1502,12 +1532,12 @@ export function renderCreateDialog(state, preset = {}) {
       <div class="field field-wide"><label for="create-task-description">Description</label><textarea id="create-task-description" name="description" rows="3"></textarea></div>
     </form>
     <form class="form-grid create-panel" data-create-panel="bug" data-form="create-bug"${panelHidden('bug')}>
-      <div class="field field-wide"><label for="create-bug-title">Title</label><input id="create-bug-title" name="title" type="text" required /></div>
-      <div class="field"><label for="create-bug-severity">Severity</label><select id="create-bug-severity" class="select" name="severity" required>${['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'].map((value) => option(value, 'S3 Major')).join('')}</select></div>
+      <div class="field field-wide"><label for="create-bug-title">Title</label><input id="create-bug-title" name="title" type="text" required value="${esc(bugTitle)}" /></div>
+      <div class="field"><label for="create-bug-severity">Severity</label><select id="create-bug-severity" class="select" name="severity" required>${BUG_SEVERITIES.map((value) => option(value, bugSeverity)).join('')}</select></div>
       <div class="field"><label for="create-bug-priority">Priority</label><select id="create-bug-priority" class="select" name="priority">${['Highest', 'High', 'Medium', 'Low', 'Lowest'].map((value) => option(value, 'Medium')).join('')}</select></div>
-      <div class="field"><label for="create-bug-component">Component</label><select id="create-bug-component" class="select" name="component">${['work desk', 'tasks page', 'bugs page', 'calendar', 'settings', 'chart studio', 'other'].map((value) => option(value, 'other')).join('')}</select></div>
+      <div class="field"><label for="create-bug-component">Component</label><select id="create-bug-component" class="select" name="component">${bugComponents.map((value) => option(value, bugComponent)).join('')}</select></div>
       <div class="field field-wide"><label for="create-bug-repro">Steps to reproduce</label><textarea id="create-bug-repro" name="repro" rows="3" required></textarea></div>
-      <div class="field field-wide"><label for="create-bug-description">Description</label><textarea id="create-bug-description" name="description" rows="3"></textarea></div>
+      <div class="field field-wide"><label for="create-bug-description">Description</label><textarea id="create-bug-description" name="description" rows="3">${esc(bugDescription)}</textarea></div>
     </form>
     <form class="form-grid create-panel" data-create-panel="event" data-form="create-event"${panelHidden('event')}>
       <div class="field field-wide"><label for="create-event-title">What</label><input id="create-event-title" name="title" type="text" required${eventTitle ? ` value="${esc(eventTitle)}"` : ''} /></div>

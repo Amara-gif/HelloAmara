@@ -10,6 +10,28 @@ import {
 } from './db.js';
 import { buildDemoData, demoSettings, DEMO_VERSION } from './demo-data.js';
 
+export const BUG_SEVERITIES = ['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'];
+const BUG_SLA_DAYS = { 'S1 Blocker': 0, 'S2 Critical': 2, 'S3 Major': 5, 'S4 Minor': null };
+
+// Accept both the stored label ("S2 Critical") and the short form ("S2") that
+// report-a-bug links use. Unknown values fall back to the S3 default.
+export function normalizeBugSeverity(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return 'S3 Major';
+  const short = /^S([1-4])\b/i.exec(raw);
+  if (short) return BUG_SEVERITIES[Number(short[1]) - 1];
+  return BUG_SEVERITIES.find((severity) => severity.toLowerCase() === raw.toLowerCase()) ?? 'S3 Major';
+}
+
+// SLA due dates are calendar-day offsets from the local day, not UTC timestamps.
+export function bugSlaDue(severity, baseDate = new Date()) {
+  const days = BUG_SLA_DAYS[normalizeBugSeverity(severity)];
+  if (days === null) return '';
+  const due = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+  due.setDate(due.getDate() + days);
+  return `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`;
+}
+
 const DEFAULT_SETTINGS = {
   ...structuredClone(demoSettings),
   ai: { status: 'Not configured', model: 'deepseek-v4-pro', timeout: 90, key: '' },
@@ -467,15 +489,12 @@ export async function restoreQaMark(id) {
 export async function createBug(input) {
   const number = nextNumber(state.bugs, 'key');
   const now = nowIso();
-  const due = new Date();
-  if (input.severity === 'S1 Blocker') due.setDate(due.getDate() + 0);
-  else if (input.severity === 'S2 Critical') due.setDate(due.getDate() + 2);
-  else if (input.severity === 'S3 Major') due.setDate(due.getDate() + 5);
+  const severity = normalizeBugSeverity(input.severity);
   const bug = {
     id: newId('bug'), key: `WD-${number}`, title: input.title, status: 'New',
-    severity: input.severity || 'S3 Major', priority: input.priority || 'Medium',
+    severity, priority: input.priority || 'Medium',
     assignee: input.assignee || 'Dispatcher', component: input.component || 'other',
-    due: input.severity === 'S4 Minor' ? '' : due.toISOString().slice(0, 10),
+    due: bugSlaDue(severity),
     type: 'Bug', reporter: 'Amara', description: input.description || '',
     repro: input.repro || '', expected: input.expected || '', actual: input.actual || '',
     labels: input.labels || '', found_in: input.found_in || '', fix_in: '',
