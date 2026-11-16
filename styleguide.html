@@ -312,6 +312,83 @@
         </details>
       </section>
 
+      <section class="section" aria-labelledby="sg-task-views-title">
+        <div class="section-head">
+          <h2 id="sg-task-views-title">Task calendar and timeline</h2>
+          <p>
+            The Calendar and Timeline tabs on All work items reuse the shared calendar grid, card,
+            badge and row classes. Timeline bars, the today line and milestone marks are driven by
+            the task dates, so they need no new button or card style.
+          </p>
+        </div>
+        <div class="grid-2">
+          <article class="card">
+            <div class="card-head">
+              <h2>Calendar</h2>
+              <span class="badge badge-muted">2 in February 2026</span>
+            </div>
+            <div class="card-body">
+              <div class="calendar-toolbar">
+                <button class="btn btn-ghost btn-sm" type="button">Previous</button>
+                <button class="btn btn-ghost btn-sm" type="button">This month</button>
+                <button class="btn btn-ghost btn-sm" type="button">Next</button>
+                <h2 class="calendar-month">February 2026</h2>
+              </div>
+              <div class="calendar calendar-mini">
+                <div class="calendar-week">
+                  <span class="calendar-weekday">Mon</span>
+                  <span class="calendar-weekday">Tue</span>
+                  <span class="calendar-weekday">Wed</span>
+                  <span class="calendar-weekday">Thu</span>
+                  <span class="calendar-weekday">Fri</span>
+                  <span class="calendar-weekday">Sat</span>
+                  <span class="calendar-weekday">Sun</span>
+                </div>
+                <div class="calendar-grid">
+                  <div class="calendar-day has-items"><span class="calendar-date">2</span><a class="calendar-item calendar-item-task" href="#sg-task-views">T-1 · Example task</a></div>
+                  <div class="calendar-day"><span class="calendar-date">3</span></div>
+                  <div class="calendar-day"><span class="calendar-date">4</span></div>
+                  <div class="calendar-day"><span class="calendar-date">5</span></div>
+                  <div class="calendar-day"><span class="calendar-date">6</span></div>
+                  <div class="calendar-day"><span class="calendar-date">7</span></div>
+                  <div class="calendar-day"><span class="calendar-date">8</span></div>
+                </div>
+              </div>
+              <p class="row-meta" data-undated-count="2" data-undated-total="3">2 open undated items</p>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h2>Timeline</h2>
+              <span class="badge badge-muted">2 dated</span>
+            </div>
+            <div class="card-body">
+              <div class="timeline-legend">
+                <span class="badge badge-accent">Dated bar</span>
+                <span class="badge badge-muted">Today line</span>
+                <span class="badge badge-band">Milestone</span>
+              </div>
+              <div class="timeline" data-days="14">
+                <div class="timeline-head">
+                  <span class="timeline-label">Work item</span>
+                  <span class="timeline-axis"><span>Feb 1</span><span class="timeline-axis-today">Today · Feb 8</span><span>Feb 14</span></span>
+                </div>
+                <div class="timeline-row">
+                  <span class="timeline-label"><a class="table-title" href="#sg-task-views">T-1 · Example task</a><span class="row-meta">Amara · In progress · Feb 2 → Feb 8</span></span>
+                  <span class="timeline-track"><a class="timeline-bar timeline-bar-open" href="#sg-task-views" aria-label="Example dated bar"></a><span class="timeline-today" aria-hidden="true"></span></span>
+                </div>
+                <div class="timeline-row">
+                  <span class="timeline-label"><a class="table-title" href="#sg-task-views">T-2 · Example milestone</a><span class="row-meta">Worker A · In progress · Feb 4 → Feb 12</span></span>
+                  <span class="timeline-track"><a class="timeline-bar timeline-bar-done" href="#sg-task-views" aria-label="Example milestone bar"></a><a class="timeline-milestone" href="#sg-task-views" aria-label="Example milestone"></a><span class="timeline-today" aria-hidden="true"></span></span>
+                </div>
+              </div>
+              <p class="row-meta" data-undated-count="1" data-undated-total="1">1 open undated item</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <section class="section" aria-labelledby="sg-nav-title">
         <div class="section-head">
           <h2 id="sg-nav-title">Navigation</h2>

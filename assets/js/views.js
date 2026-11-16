@@ -697,13 +697,183 @@ function taskBoard(state, rows) {
   return `<div class="board">${columns.map((column) => `<section class="board-column" data-board-column="${esc(column)}"><h2>${column}<span class="badge badge-muted">${rows.filter((task) => bucket(task) === column).length}</span></h2>${cards(column)}</section>`).join('')}</div>${boardHealth(state)}`;
 }
 
+const pad2 = (value) => String(value).padStart(2, '0');
+
+function parseMonth(value) {
+  const now = new Date();
+  const match = /^(\d{4})-(\d{1,2})$/.exec(String(value ?? ''));
+  const year = match ? Number(match[1]) : now.getFullYear();
+  const month = match ? Math.min(12, Math.max(1, Number(match[2]))) : now.getMonth() + 1;
+  return { year, month, value: `${year}-${pad2(month)}` };
+}
+
+function shiftMonth(current, delta) {
+  const date = new Date(current.year, current.month - 1 + delta, 1);
+  return { year: date.getFullYear(), month: date.getMonth() + 1, value: `${date.getFullYear()}-${pad2(date.getMonth() + 1)}` };
+}
+
+function addDays(isoDate, amount) {
+  const date = new Date(`${isoDate}T12:00:00`);
+  date.setDate(date.getDate() + amount);
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function daysBetween(from, to) {
+  const a = new Date(`${from}T12:00:00`);
+  const b = new Date(`${to}T12:00:00`);
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+
+function milestoneDate(task) {
+  const raw = task?.milestone;
+  const candidates = [task?.milestoneAt, task?.milestoneDate];
+  if (raw && typeof raw === 'object') candidates.unshift(raw.date ?? raw.at ?? raw.due);
+  if (typeof raw === 'string') candidates.unshift(raw);
+  for (const candidate of candidates) {
+    const match = String(candidate ?? '').match(/\d{4}-\d{2}-\d{2}/);
+    if (match) return match[0];
+  }
+  const flag = raw === true || raw === 1
+    || (typeof raw === 'string' && !['', '0', 'false', 'no'].includes(raw.toLowerCase()))
+    || task?.isMilestone
+    || /^milestone$/i.test(String(task?.type ?? '').trim())
+    || /^milestone$/i.test(String(task?.kind ?? '').trim());
+  return flag ? dateOnly(task?.due || task?.start) : '';
+}
+
+function undatedSummary(rows, isUndated = (task) => !dateOnly(task.due)) {
+  const undated = rows.filter(isUndated);
+  const open = undated.filter((task) => task.status !== 'Done');
+  return { undated, open };
+}
+
+function undatedCount(rows, isUndated) {
+  const { undated, open } = undatedSummary(rows, isUndated);
+  return `<p class="row-meta" data-undated-count="${open.length}" data-undated-total="${undated.length}">${open.length} open undated ${open.length === 1 ? 'item' : 'items'}</p>`;
+}
+
+function taskCalendarView(rows, query, base) {
+  const current = parseMonth(query.get('m'));
+  const monthStart = new Date(current.year, current.month - 1, 1);
+  const daysInMonth = new Date(current.year, current.month, 0).getDate();
+  const lead = (monthStart.getDay() + 6) % 7;
+  const trailing = (7 - ((lead + daysInMonth) % 7)) % 7;
+  const byDate = new Map();
+  for (const task of rows) {
+    const due = dateOnly(task.due);
+    if (!due) continue;
+    if (!byDate.has(due)) byDate.set(due, []);
+    byDate.get(due).push(task);
+  }
+  const prev = shiftMonth(current, -1);
+  const next = shiftMonth(current, 1);
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+  const monthName = monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const monthTaskCount = [...byDate.entries()].filter(([date]) => date.startsWith(current.value)).reduce((sum, [, items]) => sum + items.length, 0);
+  const cells = [];
+  for (let i = 0; i < lead; i += 1) cells.push('<span class="calendar-day is-outside"></span>');
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = `${current.value}-${pad2(day)}`;
+    const items = byDate.get(date) ?? [];
+    const isToday = date === today();
+    cells.push(`<div class="calendar-day${isToday ? ' is-today' : ''}${items.length ? ' has-items' : ''}" data-calendar-date="${date}">
+      <span class="calendar-date">${day}</span>
+      ${items.slice(0, 3).map((task) => `<a class="calendar-item calendar-item-task" href="#/task/${encodeURIComponent(task.id)}" data-task-id="${esc(task.id)}">${esc(task.key ? `${task.key} · ` : '')}${esc(task.title)}</a>`).join('')}
+      ${items.length > 3 ? `<span class="calendar-more">+${items.length - 3}</span>` : ''}
+    </div>`);
+  }
+  for (let i = 0; i < trailing; i += 1) cells.push('<span class="calendar-day is-outside"></span>');
+  const openUndated = undatedSummary(rows).open;
+  const undatedLinks = openUndated.slice(0, 6).map((task) => `<a class="row-item" href="#/task/${encodeURIComponent(task.id)}"><span class="row-main"><span class="row-title">${esc(task.key ? `${task.key} · ` : '')}${esc(task.title)}</span><span class="row-meta">No due date · ${esc(task.status)}</span></span><span class="badge badge-muted">${esc(task.owner || 'Unassigned')}</span></a>`).join('');
+  return `<section class="card" data-task-view="calendar" data-view="calendar">
+    <div class="card-head"><h2>Calendar</h2><span class="badge badge-muted">${monthTaskCount} in ${esc(monthName)}</span></div>
+    <div class="card-body">
+      <div class="calendar-toolbar">
+        <a class="btn btn-ghost btn-sm" href="${pageUrl('/tasks', { ...base, view: 'calendar', m: prev.value })}">Previous</a>
+        <a class="btn btn-ghost btn-sm" href="${pageUrl('/tasks', { ...base, view: 'calendar', m: thisMonth })}">This month</a>
+        <a class="btn btn-ghost btn-sm" href="${pageUrl('/tasks', { ...base, view: 'calendar', m: next.value })}">Next</a>
+        <h2 class="calendar-month">${esc(monthName)}</h2>
+      </div>
+      <div class="calendar">
+        <div class="calendar-week">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => `<span class="calendar-weekday">${day}</span>`).join('')}</div>
+        <div class="calendar-grid">${cells.join('')}</div>
+      </div>
+      ${undatedCount(rows)}
+      ${undatedLinks ? `<div class="row-list">${undatedLinks}</div>${openUndated.length > 6 ? `<p class="row-meta">${openUndated.length - 6} more open undated items.</p>` : ''}` : ''}
+    </div>
+  </section>`;
+}
+
+function taskTimelineView(rows, base) {
+  const todayIso = today();
+  const datedRows = rows.map((task) => {
+    const milestone = milestoneDate(task);
+    const start = dateOnly(task.start) || dateOnly(task.due) || milestone;
+    const end = dateOnly(task.due) || start;
+    return { task, start, end, milestone };
+  }).filter((row) => row.start || row.end || row.milestone);
+  const dates = [todayIso];
+  for (const row of datedRows) {
+    if (row.start) dates.push(row.start);
+    if (row.end) dates.push(row.end);
+    if (row.milestone) dates.push(row.milestone);
+  }
+  const sorted = dates.sort();
+  const first = datedRows.length ? addDays(sorted[0], -1) : addDays(todayIso, -3);
+  const last = datedRows.length ? addDays(sorted[sorted.length - 1], 1) : addDays(todayIso, 10);
+  const totalDays = Math.max(1, daysBetween(first, last) + 1);
+  const todayIndex = Math.max(0, Math.min(totalDays - 1, daysBetween(first, todayIso)));
+  const isUndated = (task) => !dateOnly(task.start) && !dateOnly(task.due) && !milestoneDate(task);
+  const undated = undatedSummary(rows, isUndated);
+  const undatedLinks = undated.open.slice(0, 6).map((task) => `<a class="row-item" href="#/task/${encodeURIComponent(task.id)}"><span class="row-main"><span class="row-title">${esc(task.key ? `${task.key} · ` : '')}${esc(task.title)}</span><span class="row-meta">No dates · ${esc(task.status)}</span></span><span class="badge badge-muted">${esc(task.owner || 'Unassigned')}</span></a>`).join('');
+  const rowHtml = datedRows.map(({ task, start, end, milestone }) => {
+    const span = Math.max(1, daysBetween(start, end) + 1);
+    const startIndex = Math.max(0, Math.min(totalDays - 1, daysBetween(first, start)));
+    const milestoneIndex = milestone ? Math.max(0, Math.min(totalDays - 1, daysBetween(first, milestone))) : -1;
+    const label = task.key ? `${task.key} · ${task.title}` : task.title;
+    const range = start === end ? fmt(start) : `${fmt(start)} → ${fmt(end)}`;
+    return `<div class="timeline-row" data-timeline-row data-task-id="${esc(task.id)}" data-start="${esc(start)}" data-end="${esc(end)}">
+      <span class="timeline-label">
+        <a class="table-title" href="#/task/${encodeURIComponent(task.id)}">${esc(label)}</a>
+        <span class="row-meta">${esc(task.owner || 'Unassigned')} · ${esc(task.status)} · ${esc(range)}</span>
+      </span>
+      <span class="timeline-track">
+        <a class="timeline-bar timeline-bar-${task.status === 'Done' ? 'done' : 'open'}" href="#/task/${encodeURIComponent(task.id)}" data-timeline-bar data-start-index="${startIndex}" data-span="${span}" data-start="${esc(start)}" data-end="${esc(end)}" aria-label="${esc(`${label}, ${range}`)}"></a>
+        ${milestone ? `<a class="timeline-milestone" href="#/task/${encodeURIComponent(task.id)}" data-timeline-milestone data-date-index="${milestoneIndex}" data-date="${esc(milestone)}" title="Milestone: ${esc(milestone)}" aria-label="Milestone for ${esc(label)} on ${esc(fmt(milestone))}"></a>` : ''}
+        <span class="timeline-today" data-timeline-today data-today-index="${todayIndex}" aria-hidden="true"></span>
+      </span>
+    </div>`;
+  }).join('');
+  return `<section class="card" data-task-view="timeline" data-view="timeline">
+    <div class="card-head"><h2>Timeline</h2><span class="badge badge-muted">${datedRows.length} dated</span></div>
+    <div class="card-body">
+      <div class="timeline-legend">
+        <span class="badge badge-accent">Dated bar</span>
+        <span class="badge badge-muted">Today line</span>
+        <span class="badge badge-band">Milestone</span>
+      </div>
+      <div class="timeline" data-timeline data-days="${totalDays}">
+        <div class="timeline-head">
+          <span class="timeline-label">Work item</span>
+          <span class="timeline-axis"><span>${esc(fmt(first))}</span><span class="timeline-axis-today">Today · ${esc(fmt(todayIso))}</span><span>${esc(fmt(last))}</span></span>
+        </div>
+        ${rowHtml || `<div class="timeline-row" data-timeline-row><span class="timeline-label">${empty('No dated items match these filters.')}</span><span class="timeline-track"><span class="timeline-today" data-timeline-today data-today-index="${todayIndex}" aria-hidden="true"></span></span></div>`}
+      </div>
+      ${undatedCount(rows, isUndated)}
+      ${undatedLinks ? `<div class="row-list">${undatedLinks}</div>${undated.open.length > 6 ? `<p class="row-meta">${undated.open.length - 6} more open undated items.</p>` : ''}` : ''}
+    </div>
+  </section>`;
+}
+
 function tasksPage(state, query) {
   const { rows, scope, q, status, owner, priorityFilter, severity, component, module, projectFilter, sort } = filterTasks(state, query);
   const view = ['list', 'board', 'calendar', 'timeline'].includes(query.get('view')) ? query.get('view') : 'list';
   const openCount = state.tasks.filter((task) => task.status !== 'Done').length;
   const allCount = state.tasks.length;
   const overdue = state.tasks.filter((task) => task.due && task.due < today() && task.status !== 'Done').length;
-  const base = { q, status, owner, priority: priorityFilter, severity, component, module, project: projectFilter, sort, scope };
+  const monthParam = query.get('m') ?? '';
+  const base = { q, status, owner, priority: priorityFilter, severity, component, module, project: projectFilter, sort, scope, m: monthParam };
   const unique = (field) => [...new Set(state.tasks.map((task) => task[field]).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
   const statusOptions = [...new Set([...WORKFLOW_STATUSES, ...unique('workflow')])];
   const severityOptions = [...new Set([...['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'], ...unique('severity')])];
@@ -720,7 +890,7 @@ function tasksPage(state, query) {
       <span class="toolbar-count">${state.tasks.filter((task) => task.status === 'In progress').length} in progress · ${state.tasks.filter((task) => task.status === 'Waiting').length} in review · ${overdue} overdue</span>
     </div>
     <form class="toolbar" data-form="task-filters">
-      <input type="hidden" name="view" value="${view}" /><input type="hidden" name="scope" value="${scope}" />
+      <input type="hidden" name="view" value="${view}" /><input type="hidden" name="scope" value="${scope}" /><input type="hidden" name="m" value="${esc(monthParam)}" />
       <input class="input" type="search" name="q" value="${esc(q)}" placeholder="Search work items…" aria-label="Search work items" />
       <select class="select" name="status" aria-label="Status"><option value="">All statuses</option>${statusOptions.map((value) => option(value, status)).join('')}</select>
       <select class="select" name="owner" aria-label="Owner"><option value="">All owners</option>${[...new Set(state.tasks.map((task) => task.owner).filter(Boolean))].map((value) => option(value, owner)).join('')}</select>
@@ -733,7 +903,7 @@ function tasksPage(state, query) {
       <button class="btn btn-sm btn-primary" type="submit">Apply</button>
       <a class="btn btn-ghost btn-sm" href="${pageUrl('/tasks', { view })}">Reset</a>
     </form>
-    ${view === 'board' ? taskBoard(state, rows) : view === 'calendar' || view === 'timeline' ? `<section class="card"><div class="card-body">${empty(`${view === 'calendar' ? 'Calendar' : 'Timeline'} view is wired to the same rows. Use Board or List for the demo data.`)}</div></section>` : taskTable(state, rows)}`;
+    ${view === 'board' ? taskBoard(state, rows) : view === 'calendar' ? taskCalendarView(rows, query, base) : view === 'timeline' ? taskTimelineView(rows, base) : taskTable(state, rows)}`;
 }
 
 function calendarItems(state, date, projectFilter) {
@@ -1113,6 +1283,26 @@ export function mountView(route, query, state) {
       const max = Math.max(...[...document.querySelectorAll('[data-bar]')].map((item) => Number(item.dataset.bar)), 1);
       bar.style.setProperty('--bar-width', `${(Number(bar.dataset.bar) / max) * 100}%`);
     });
+  }
+  if (route.id === 'tasks' && query.get('view') === 'timeline') {
+    const timeline = document.querySelector('[data-timeline]');
+    if (timeline) {
+      const days = Math.max(1, Number(timeline.dataset.days) || 1);
+      const clampedIndex = (value) => Math.max(0, Math.min(days - 1, Number(value) || 0));
+      const percent = (value) => `${(Math.max(0, Math.min(days, value)) / days) * 100}%`;
+      timeline.querySelectorAll('[data-timeline-bar]').forEach((bar) => {
+        const startIndex = clampedIndex(bar.dataset.startIndex);
+        const span = Math.max(1, Math.min(days - startIndex, Number(bar.dataset.span) || 1));
+        bar.style.setProperty('--timeline-left', percent(startIndex));
+        bar.style.setProperty('--timeline-width', percent(span));
+      });
+      timeline.querySelectorAll('[data-timeline-milestone]').forEach((mark) => {
+        mark.style.setProperty('--timeline-left', percent(clampedIndex(mark.dataset.dateIndex)));
+      });
+      timeline.querySelectorAll('[data-timeline-today]').forEach((line) => {
+        line.style.setProperty('--timeline-left', percent(clampedIndex(line.dataset.todayIndex)));
+      });
+    }
   }
   if (route.id === 'settings-appearance') {
     const input = document.getElementById('theme-primary');
