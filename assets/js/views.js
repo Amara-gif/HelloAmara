@@ -1079,13 +1079,110 @@ function teamPage(state) {
     </div>`;
 }
 
+const CHART_DATASETS = [
+  { id: 'work-status', label: 'Work items by status', source: 'tasks', groupBy: 'status', filterBy: 'projectId', order: ['To do', 'In progress', 'Waiting', 'Done'] },
+  { id: 'work-priority', label: 'Work items by priority', source: 'tasks', groupBy: 'priority', filterBy: 'projectId', order: PRIORITY_ORDER },
+  { id: 'bug-severity', label: 'Bugs by severity', source: 'bugs', groupBy: 'severity', filterBy: 'status', order: ['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'] },
+  { id: 'bug-component', label: 'Bugs by component', source: 'bugs', groupBy: 'component', filterBy: 'status' },
+];
+
+const BUG_STATUS_ORDER = ['New', 'Triaged', 'In progress', 'Fixed', 'Verified', 'Closed', 'Reopened', 'Duplicate', 'Wont fix', 'Deferred', 'Rejected'];
+
+function chartDataset(tableId) {
+  return CHART_DATASETS.find((dataset) => dataset.id === tableId) ?? CHART_DATASETS[0];
+}
+
+function orderChartValues(values, preferred = []) {
+  const rank = new Map(preferred.map((value, index) => [value, index]));
+  return [...new Set(values)].sort((a, b) => {
+    const rankA = rank.has(a) ? rank.get(a) : preferred.length;
+    const rankB = rank.has(b) ? rank.get(b) : preferred.length;
+    return rankA - rankB || String(a).localeCompare(String(b));
+  });
+}
+
+export function chartDatasets() {
+  return CHART_DATASETS.map(({ id, label }) => ({ id, label }));
+}
+
+export function chartFilters(state, tableId) {
+  const dataset = chartDataset(tableId);
+  const rows = state?.[dataset.source] ?? [];
+  if (dataset.filterBy === 'projectId') {
+    const projects = state?.projects ?? [];
+    const projectIds = orderChartValues(rows.map((row) => row.projectId).filter(Boolean));
+    const options = projectIds
+      .map((id) => projects.find((project) => project.id === id) ?? { id, name: id })
+      .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || String(a.name).localeCompare(String(b.name)))
+      .map((project) => ({
+        value: project.id,
+        label: [project.key, project.name].filter(Boolean).join(' · '),
+      }));
+    return { field: 'projectId', label: 'Project', allLabel: 'All projects', options };
+  }
+  const statuses = orderChartValues(rows.map((row) => row.status).filter(Boolean), BUG_STATUS_ORDER);
+  return {
+    field: 'status',
+    label: 'Status',
+    allLabel: 'All statuses',
+    options: statuses.map((status) => ({ value: status, label: status })),
+  };
+}
+
+export function buildChartSeries(state, tableId = 'work-status', filter = '') {
+  const dataset = chartDataset(tableId);
+  const filters = chartFilters(state, dataset.id);
+  const selected = filters.options.some((optionRow) => optionRow.value === filter) ? filter : '';
+  const rows = state?.[dataset.source] ?? [];
+  const scoped = selected ? rows.filter((row) => String(row[filters.field] ?? '') === selected) : rows;
+  const counts = new Map();
+  for (const row of scoped) {
+    const label = String(row[dataset.groupBy] ?? '').trim() || 'Unset';
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  const labels = orderChartValues([...counts.keys()], dataset.order);
+  const filterLabel = selected
+    ? filters.options.find((optionRow) => optionRow.value === selected)?.label ?? selected
+    : filters.allLabel;
+  return {
+    dataset: { id: dataset.id, label: dataset.label },
+    labels,
+    values: labels.map((label) => counts.get(label) ?? 0),
+    total: scoped.length,
+    filter: selected,
+    filterLabel,
+    title: `${dataset.label} · ${filterLabel}`,
+  };
+}
+
 function filesPage(state, query) {
   const tab = query.get('tab') === 'agents' ? 'agents' : 'charts';
+  const agents = state.team ?? [];
+  const tableId = chartDataset(query.get('table')).id;
+  const filters = chartFilters(state, tableId);
+  const requestedFilter = query.get('filter') ?? '';
+  const filter = filters.options.some((optionRow) => optionRow.value === requestedFilter) ? requestedFilter : '';
   const run = query.get('run') === '1';
+  const series = buildChartSeries(state, tableId, filter);
+  const openChartHref = pageUrl('/files', { run: 1, table: tableId, ...(filter ? { filter } : {}) });
   return `
     ${pageHead('Tools & Files', 'Chart Studio and the agent configuration files.')}
     <div class="tabs"><a class="tab" href="#/files"${tab === 'charts' ? ' aria-current="page"' : ''}>Chart Studio</a><a class="tab" href="#/files?tab=agents"${tab === 'agents' ? ' aria-current="page"' : ''}>Agent Configuration</a></div>
-    ${tab === 'charts' ? `<section class="card"><div class="card-head"><h2>Chart Studio</h2></div><div class="card-body"><div class="form-grid"><div class="field"><label for="chart-table">Target table</label><select id="chart-table" class="select"><option>Roselite_After_Sales.xlsx</option><option>Review_Master.xlsx</option><option>PQA_Tracker.xlsx</option></select></div><div class="field"><label for="chart-sheet">Sheet</label><select id="chart-sheet" class="select"><option>(first readable sheet)</option><option>Open issues</option><option>Weekly totals</option></select></div></div><div class="row-actions"><a class="btn btn-primary btn-sm" href="#/files?run=1">Open chart page</a><button class="btn btn-ghost btn-sm" type="button" data-action="open-folder">Open chart folder</button></div>${run ? `<div class="chart-box" id="files-chart"></div>` : ''}</div></section>` : `<section class="card"><div class="card-head"><h2>Agent Configuration</h2><span class="badge badge-muted">${state.team.length} files</span></div><div class="card-body"><div class="table-wrap"><table class="table table-stack"><thead><tr><th>Agent</th><th>Role</th><th>Model</th><th>Focus</th></tr></thead><tbody>${state.team.map((agent) => `<tr><td data-label="Agent">${esc(agent.name)}</td><td data-label="Role">${esc(agent.role)}</td><td data-label="Model">${esc(agent.model)}</td><td data-label="Focus">${esc(agent.focus)}</td></tr>`).join('')}</tbody></table></div></div></section>`}`;
+    ${tab === 'charts' ? `<section class="card">
+      <div class="card-head"><h2>Chart Studio</h2><span class="badge badge-muted">Local data</span></div>
+      <div class="card-body">
+        <p class="field-help">Pick a table that already lives in this browser. Filters and the chart are drawn from your local IndexedDB records — no workbook path and nothing uploaded.</p>
+        <div class="form-grid">
+          <div class="field"><label for="chart-table">Target table</label><select id="chart-table" class="select" data-chart-table>${chartDatasets().map((dataset) => option(dataset.id, tableId, dataset.label)).join('')}</select></div>
+          <div class="field"><label for="chart-filter">Filter by ${esc(filters.label.toLowerCase())}</label><select id="chart-filter" class="select" data-chart-filter="${esc(tableId)}"${filters.options.length ? '' : ' disabled'}><option value="">${esc(filters.allLabel)}</option>${filters.options.map((optionRow) => option(optionRow.value, filter, optionRow.label)).join('')}</select></div>
+        </div>
+        <div class="row-actions"><a class="btn btn-primary btn-sm" href="${openChartHref}">Open chart page</a><button class="btn btn-ghost btn-sm" type="button" data-action="open-folder">Open chart folder</button></div>
+        ${run ? `<div class="chart-box" id="files-chart"></div><div class="chart-legend">${series.labels.map((label, index) => `<span class="chart-legend-item"><span class="chart-dot chart-line-${(index % 2) + 1}"></span>${esc(label)} · ${series.values[index]}</span>`).join('')}</div><p class="field-help">${series.total} local ${series.total === 1 ? 'record' : 'records'} · ${esc(series.filterLabel)}</p>` : '<p class="field-help">Choose a table and filter, then open the chart page to draw it here.</p>'}
+      </div>
+    </section>` : `<section class="card">
+      <div class="card-head"><h2>Agent Configuration</h2><span class="badge badge-muted">${agents.length} agents</span></div>
+      <div class="card-body"><div class="table-wrap"><table class="table table-stack"><thead><tr><th>Agent</th><th>Role</th><th>Status</th><th>Model</th><th>Focus</th></tr></thead><tbody>${agents.map((agent) => `<tr><td data-label="Agent">${esc(agent.name)}</td><td data-label="Role">${esc(agent.role)}</td><td data-label="Status">${esc(agent.status)}</td><td data-label="Model">${esc(agent.model)}</td><td data-label="Focus">${esc(agent.focus)}</td></tr>`).join('')}</tbody></table></div>${agents.length ? '' : empty('No team agents are configured on this device yet.')}</div>
+    </section>`}`;
 }
 
 function settingsTabs(route) {
@@ -1355,7 +1452,10 @@ export function mountView(route, query, state) {
   }
   if (route.id === 'files' && query.get('run') === '1') {
     const chart = document.getElementById('files-chart');
-    if (chart) renderBarChart(chart, { labels: ['To do', 'In progress', 'Waiting', 'Done'], values: [6, 4, 3, 5], title: 'Work items by status' });
+    if (chart) {
+      const series = buildChartSeries(state, query.get('table'), query.get('filter'));
+      renderBarChart(chart, { labels: series.labels, values: series.values, title: series.title });
+    }
   }
   if (route.id === 'project-detail') {
     document.querySelectorAll('[data-bar]').forEach((bar) => {

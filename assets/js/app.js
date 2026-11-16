@@ -616,6 +616,15 @@ document.addEventListener('change', async (event) => {
     const form = calendarProject.form;
     navigate('/calendar', { m: form.elements.m.value, project: calendarProject.value });
   }
+  const chartTable = event.target.closest('[data-chart-table]');
+  if (chartTable) {
+    navigate('/files', { run: '1', table: chartTable.value });
+    return;
+  }
+  const chartFilter = event.target.closest('[data-chart-filter]');
+  if (chartFilter) {
+    navigate('/files', { run: '1', table: chartFilter.dataset.chartFilter, filter: chartFilter.value });
+  }
 });
 
 document.addEventListener('submit', async (event) => {
