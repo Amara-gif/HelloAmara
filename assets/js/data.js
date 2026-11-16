@@ -145,8 +145,9 @@ export async function createTask(input) {
     owner: input.owner || 'Dispatcher', due: input.due || '', start: input.start || '',
     module: input.module || 'General', component: input.component || 'work desk',
     severity: input.severity || 'S3 Major', type: input.type || 'Task',
-    description: input.description || '', expected: input.expected || '', actual: input.actual || '',
-    attachments: [], notes: input.notes || '', parentId: input.parentId || null,
+    description: input.description || '', repro: input.repro || '', expected: input.expected || '',
+    actual: input.actual || '', attachments: [], notes: input.notes || '', parentId: input.parentId || null,
+    end: input.end || input.due || '', depends_on: input.depends_on || input.dependsOn || '', milestone: input.milestone || '',
     reviewed: false, pendingDecision: false, createdAt: now, updatedAt: now, deletedAt: null,
   };
   await putRecord('tasks', task);
@@ -161,10 +162,16 @@ export async function updateTask(id, patch, historyField = '') {
   const now = nowIso();
   const updated = { ...task, ...patch, updatedAt: now };
   await putRecord('tasks', updated);
-  if (historyField && patch[historyField] !== undefined && patch[historyField] !== task[historyField]) {
+  const requested = Array.isArray(historyField) ? historyField : String(historyField || '').split(/[,;]/);
+  const fields = [...new Set(requested.map((field) => field.trim()).filter(Boolean))];
+  for (const field of fields) {
+    if (patch[field] === undefined) continue;
+    const previous = task[field] ?? '';
+    const next = patch[field] ?? '';
+    if (String(previous) === String(next)) continue;
     await putRecord('task_history', {
-      id: newId('th'), taskId: id, at: now, who: 'Amara', field: historyField,
-      old: String(task[historyField] ?? ''), new: String(patch[historyField] ?? ''),
+      id: newId('th'), taskId: id, at: now, who: 'Amara', field,
+      old: String(previous), new: String(next),
       updatedAt: now, deletedAt: null,
     });
   }

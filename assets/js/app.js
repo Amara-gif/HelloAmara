@@ -10,6 +10,7 @@ import { renderView, mountView, renderAccountScreen, renderCreateDialog, canSend
 import { icon } from './icons.js';
 import { updateTaskBadge } from './nav-badge.js';
 import { openModal, toast } from './ui.js';
+import { taskFormPatch } from './task-form.js';
 
 const shell = document.getElementById('shell');
 const authScreen = document.getElementById('auth-screen');
@@ -580,6 +581,12 @@ document.addEventListener('submit', async (event) => {
       await createProject(data);
       await rerender();
       toast('Project added.', { tone: 'success' });
+    } else if (form.dataset.form === 'task-title' || form.dataset.form === 'task-details' || form.dataset.form === 'task-fields' || form.dataset.form === 'task-plan') {
+      const fields = (form.dataset.history || '').split(',').map((field) => field.trim()).filter(Boolean);
+      const patch = taskFormPatch(form.dataset.form, fields, data);
+      await updateTask(data.id, patch, fields);
+      await rerender();
+      toast('Task saved on this device.', { tone: 'success' });
     } else if (form.dataset.form === 'task-comment') {
       await addTaskComment(data.id, data.body);
       await rerender();
