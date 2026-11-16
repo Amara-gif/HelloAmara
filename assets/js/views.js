@@ -1365,6 +1365,64 @@ function projectPagesTab(pages) {
   </section>`;
 }
 
+// The old WorkDesk showed the xBuild Rule Book and report for TAG only. They stay
+// local placeholders here: no scraper, file fetch or /api/tools/xbuild call.
+const TAG_PROJECT_TABS = [
+  { id: 'xbuild-standard', label: 'Rule Book' },
+  { id: 'xbuild-report', label: 'xBuild Report' },
+];
+const PROJECT_TAB_ALIASES = {
+  'rule-book': 'xbuild-standard',
+  rulebook: 'xbuild-standard',
+  xbuild: 'xbuild-report',
+};
+
+function projectTabItems(project) {
+  const items = [
+    { id: 'overview', label: 'Overview', href: `#/project/${project.key}` },
+    { id: 'work', label: 'Work items', href: `#/project/${project.key}?tab=work` },
+    { id: 'modules', label: 'Modules', href: `#/project/${project.key}?tab=modules` },
+    { id: 'pages', label: 'Pages', href: `#/project/${project.key}?tab=pages` },
+  ];
+  if (project.key === 'TAG') {
+    items.push(...TAG_PROJECT_TABS.map((tab) => ({ ...tab, href: `#/project/${project.key}?tab=${tab.id}` })));
+  }
+  return items;
+}
+
+function projectTabStrip(project, active) {
+  const tabs = projectTabItems(project);
+  return `<div class="tabs">${tabs.map((tab) => `<a class="tab" href="${tab.href}"${active === tab.id ? ' aria-current="page"' : ''}>${tab.label}</a>`).join('')}</div>`;
+}
+
+function projectTabId(project, requested) {
+  const tab = PROJECT_TAB_ALIASES[requested] ?? requested;
+  return projectTabItems(project).some((item) => item.id === tab) ? tab : 'overview';
+}
+
+function projectRuleBookTab(project, pages) {
+  return `<section class="card">
+    <div class="card-head"><h2>Rule Book</h2><span class="badge badge-muted">Local placeholder</span></div>
+    <div class="card-body">
+      <p class="lede">The xBuild Rule Book is not ported to My Platform yet. This tab reads only local markdown pages and makes no xBuild API call.</p>
+      <p class="field-help">Write a rule note as a page for ${esc(project.key)}; saved pages appear below and stay on this device.</p>
+      <h3 class="card-title">Local markdown pages</h3>
+      <div class="row-list">${pages.map((page) => `<a class="row-item" href="#/page/${page.id}"><span class="row-main"><span class="row-title">${esc(page.title)}</span><span class="row-meta">${esc(page.type)} · ${fmtStamp(page.updatedAt)}</span></span>${icon('arrow', 16)}</a>`).join('') || empty('No local pages for this project yet.')}</div>
+    </div>
+  </section>`;
+}
+
+function projectXbuildReportTab(project) {
+  return `<section class="card">
+    <div class="card-head"><h2>xBuild Report</h2><span class="badge badge-muted">Not ported</span></div>
+    <div class="card-body">
+      <p class="lede">The xBuild Report tool is not ported to My Platform yet. Report generation, polish/check previews and Outlook/email actions are unavailable, and this tab makes no API calls.</p>
+      <p class="field-help">Build-phase work items remain in the local Work items tab for this project.</p>
+      <div class="row-actions"><a class="btn btn-ghost btn-sm" href="#/project/${esc(project.key)}?tab=work">Open Work items</a></div>
+    </div>
+  </section>`;
+}
+
 function projectOverview(state, project, tasks, pages, open) {
   const statusRows = projectStatusRows(tasks);
   const comingUp = projectComingUp(state, project, tasks);
@@ -1405,16 +1463,22 @@ function projectOverview(state, project, tasks, pages, open) {
 function projectPage(state, route, query) {
   const project = state.projects.find((row) => row.key === route.params.key || row.id === route.params.key);
   if (!project) return projectNotFound(route.params.key);
-  const tab = ['overview', 'work', 'modules', 'pages'].includes(query.get('tab')) ? query.get('tab') : 'overview';
+  const tab = projectTabId(project, query.get('tab'));
   const tasks = state.tasks.filter((task) => task.projectId === project.id);
   const pages = state.pages.filter((page) => page.projectId === project.id);
   const open = tasks.filter((task) => task.status !== 'Done');
+  const body = tab === 'work' ? workItemsBody(state, query, { path: `/project/${project.key}`, projectId: project.id, tab: 'work' })
+    : tab === 'modules' ? projectModulesTab(project, tasks)
+      : tab === 'pages' ? projectPagesTab(pages)
+        : tab === 'xbuild-standard' ? projectRuleBookTab(project, pages)
+          : tab === 'xbuild-report' ? projectXbuildReportTab(project)
+            : projectOverview(state, project, tasks, pages, open);
   return `
     <nav class="breadcrumb"><a href="#/projects">← Projects</a></nav>
     ${pageHead(project.name, project.description, `<span class="badge badge-${project.archived ? 'muted' : 'accent'}">${esc(project.archived ? 'Archived' : project.status)}</span>`)}
     <div class="project-meta"><span class="badge badge-accent">${esc(project.key)}</span><span>Owner ${esc(project.owner)}</span><span>${fmt(project.start)} → ${fmt(project.due)}</span><span>${esc(project.keywords)}</span></div>
-    <div class="tabs"><a class="tab" href="#/project/${project.key}"${tab === 'overview' ? ' aria-current="page"' : ''}>Overview</a><a class="tab" href="#/project/${project.key}?tab=work"${tab === 'work' ? ' aria-current="page"' : ''}>Work items</a><a class="tab" href="#/project/${project.key}?tab=modules"${tab === 'modules' ? ' aria-current="page"' : ''}>Modules</a><a class="tab" href="#/project/${project.key}?tab=pages"${tab === 'pages' ? ' aria-current="page"' : ''}>Pages</a></div>
-    ${tab === 'work' ? workItemsBody(state, query, { path: `/project/${project.key}`, projectId: project.id, tab: 'work' }) : tab === 'modules' ? projectModulesTab(project, tasks) : tab === 'pages' ? projectPagesTab(pages) : projectOverview(state, project, tasks, pages, open)}`;
+    ${projectTabStrip(project, tab)}
+    ${body}`;
 }
 
 function pageView(state, route) {
