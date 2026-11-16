@@ -1,5 +1,6 @@
 // One IndexedDB database per account: my-platform-<accountId>.
-export const DB_VERSION = 1;
+// Version 2 adds the attachments store so pasted/dropped files stay local.
+export const DB_VERSION = 2;
 
 export const STORES = {
   tasks: { keyPath: 'id', indexes: ['status', 'projectId', 'owner', 'due'] },
@@ -8,6 +9,9 @@ export const STORES = {
   bugs: { keyPath: 'id', indexes: ['status', 'assignee', 'due'] },
   bug_history: { keyPath: 'id', indexes: ['bugId'] },
   bug_comments: { keyPath: 'id', indexes: ['bugId'] },
+  // Local file blobs plus their metadata. A row is never uploaded; Remove only
+  // sets deletedAt and drops the reference from the task/bug attachment list.
+  attachments: { keyPath: 'id', indexes: ['taskId', 'bugId'] },
   events: { keyPath: 'id', indexes: ['date', 'projectId', 'taskId'] },
   projects: { keyPath: 'id', indexes: ['key'] },
   pages: { keyPath: 'id', indexes: ['projectId', 'taskId'] },

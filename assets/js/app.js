@@ -6,6 +6,7 @@ import {
   updatePage, softDeletePage, createProject, updateProject, createOrder,
   closeOrder, saveSettings, restoreQaMark, buildExport,
   parseImportJson, planImport, applyImportPlan,
+  addAttachment, removeAttachment, attachmentObjectUrl,
 } from './data.js';
 import { readLocation, routeForPath, groupRoutes, SETTINGS_LINKS } from './routes.js';
 import { renderView, mountView, renderAccountScreen, renderCreateDialog, canSendToQa, qaOwnerName } from './views.js';
@@ -678,6 +679,58 @@ function openAgendaDialog(rowEl) {
   open.addEventListener('click', () => dialog.close());
 }
 
+function attachmentZone(node) {
+  return node?.closest?.('[data-attachments]') ?? null;
+}
+
+function filesFromTransfer(transfer) {
+  if (!transfer) return [];
+  if (transfer.files?.length) return [...transfer.files];
+  return [...(transfer.items ?? [])]
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.getAsFile())
+    .filter(Boolean);
+}
+
+async function addAttachmentFiles(zone, fileList, label = 'Attached') {
+  const files = [...(fileList ?? [])].filter((file) => file && (file.size > 0 || file.name));
+  if (!zone || !files.length) return 0;
+  const ownerType = zone.dataset.attachmentOwner;
+  const ownerId = zone.dataset.attachmentId;
+  let added = 0;
+  let failed = 0;
+  for (const file of files) {
+    try {
+      await addAttachment(ownerType, ownerId, file);
+      added += 1;
+    } catch (error) {
+      failed += 1;
+      toast(error.message || 'That file could not be attached.', { tone: 'danger' });
+    }
+  }
+  if (added) {
+    render();
+    toast(`${label} ${added} file${added === 1 ? '' : 's'} on this device.`, { tone: 'success' });
+  } else if (failed) {
+    toast('No files were attached.', { tone: 'danger' });
+  }
+  return added;
+}
+
+function downloadAttachment(url, name) {
+  if (!url) return;
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name || 'attachment';
+  link.rel = 'noopener';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  if (url.startsWith('blob:') && typeof URL.revokeObjectURL === 'function') {
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+}
+
 function openAgentTodo(owner) {
   const state = getState();
   const body = document.createElement('div');
@@ -774,7 +827,28 @@ document.addEventListener('click', async (event) => {
     } else toast('This browser does not support notifications.', { tone: 'danger' });
   } else if (action === 'print') window.print();
   else if (action === 'open-folder') toast('Folder access is not available in a browser.', { tone: 'danger' });
-  else if (action === 'fake-download') toast('Attachment placeholder — file storage is a later phase.');
+  else if (action === 'attachment-open') {
+    try {
+      const url = await attachmentObjectUrl(id);
+      if (!url) {
+        toast('This attachment has no local file data to open.', { tone: 'danger' });
+        return;
+      }
+      const row = actionEl.closest('[data-attachment-row]');
+      const name = row?.querySelector('.row-title')?.textContent ?? 'attachment';
+      downloadAttachment(url, name);
+    } catch (error) {
+      toast(error.message || 'That attachment could not be opened.', { tone: 'danger' });
+    }
+  } else if (action === 'attachment-remove') {
+    try {
+      const removed = await removeAttachment(id);
+      render();
+      toast(removed ? 'Attachment detached. The local file stays in this account.' : 'Attachment was already detached.', { tone: removed ? 'success' : 'info' });
+    } catch (error) {
+      toast(error.message || 'That attachment could not be removed.', { tone: 'danger' });
+    }
+  } else if (action === 'fake-download') toast('Attachment placeholder — file storage is a later phase.');
   else if (action === 'toast-copy') toast('Copied actions are placeholders in this build.');
   else if (action === 'test-key') toast('Demo key is valid for preview.', { tone: 'success' });
   else if (action === 'fill-gaps') toast('Backfill is not connected to an AI service yet.');
@@ -792,6 +866,12 @@ document.addEventListener('click', async (event) => {
 });
 
 document.addEventListener('change', async (event) => {
+  const attachmentInput = event.target.closest('[data-attachment-input]');
+  if (attachmentInput) {
+    await addAttachmentFiles(attachmentZone(attachmentInput), attachmentInput.files, 'Attached');
+    attachmentInput.value = '';
+    return;
+  }
   const importFile = event.target.closest('[data-import-file]');
   if (importFile) {
     await importJsonFile(importFile);
@@ -819,6 +899,39 @@ document.addEventListener('change', async (event) => {
   if (chartFilter) {
     navigate('/files', { run: '1', table: chartFilter.dataset.chartFilter, filter: chartFilter.value });
   }
+});
+
+document.addEventListener('dragover', (event) => {
+  const zone = event.target.closest?.('[data-attachment-dropzone]');
+  if (!zone) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+  zone.classList.add('is-dragover');
+});
+
+document.addEventListener('dragleave', (event) => {
+  const zone = event.target.closest?.('[data-attachment-dropzone]');
+  if (!zone || zone.contains(event.relatedTarget)) return;
+  zone.classList.remove('is-dragover');
+});
+
+document.addEventListener('drop', async (event) => {
+  const zone = event.target.closest?.('[data-attachment-dropzone]');
+  if (!zone) return;
+  event.preventDefault();
+  zone.classList.remove('is-dragover');
+  await addAttachmentFiles(attachmentZone(zone), filesFromTransfer(event.dataTransfer), 'Dropped');
+});
+
+// Paste anywhere on a task/bug detail page. Files found on the clipboard are
+// saved to IndexedDB; plain text pasting keeps its normal textarea behaviour.
+document.addEventListener('paste', async (event) => {
+  const files = filesFromTransfer(event.clipboardData);
+  if (!files.length) return;
+  const zone = attachmentZone(event.target) ?? document.querySelector('[data-attachments]');
+  if (!zone) return;
+  event.preventDefault();
+  await addAttachmentFiles(zone, files, 'Pasted');
 });
 
 document.addEventListener('submit', async (event) => {

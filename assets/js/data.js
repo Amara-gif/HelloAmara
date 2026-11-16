@@ -165,6 +165,193 @@ export function attachmentsFingerprint(attachments) {
   }));
 }
 
+// Attachments are local-only. The row in the `attachments` store is the
+// durable copy: metadata plus a Blob (or data URL) that IndexedDB can clone.
+// The task/bug record keeps a small metadata list only, so rendering detail
+// pages never needs to load every blob. Object URLs are made on demand for
+// Open and revoked again; they are never stored, because they die on reload.
+const ATTACHMENT_OWNERS = {
+  task: { type: 'task', store: 'tasks', ownerKey: 'taskId', otherKey: 'bugId' },
+  bug: { type: 'bug', store: 'bugs', ownerKey: 'bugId', otherKey: 'taskId' },
+};
+
+function attachmentOwner(ownerType) {
+  const key = String(ownerType ?? '').trim().toLowerCase();
+  const owner = ATTACHMENT_OWNERS[key] ?? ATTACHMENT_OWNERS[`${key}s`];
+  if (!owner) throw new Error('Attachments belong to a task or a bug.');
+  return owner;
+}
+
+function isBlob(value) {
+  return typeof Blob !== 'undefined' && value instanceof Blob;
+}
+
+function attachmentName(file) {
+  const name = String(file?.name ?? file?.filename ?? '').trim();
+  if (name) return name;
+  return `attachment-${Date.now()}.bin`;
+}
+
+function attachmentKind(file) {
+  const explicit = String(file?.kind ?? '').trim().toLowerCase();
+  if (explicit) return explicit;
+  const type = String(file?.type ?? '').trim().toLowerCase();
+  if (type.startsWith('image/')) return 'image';
+  if (type.startsWith('video/')) return 'video';
+  if (type.startsWith('audio/')) return 'audio';
+  return 'file';
+}
+
+function attachmentSize(file) {
+  const size = Number(file?.size);
+  return Number.isFinite(size) && size >= 0 ? size : 0;
+}
+
+// Keep the owner record's array free of the Blob. attachmentsFingerprint uses
+// name/kind/size, so adding or detaching still marks a review stale.
+function attachmentMetadata(record) {
+  return {
+    id: record.id,
+    name: record.name,
+    kind: record.kind,
+    type: record.type,
+    size: record.size,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+}
+
+function matchesAttachment(file, record) {
+  if (typeof file === 'string') return file === record.id || file === record.name;
+  const fileId = String(file?.id ?? '');
+  if (fileId) return fileId === record.id;
+  return String(file?.name ?? '') === record.name && attachmentSize(file) === record.size;
+}
+
+export async function addAttachment(ownerTypeOrInput, ownerIdOrFile, maybeFile) {
+  let ownerType = ownerTypeOrInput;
+  let ownerId = ownerIdOrFile;
+  let file = maybeFile;
+  if (ownerTypeOrInput && typeof ownerTypeOrInput === 'object') {
+    const input = ownerTypeOrInput;
+    ownerType = input.ownerType ?? input.owner ?? input.parentType ?? input.type;
+    ownerId = input.ownerId ?? input.taskId ?? input.bugId ?? input.id;
+    file = input.file ?? input.blob ?? input;
+  }
+  if (!file || typeof file !== 'object') throw new Error('Choose a file to attach.');
+  const owner = attachmentOwner(ownerType);
+  const ownerRecord = state?.[owner.store]?.find((row) => row.id === ownerId);
+  if (!ownerRecord) throw new Error(`${owner.type === 'task' ? 'Task' : 'Bug'} not found.`);
+
+  const now = nowIso();
+  const name = attachmentName(file);
+  const type = String(file?.type ?? '');
+  const record = {
+    id: newId('attachment'),
+    ownerType: owner.type,
+    ownerId: String(ownerId),
+    [owner.ownerKey]: String(ownerId),
+    [owner.otherKey]: null,
+    name,
+    kind: attachmentKind(file),
+    type,
+    size: attachmentSize(file),
+    blob: isBlob(file) ? file : (isBlob(file?.blob) ? file.blob : null),
+    dataUrl: typeof file?.dataUrl === 'string' ? file.dataUrl : '',
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+  };
+  await putRecord('attachments', record);
+  const metadata = attachmentMetadata(record);
+
+  if (owner.type === 'task') {
+    await updateTask(ownerId, { attachments: [...(ownerRecord.attachments ?? []), metadata] });
+  } else {
+    await updateBug(ownerId, { attachments: [...(ownerRecord.attachments ?? []), metadata] });
+  }
+  state = await readState();
+  return record;
+}
+
+export async function addTaskAttachment(taskId, file) {
+  return addAttachment('task', taskId, file);
+}
+
+export async function addBugAttachment(bugId, file) {
+  return addAttachment('bug', bugId, file);
+}
+
+export const attachFile = addAttachment;
+export const attachTaskFile = addTaskAttachment;
+export const attachBugFile = addBugAttachment;
+
+export function listAttachments(ownerType, ownerId) {
+  const owner = attachmentOwner(ownerType);
+  return (state?.attachments ?? []).filter((row) => (
+    !row.deletedAt
+    && String(row[owner.ownerKey] ?? row.ownerId) === String(ownerId)
+  ));
+}
+
+export async function getAttachment(attachmentId) {
+  return getOne('attachments', attachmentId);
+}
+
+// Create a short-lived object URL for Open. The Blob itself stays in
+// IndexedDB; callers must revoke the URL after the download/open starts.
+export async function attachmentObjectUrl(attachmentId) {
+  const record = await getOne('attachments', attachmentId);
+  if (!record || record.deletedAt) return '';
+  if (record.dataUrl) return record.dataUrl;
+  if (!isBlob(record.blob) || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return '';
+  return URL.createObjectURL(record.blob);
+}
+
+export const objectUrlForAttachment = attachmentObjectUrl;
+
+export async function removeAttachment(attachmentId) {
+  let id = attachmentId;
+  if (attachmentId && typeof attachmentId === 'object') id = attachmentId.id;
+  if (!id) return false;
+  const record = await getOne('attachments', id);
+  if (!record || record.deletedAt) return false;
+
+  const now = nowIso();
+  await putRecord('attachments', { ...record, deletedAt: now, updatedAt: now });
+
+  const ownerType = record.ownerType ?? (record.bugId ? 'bug' : 'task');
+  const owner = attachmentOwner(ownerType);
+  const ownerId = String(record.ownerId ?? record[owner.ownerKey] ?? '');
+  const ownerRecord = state?.[owner.store]?.find((row) => row.id === ownerId);
+  if (ownerRecord) {
+    const attachments = (ownerRecord.attachments ?? []).filter((file) => !matchesAttachment(file, record));
+    if (owner.type === 'task') await updateTask(ownerId, { attachments });
+    else await updateBug(ownerId, { attachments });
+  }
+  state = await readState();
+  return { ...record, deletedAt: now, updatedAt: now };
+}
+
+export const detachAttachment = removeAttachment;
+
+export async function removeTaskAttachment(taskId, attachmentIdOrFile) {
+  const task = state?.tasks?.find((row) => row.id === taskId);
+  const match = (task?.attachments ?? []).find((file) => matchesAttachment(attachmentIdOrFile, file));
+  const id = attachmentIdOrFile?.id ?? match?.id ?? attachmentIdOrFile;
+  return removeAttachment(id);
+}
+
+export async function removeBugAttachment(bugId, attachmentIdOrFile) {
+  const bug = state?.bugs?.find((row) => row.id === bugId);
+  const match = (bug?.attachments ?? []).find((file) => matchesAttachment(attachmentIdOrFile, file));
+  const id = attachmentIdOrFile?.id ?? match?.id ?? attachmentIdOrFile;
+  return removeAttachment(id);
+}
+
+export const detachTaskAttachment = removeTaskAttachment;
+export const detachBugAttachment = removeBugAttachment;
+
 export function taskReviewFingerprint(task) {
   return String(task?.reviewFingerprint ?? task?.review?.fingerprint ?? '');
 }
@@ -283,10 +470,11 @@ export async function refresh() {
 }
 
 async function readState() {
-  const [tasks, taskHistory, taskComments, bugs, bugHistory, bugComments, events, projects, pages, aiCalls, team, orders, metaRows] = await Promise.all([
+  const [tasks, taskHistory, taskComments, bugs, bugHistory, bugComments, attachments, events, projects, pages, aiCalls, team, orders, metaRows] = await Promise.all([
     getAll('tasks'), getAll('task_history'), getAll('task_comments'), getAll('bugs'),
-    getAll('bug_history'), getAll('bug_comments'), getAll('events'), getAll('projects'),
-    getAll('pages'), getAll('ai_calls'), getAll('team'), getAll('orders'), getAll('meta'),
+    getAll('bug_history'), getAll('bug_comments'), getAll('attachments'), getAll('events'),
+    getAll('projects'), getAll('pages'), getAll('ai_calls'), getAll('team'), getAll('orders'),
+    getAll('meta'),
   ]);
   const meta = Object.fromEntries(metaRows.map((row) => [row.key, row.value]));
   const supported = meta[STORAGE_PERSIST_META.supported] === true;
@@ -299,6 +487,7 @@ async function readState() {
     bugs: live(bugs).sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true })),
     bugHistory: live(bugHistory),
     bugComments: live(bugComments),
+    attachments: live(attachments),
     events: live(events).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)),
     projects: live(projects).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)),
     pages: live(pages).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),

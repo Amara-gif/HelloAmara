@@ -54,8 +54,9 @@ index.html + styleguide.html
 assets/css/tokens.css, components.css
 assets/js/
   accounts.js   local account registry (LocalStorage); Test account + empty accounts
-  db.js         IndexedDB open/CRUD; DB name my-platform-<accountId>; version 1
+  db.js         IndexedDB open/CRUD; DB name my-platform-<accountId>; version 2 (attachments store)
   data.js       domain ops (tasks/bugs/events/pages/projects/orders/settings)
+                + local attachment metadata/Blob add, open URL and soft-detach
                 + per-account navigator.storage.persist() status in meta
   demo-data.js  seed rows for the Test account
   app.js        hash router, drawer, create FAB, form handlers
@@ -69,6 +70,23 @@ assets/js/
 No build step. Preview: `python3 -m http.server 4173` then open `/` and `/styleguide.html`.
 `manifest.webmanifest` and `sw.js` live at the site root; the service worker only handles
 same-origin GET requests and caches the local HTML/CSS/JS app shell.
+
+## Local attachments (task 34)
+
+Task and bug detail pages render the same attachment card. Drop, the file chooser and clipboard
+image paste all call `data.js` `addAttachment`; the `attachments` object store (schema v2) holds
+the metadata and the Blob. The task/bug row keeps a small metadata list (`id`, `name`, `kind`,
+`type`, `size`), so rendering a detail page never loads file bytes. **Open** creates a short-lived
+`URL.createObjectURL(blob)` and revokes it after the download starts; object URLs are never stored
+because they die on reload. **Remove** sets `deletedAt` on the attachment row (soft-detach) and
+drops the reference from the task/bug, so a later export/import can still see the tombstone.
+Nothing is uploaded or fetched: the bytes only ever live in this account's IndexedDB.
+
+Paste is handled anywhere on a task or bug detail page when the clipboard contains files; plain
+text paste keeps its normal textarea behaviour. The same page also has a visible drop zone and a
+file chooser, so the acceptance path works without relying on textarea paste. Node tests cover the
+schema, Blob round-trip, reload, object URL and soft-detach; the manual browser paste + reload check
+is left for the supervisor because this session's verification budget forbids launching a browser.
 
 ## Per-screen progress
 
@@ -90,8 +108,8 @@ Phone/tablet PNGs are listed for completeness; they are not a layout target.
 | `09-chat.png` | `#/chat` | partial | Summary tiles, agent cards, Send order, To-do modal, close order. Missing: lead (Amara) summary strip, Copy brief, reopen closed orders, richer per-agent counters. “Open queue file” has no static equivalent (toast). |
 | `10-files.png` | `#/files` | partial | Chart Studio + Agent Configuration tabs; stub chart when “opened”. Missing: real local chart builder UX (no OS folder), pivots/palettes, agent-file edit. Folder open correctly refused for browser. |
 | `11-settings.png` | `#/settings` | partial | AI connection fields, Save, Test/Fill toasts, demo reset for Test account. Missing: dirty-state save bar, advanced polish instructions / never-send terms, real key test (no network AI yet — keep local-only). Shared secret file path does not apply. |
-| `12-task-detail.png` | `#/task/:id` | partial | Breadcrumb, badges, stands/progress/details/attachments/subtasks/scheduled/feed, workflow + review side cards. Mostly read-only field blocks. Missing: inline edits, Plan card save, Depends on, New subtask / Schedule presets into Create, Ctrl+V attachments, 11-status transition map + QA gates, Ctrl+Enter comment, Analyze / real progress parse. |
-| `13-bug-detail.png` | `#/bug/:id` | partial | Description blocks, activity feed, workflow, details. Missing: inline edits, TRANSITIONS map + fixer≠verifier, attachments paste/drop, Ctrl+Enter. |
+| `12-task-detail.png` | `#/task/:id` | partial | Breadcrumb, badges, stands/progress/details/local attachments/subtasks/scheduled/feed, workflow + review side cards. Attachments accept drop/click/paste and soft-detach; Open uses a temporary object URL. Missing: inline edits, Plan card save, Depends on, New subtask / Schedule presets into Create, 11-status transition map + QA gates, Ctrl+Enter comment, Analyze / real progress parse. |
+| `13-bug-detail.png` | `#/bug/:id` | partial | Description blocks, local attachments (drop/click/paste + soft-detach), activity feed, workflow, details. Missing: inline edits, TRANSITIONS map + fixer≠verifier, Ctrl+Enter. |
 | `14-project-hello-amara.png` | `#/project/TAG` | partial | Overview bars/snapshot, Work items + Pages tabs. Modules tab link falls back to Overview. Missing: Edit project, donut, 14-day actions, Coming up + Schedule, daily record, Modules page, Rule Book / xBuild tabs for TAG, tab reorder. |
 | `15-project-market-review.png` | `#/project/MR` | partial | Same overview shell as other projects. **Market Review tool tabs** (Products, Review Update, Find user voices, Daily Digest, Issue Workbench, PQA Tracker, Report Deck, Issue Review, Analysis Report) are **missing**. P6 scraper-related tabs stay blocked. |
 | `16-bugs-new.png` | `#/bugs/new` | partial | Dedicated create form with SLA due on create. Inventory expects auto-open of Create dialog Bug tab + “Open the bug form”. Prefill query params incomplete. |
@@ -126,13 +144,17 @@ Phone/tablet PNGs are listed for completeness; they are not a layout target.
   reopen control; the drawer below 900 px is unchanged
 - Context menu disabled; Create FAB → Task/Bug/Event dialogs persist to IndexedDB
 - Per-account IndexedDB (`my-platform-<id>`) with soft deletes (`deletedAt`) and `updatedAt`
-- Node tests (`npm test`, fake-indexeddb): CRUD for every store, version 1 → 2 schema upgrade,
+- Node tests (`npm test`, fake-indexeddb): CRUD for every store, schema upgrade across versions,
   live-only soft-delete filtering through `data.js`, Test-account seeding,
-  persistent-storage Granted / Denied / Unsupported status, and nav In-progress badge
-  count/show/hide through `nav-badge.js`
+  persistent-storage Granted / Denied / Unsupported status, nav In-progress badge
+  count/show/hide through `nav-badge.js`, and local attachment Blob round-trip, reload,
+  object URL and soft-detach through `attachments-local-blobs.test.js`
 - Per-account persistent storage: `navigator.storage.persist()` is called on account boot,
   its boolean result is stored in that account's `meta`, and the status appears in the
   sidebar note and Settings
+- Local task/bug attachments: IndexedDB `attachments` store (schema v2) keeps metadata + Blob;
+  detail pages accept drop/click/paste, Open uses a revocable object URL, and Remove soft-detaches
+  with a `deletedAt` tombstone. No upload or network request is involved
 - PWA: self-hosted manifest/icons, versioned service-worker cache with offline navigation
   fallback, "New version available, reload" toast, and a browser install prompt on Appearance
 - Demo seed for Test account (projects, tasks, bugs, events, pages, team, orders, ratings)
@@ -146,6 +168,9 @@ Phone/tablet PNGs are listed for completeness; they are not a layout target.
   exercised by Node tests plus the service-worker source checks in `tests/pwa-manifest-sw.test.js`.
 - Additional shell behaviours now present but **not yet reticked** in the inventory file:
   create FAB, project sub-links, drawer (phone), demo Test account (not `--demo` CLI).
+- Task 34 local attachment blobs are implemented and Node-tested. The matching inventory items
+  still describe the old `/api/attach` server flow, so they stay unticked until those lines are
+  rewritten for the local IndexedDB behaviour.
 - Remaining checklist items: still the large majority; tick in FEATURE-INVENTORY.md when a
   task’s acceptance criteria land.
 

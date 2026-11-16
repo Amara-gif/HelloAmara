@@ -1250,6 +1250,42 @@ function settingsPage(route, state) {
   return `${pageHead(route.title, 'Settings are stored on this device with the account.', `${storageBadge(storage)}<span class="badge badge-muted">${esc(state.account.name)}</span>`)}${settingsTabs(route)}${body}`;
 }
 
+const formatBytes = (value) => {
+  const size = Number(value) || 0;
+  if (!size) return 'Size unavailable';
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+// Task and bug detail share the same local-only attachment card. The actual
+// Blob lives in the `attachments` object store; this markup only receives the
+// metadata list copied into the task/bug row.
+function attachmentCard(ownerType, ownerId, attachments = []) {
+  const rows = (Array.isArray(attachments) ? attachments : []).map((raw) => {
+    const file = typeof raw === 'string' ? { name: raw, kind: 'file' } : raw;
+    const id = String(file?.id ?? '');
+    const kind = String(file?.kind ?? file?.type ?? 'file');
+    const meta = [kind, formatBytes(file?.size)].filter(Boolean).join(' · ');
+    return `<div class="row-item" data-attachment-row="${esc(id)}">
+      <span class="badge badge-muted">${esc(kind.toUpperCase())}</span>
+      <span class="row-main"><span class="row-title">${esc(file?.name ?? 'Attachment')}</span><span class="row-meta">${esc(meta)}</span></span>
+      <span class="row-actions">${id ? `<button class="btn btn-ghost btn-sm" type="button" data-action="attachment-open" data-id="${esc(id)}">Open</button><button class="btn btn-ghost btn-sm" type="button" data-action="attachment-remove" data-id="${esc(id)}">Remove</button>` : '<span class="badge badge-muted">Metadata only</span>'}</span>
+    </div>`;
+  }).join('');
+  return `<section class="card" data-attachments data-attachment-owner="${esc(ownerType)}" data-attachment-id="${esc(ownerId)}">
+    <div class="card-head"><h2>Attachments / deliverables</h2><span class="badge badge-muted">${Array.isArray(attachments) ? attachments.length : 0} local</span></div>
+    <div class="card-body">
+      ${rows ? `<div class="row-list" data-attachment-list>${rows}</div>` : empty('No attachments yet.')}
+      <label class="dropzone" data-attachment-dropzone>
+        <input class="sr-only" type="file" multiple data-attachment-input />
+        <span class="dropzone-title">Drop files here, paste a screenshot, or choose a file</span>
+        <span class="field-help">Files are saved in this browser's IndexedDB and are never uploaded. Remove soft-detaches the local file.</span>
+      </label>
+    </div>
+  </section>`;
+}
+
 function taskDetail(state, route) {
   const allTasks = state.tasks ?? [];
   const team = state.team ?? [];
@@ -1296,7 +1332,7 @@ function taskDetail(state, route) {
         <section class="card"><div class="card-head"><h2>Where this stands</h2></div><div class="card-body"><dl class="details"><div><dt>Next action</dt><dd>${esc(task.status === 'Waiting' ? 'Wait for the QA check.' : task.status === 'Done' ? 'No further action.' : 'Continue the current step.')}</dd></div><div><dt>QA state</dt><dd>${task.notes?.includes('[已核') ? 'Checked' : task.notes?.includes('[待核') ? 'Waiting for QA' : 'Not sent yet'}</dd></div><div><dt>Review</dt><dd>${esc(reviewLabel)}</dd></div><div><dt>Note</dt><dd>${esc(task.notes || '—')}</dd></div></dl></div></section>
         <section class="card"><div class="card-head"><h2>Progress update</h2></div><div class="card-body"><form data-form="task-comment"><input type="hidden" name="id" value="${task.id}" /><div class="field"><label for="task-progress-comment">Add a comment or progress update</label><textarea id="task-progress-comment" name="body" rows="3" placeholder="What changed?" required></textarea><p class="field-help">Ctrl+Enter saves the progress update.</p></div><div class="row-actions"><button class="btn btn-primary btn-sm" type="submit">Save progress</button><label class="checkbox-row"><input name="real" type="checkbox" value="1" /> This is a real progress update</label></div></form></div></section>
         <section class="card"><div class="card-head"><h2>Details</h2><span class="badge badge-muted">Saved to this device</span></div><div class="card-body"><form class="stack" data-form="task-details" data-history="description,repro,expected,actual"><input type="hidden" name="id" value="${task.id}" /><div class="field"><label for="task-description-${task.id}">Description</label><textarea id="task-description-${task.id}" name="description" rows="3">${esc(task.description)}</textarea></div><div class="field"><label for="task-repro-${task.id}">Steps / repro</label><textarea id="task-repro-${task.id}" name="repro" rows="3">${esc(task.repro ?? task.steps ?? '')}</textarea></div><div class="field"><label for="task-expected-${task.id}">Expected</label><textarea id="task-expected-${task.id}" name="expected" rows="2">${esc(task.expected)}</textarea></div><div class="field"><label for="task-actual-${task.id}">Actual</label><textarea id="task-actual-${task.id}" name="actual" rows="2">${esc(task.actual)}</textarea></div><div class="row-actions"><button class="btn btn-primary btn-sm" type="submit">Save details</button></div></form></div></section>
-        <section class="card"><div class="card-head"><h2>Attachments / deliverables</h2></div><div class="card-body">${attachments.length ? `<div class="row-list">${attachments.map((file) => `<div class="row-item"><span class="badge badge-muted">FILE</span><span class="row-main"><span class="row-title">${esc(file.name)}</span><span class="row-meta">${esc(file.kind)}</span></span><button class="btn btn-ghost btn-sm" type="button" data-action="fake-download">Open</button></div>`).join('')}</div>` : empty('No attachments yet.')}</div></section>
+        ${attachmentCard('task', task.id, attachments)}
         <section class="card"><div class="card-head"><h2>Subtasks</h2><div class="row-actions"><span class="badge badge-muted">${subtasks.length}</span><button class="btn btn-ghost btn-sm" type="button" data-action="new-subtask" data-id="${task.id}" data-parent-id="${task.id}">New subtask</button></div></div><div class="card-body">${subtasks.length ? `<div class="row-list">${subtasks.map((row) => `<div class="row-item" data-subtask-id="${esc(row.id)}"><span class="key-link">↳ ${esc(row.key)}</span><span class="row-main"><span class="row-title"><a href="#/task/${row.id}">${esc(row.title)}</a></span></span>${statusBadge(row.workflow)}</div>`).join('')}</div>` : empty('No subtasks.')}</div></section>
         <section class="card"><div class="card-head"><h2>Depends on</h2><div class="row-actions"><span class="badge badge-muted">${dependencies.length}</span><button class="btn btn-ghost btn-sm" type="button" data-action="focus-dependencies" data-id="${task.id}">Edit in Plan</button></div></div><div class="card-body">${dependencies.length ? `<div class="row-list">${dependencies.map(({ ref, dependency, missing }) => missing ? `<div class="row-item" data-dependency-ref="${esc(ref)}"><span class="key-link">${esc(ref)}</span><span class="row-main"><span class="row-title">Dependency not found</span><span class="row-meta">Use a task key or ID in the Plan card.</span></span><span class="badge badge-warning">Missing</span></div>` : `<div class="row-item" data-dependency-ref="${esc(ref)}"><span class="key-link">${esc(dependency.key)}</span><span class="row-main"><span class="row-title"><a href="#/task/${dependency.id}">${esc(dependency.title)}</a></span><span class="row-meta">${esc(dependency.key)} · ${esc(dependency.status)}</span></span>${statusBadge(dependency.workflow ?? dependency.status)}</div>`).join('')}</div>` : empty('No dependencies.')}<p class="field-help">Edit this list in the Plan card using task keys or IDs, separated by commas.</p></div></section>
         <section class="card"><div class="card-head"><h2>Scheduled</h2><div class="row-actions"><span class="badge badge-muted">${scheduled.length}</span><button class="btn btn-ghost btn-sm" type="button" data-action="schedule-task" data-id="${task.id}" data-task-id="${task.id}">Schedule time for this</button></div></div><div class="card-body">${scheduled.length ? `<div class="row-list">${scheduled.map((event) => `<div class="row-item" data-event-id="${esc(event.id)}"><span class="row-date">${fmt(event.date)}</span><span class="row-main"><span class="row-title">${esc(event.title)}</span><span class="row-meta">${esc(event.kind)} ${esc(event.time)}</span></span></div>`).join('')}</div>` : empty('No scheduled time.')}</div></section>
@@ -1326,6 +1362,7 @@ function bugDetail(state, route) {
     <div class="detail-grid">
       <div class="detail-main">
         <section class="card"><div class="card-head"><h2>Description</h2></div><div class="card-body"><dl class="details"><div><dt>Description</dt><dd>${esc(bug.description)}</dd></div><div><dt>Steps to reproduce</dt><dd>${esc(bug.repro)}</dd></div><div><dt>Expected</dt><dd>${esc(bug.expected)}</dd></div><div><dt>Actual</dt><dd>${esc(bug.actual)}</dd></div><div><dt>Environment</dt><dd>${esc(bug.environment)}</dd></div></dl></div></section>
+        ${attachmentCard('bug', bug.id, bug.attachments ?? [])}
         <section class="card"><div class="card-head"><h2>Comments and activity</h2></div><div class="card-body"><div class="feed">${feed.map((row) => `<div class="feed-item"><div class="feed-head">${avatar(row.who ?? 'Amara')}<strong>${esc(row.who ?? 'Amara')}</strong><span>${fmtStamp(row.at)}</span>${row.kind === 'history' ? `<span class="badge badge-muted">${esc(row.field)}</span>` : ''}</div><p>${row.kind === 'comment' ? esc(row.body) : `${esc(row.field)}: ${esc(row.old || '—')} → ${esc(row.new || '—')}`}</p></div>`).join('') || empty('No activity yet.')}</div><form class="comment-form" data-form="bug-comment"><input type="hidden" name="id" value="${bug.id}" /><textarea name="body" rows="2" placeholder="Add a comment…" required></textarea><button class="btn btn-primary btn-sm" type="submit">Comment</button></form></div></section>
       </div>
       <aside class="detail-side">
