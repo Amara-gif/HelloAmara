@@ -261,23 +261,124 @@ function home(state) {
     </div>`;
 }
 
+const noteHas = (task, mark) => String(task?.notes ?? '').includes(mark);
+const taskNumber = (task) => String(task?.key ?? task?.id ?? '');
+const taskLabel = (task) => (task?.key ? `${task.key} · ${task.title}` : task?.title ?? 'Untitled');
+
+function isQaChecked(task) {
+  return noteHas(task, '[已核') || noteHas(task, '[免核') || ['Verified', 'Closed'].includes(task?.workflow);
+}
+
+function qaCheckDate(task) {
+  const match = String(task?.notes ?? '').match(/\[(?:已核|免核)\s+(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : '';
+}
+
+function isQaOwner(state, task) {
+  const owner = String(task?.owner ?? '').trim();
+  if (!owner) return false;
+  if (/^qa$/i.test(owner)) return true;
+  return (state.team ?? []).some((agent) => agent.name === owner && /^qa$/i.test(String(agent.role ?? '').trim()));
+}
+
+function hasQaRecord(state, task) {
+  return noteHas(task, '[待核') || isQaChecked(task) || isQaOwner(state, task);
+}
+
+function dependencyRefs(task) {
+  const raw = task?.dependsOn ?? task?.depends_on ?? task?.dependencies ?? task?.depends ?? task?.blockedBy ?? [];
+  if (Array.isArray(raw)) return raw.map((value) => String(value).trim()).filter(Boolean);
+  return String(raw ?? '').split(/[,;|]/).map((value) => value.trim()).filter(Boolean);
+}
+
+function unfinishedDependencies(state, task) {
+  return dependencyRefs(task).map((ref) => {
+    const dependency = (state.tasks ?? []).find((row) => row.id === ref || String(row.key ?? '').toUpperCase() === ref.toUpperCase());
+    if (!dependency) return { ref, missing: true };
+    if (dependency.status === 'Done') return null;
+    return { ref, dependency };
+  }).filter(Boolean);
+}
+
+function reasonForBlocked(state, task) {
+  const dependencies = unfinishedDependencies(state, task);
+  if (dependencies.length) {
+    const labels = dependencies.map(({ ref, dependency, missing }) => missing
+      ? `${ref} (not found, treated as unfinished)`
+      : `${taskNumber(dependency)} (${dependency.status})`);
+    return `Depends on unfinished ${labels.join(', ')}.`;
+  }
+  if (task.status === 'Waiting' && !hasQaRecord(state, task)) {
+    return 'Waiting with no QA hand-over ([待核]); unknown is treated as blocked.';
+  }
+  return '';
+}
+
+function reasonForReview(task) {
+  const checkedAt = qaCheckDate(task);
+  if (checkedAt) return `QA checked on ${fmt(checkedAt)}. You have not reviewed it.`;
+  if (isQaChecked(task)) return 'QA has recorded its check. You have not reviewed it.';
+  return 'Done and not yet reviewed.';
+}
+
+export function myworkQueues(state, projectFilter = '') {
+  const scoped = (state.tasks ?? []).filter((task) => !projectFilter || task.projectId === projectFilter);
+  const open = scoped.filter((task) => task.status !== 'Done');
+  const decisionRows = open
+    .filter((task) => task.pendingDecision || noteHas(task, '[待确认]'))
+    .map((task) => ({
+      task,
+      reason: noteHas(task, '[待确认]')
+        ? 'The note asks for your decision ([待确认]).'
+        : 'The row is marked as waiting for your decision.',
+      next: 'Confirm the decision, then set the owner or close it.',
+    }));
+  const blockedRows = open
+    .map((task) => ({ task, reason: reasonForBlocked(state, task) }))
+    .filter((row) => row.reason)
+    .map((row) => ({ ...row, next: row.reason.startsWith('Depends') ? 'Finish or unblock the dependency first.' : 'Send it to QA or record the missing hand-over.' }));
+  const reviewRows = scoped
+    .filter((task) => !task.reviewed && (task.status === 'Done' || isQaChecked(task)))
+    .map((task) => ({ task, reason: reasonForReview(task), next: 'Approve or request changes.' }));
+  return [
+    { title: 'Needs your decision', description: 'Open work items whose note asks for you (it contains [待确认]) or says it waits for your call.', rows: decisionRows },
+    { title: 'Blocked', description: 'Open work items that depend on an unfinished item, or are Waiting with no hand-over to QA. Unknown is shown as blocked, not as fine.', rows: blockedRows },
+    { title: 'Ready for review', description: 'QA has recorded its check, and you have not approved this version. Your approval is separate from QA’s check.', rows: reviewRows },
+  ];
+}
+
 function mywork(state, query) {
   const all = query.get('all') === '1';
-  const queues = [
-    { title: 'Needs your decision', rows: state.tasks.filter((task) => task.pendingDecision), reason: 'Decision pending', next: 'Choose an owner or close it' },
-    { title: 'Blocked', rows: state.tasks.filter((task) => task.status === 'Waiting' && task.owner !== 'Delphine Roth'), reason: 'Waiting for QA or supplier', next: 'Unblock the next step' },
-    { title: 'Ready for review', rows: state.tasks.filter((task) => task.status === 'Done' && !task.reviewed), reason: 'Deliverable finished', next: 'Review the result' },
-  ];
+  const projectFilter = query.get('project') ?? '';
+  const scopedCount = (state.tasks ?? []).filter((task) => !projectFilter || task.projectId === projectFilter).length;
+  const projectOptions = (state.projects ?? []).map((project) => option(project.id, projectFilter, `${project.key} ${project.name}`)).join('');
+  const queues = myworkQueues(state, projectFilter);
   return `
     ${pageHead('My work', 'Each list is computed from the stored rows; the counts are rows, not estimates.')}
+    <form class="toolbar" data-form="mywork-filters">
+      <input type="hidden" name="all" value="${all ? '1' : ''}" />
+      <select class="select" name="project" aria-label="Scope by project"><option value="">All projects</option>${projectOptions}</select>
+      <button class="btn btn-sm btn-primary" type="submit">Apply</button>
+      ${projectFilter ? `<a class="btn btn-ghost btn-sm" href="${pageUrl('/mywork', { all: all ? 1 : '' })}">All projects</a>` : ''}
+      <span class="toolbar-count">${scopedCount} work items in scope</span>
+    </form>
     <div class="card-grid three-up">
       ${queues.map((queue) => {
         const shown = all ? queue.rows : queue.rows.slice(0, 8);
         return `<section class="card">
           <div class="card-head"><h2>${queue.title}</h2><span class="badge badge-accent">${queue.rows.length}</span></div>
           <div class="card-body">
-            ${shown.length ? `<div class="row-list">${shown.map((task) => `<div class="row-item"><span class="row-main"><span class="row-title"><a href="#/task/${task.id}">${esc(task.title)}</a></span><span class="row-meta">${esc(queue.reason)} · ${esc(queue.next)}</span></span><span class="row-owner">${avatar(task.owner)}<span>${esc(task.owner)}</span></span><span class="row-date">${fmt(task.due)}</span></div>`).join('')}</div>` : empty('Nothing here.')}
-            ${!all && queue.rows.length > 8 ? `<a class="btn btn-ghost btn-sm" href="${pageUrl('/mywork', { all: 1 })}">Show all ${queue.rows.length}</a>` : ''}
+            <p class="row-meta">${esc(queue.description)}</p>
+            ${shown.length ? `<div class="row-list">${shown.map(({ task, reason, next }) => `<div class="row-item" data-mywork-row="${esc(queue.title)}" data-task-id="${esc(task.id)}">
+              <span class="row-main">
+                <span class="row-title"><a href="#/task/${encodeURIComponent(task.id)}">${esc(taskLabel(task))}</a></span>
+                <span class="row-meta">${esc(reason)}</span>
+                <span class="row-meta"><strong>Next:</strong> ${esc(next)}</span>
+              </span>
+              <span class="row-owner">${avatar(task.owner)}<span>${esc(task.owner || 'Unassigned')}</span></span>
+              <span class="row-date">${esc(fmt(task.due))}</span>
+            </div>`).join('')}</div>` : empty('Nothing here.')}
+            ${!all && queue.rows.length > 8 ? `<a class="btn btn-ghost btn-sm" href="${pageUrl('/mywork', { all: 1, project: projectFilter })}">Show all ${queue.rows.length}</a>` : ''}
           </div>
         </section>`;
       }).join('')}

@@ -533,6 +533,8 @@ document.addEventListener('submit', async (event) => {
       navigate('/bugs', data);
     } else if (form.dataset.form === 'page-filters') {
       navigate('/pages', data);
+    } else if (form.dataset.form === 'mywork-filters') {
+      navigate('/mywork', { project: data.project, all: data.all });
     } else if (form.dataset.form === 'add-project') {
       await createProject(data);
       await rerender();
