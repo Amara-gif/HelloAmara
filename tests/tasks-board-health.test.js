@@ -36,6 +36,15 @@ test('board cards expose Move to and conditional Send to QA', () => {
   assert.match(html, /Move to…/);
   assert.match(html, /data-move-task="t1"/);
 
+  const moveFor = (id) => html.match(new RegExp(`<select[^>]*data-move-task="${id}"[^>]*>[\\s\\S]*?</select>`))?.[0] ?? '';
+  const labelsFor = (id) => [...moveFor(id).matchAll(/<option value="([^"]+)"[^>]*>/g)].map((match) => match[1]);
+  for (const id of ['t1', 't3', 't9']) {
+    assert.deepEqual(labelsFor(id), ['To Do', 'In Progress', 'In Review', 'Done']);
+  }
+  assert.match(moveFor('t1'), /value="To Do" selected/);
+  assert.match(moveFor('t3'), /value="In Review" selected/);
+  assert.match(moveFor('t9'), /value="In Progress" selected/);
+
   assert.match(html, /data-action="task-toqa" data-id="t1"/);
   assert.doesNotMatch(html, /data-action="task-toqa" data-id="t4"/);
   assert.doesNotMatch(html, /data-action="task-toqa" data-id="t3"/);

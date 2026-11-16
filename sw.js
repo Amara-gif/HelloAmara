@@ -1,7 +1,7 @@
 // My Platform service worker: offline app shell, no third-party origins.
 // Bump CACHE_VERSION whenever an app-shell file changes. The page shows the
 // "New version available, reload" toast while this worker waits to activate.
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_PREFIX = 'my-platform-shell-';
 const CACHE_NAME = `${CACHE_PREFIX}${CACHE_VERSION}`;
 
@@ -18,6 +18,7 @@ const APP_SHELL = [
   './assets/css/components.css',
   './assets/js/accounts.js',
   './assets/js/app.js',
+  './assets/js/board-columns.js',
   './assets/js/chart.js',
   './assets/js/data.js',
   './assets/js/db.js',

@@ -19,6 +19,7 @@ import {
   BUG_REASON_REQUIRED_STATUSES,
   AI_LIMIT_DEFAULTS,
 } from './data.js';
+import { BOARD_COLUMNS, columnForTask } from './board-columns.js';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const today = () => {
@@ -58,6 +59,7 @@ const STATUS_TONE = {
   New: 'band', Open: 'band', 'To do': 'band', 'To Do': 'band',
 };
 const statusBadge = (status) => `<span class="badge badge-${STATUS_TONE[status] ?? 'muted'}">${esc(status)}</span>`;
+const taskStatusBadge = (task) => statusBadge(workflowForStoredStatus(task?.status, task?.workflow));
 const STORAGE_TONE = { Granted: 'success', Denied: 'warning', Unsupported: 'muted' };
 const storageBadge = (storage) => `<span class="badge badge-${STORAGE_TONE[storage?.status] ?? 'muted'}">${esc(storage?.status ?? 'Unsupported')}</span>`;
 
@@ -678,7 +680,7 @@ function taskRow(state, task, depth, children = []) {
     <td data-label="Summary"><a class="table-title" href="#/task/${task.id}">${esc(task.title)}</a>${childCount ? `<span class="row-meta"> · ${childLabel}</span>` : ''}</td>
     <td data-label="Project">${project ? `<span class="badge badge-accent">${esc(project.key)}</span>` : '—'}</td>
     <td data-label="Progress"><span class="progress-text">${esc(progressOf(task))}</span></td>
-    <td data-label="Status">${statusBadge(task.workflow)}</td>
+    <td data-label="Status">${taskStatusBadge(task)}</td>
     <td data-label="Assignee"><span class="assignee">${avatar(task.owner)}${esc(task.owner)}</span></td>
     <td data-label="Due">${task.start ? `${fmt(task.start)} → ` : ''}${fmt(task.due)}</td>
     <td data-label="Priority">${priority(task.priority)}</td>
@@ -719,7 +721,7 @@ const DONE_QA_MARKS = ['[已核', '[免核'];
 
 function doneWithoutQaMark(state) {
   return (state.tasks ?? []).filter((task) => (
-    task.status === 'Done' && !DONE_QA_MARKS.some((mark) => noteHas(task, mark))
+    columnForTask(state, task) === 'Done' && !DONE_QA_MARKS.some((mark) => noteHas(task, mark))
   ));
 }
 
@@ -741,13 +743,14 @@ function lostHandoverMarks(state) {
 
   // Rows that were handed to QA but lost the mark before it was written.
   for (const task of tasks.values()) {
-    if (lost.has(task.id) || task.status !== 'Waiting' || hasHandover(task)) continue;
+    if (lost.has(task.id) || hasHandover(task)) continue;
+    if (task.status !== 'Waiting' && columnForTask(state, task) !== 'In Review') continue;
     lost.set(task.id, { task, mark: '待核', date: today() });
   }
 
   // Done rows whose workflow proves QA checked them, but whose note lost the mark.
   for (const task of tasks.values()) {
-    if (lost.has(task.id) || task.status !== 'Done' || hasHandover(task)) continue;
+    if (lost.has(task.id) || columnForTask(state, task) !== 'Done' || hasHandover(task)) continue;
     if (!['Verified', 'Closed'].includes(String(task.workflow ?? ''))) continue;
     lost.set(task.id, { task, mark: '已核', date: qaCheckDate(task) || today() });
   }
@@ -777,27 +780,19 @@ function boardHealth(state) {
 }
 
 function taskBoard(state, rows) {
-  const columns = ['To Do', 'In Progress', 'In Review', 'Done'];
-  const bucket = (task) => {
-    const status = String(task.status ?? '');
-    if (status === 'To do') return 'To Do';
-    if (status === 'Done') return 'Done';
-    if (status === 'In Review' || status === 'In review') return 'In Review';
-    if (status === 'Waiting') return isQaOwner(state, task) ? 'In Review' : 'In Progress';
-    return 'In Progress';
-  };
-  const cards = (column) => rows.filter((task) => bucket(task) === column).map((task) => {
-    const flagged = task.status === 'Waiting' && !isQaOwner(state, task);
+  const cards = (column) => rows.filter((task) => columnForTask(state, task) === column).map((task) => {
+    const currentColumn = columnForTask(state, task);
+    const flagged = String(task.status ?? '') === 'Waiting' && currentColumn === 'In Progress';
     return `<article class="board-card" data-board-task="${task.id}">
       <a href="#/task/${task.id}">${esc(task.title)}</a>
       <span class="row-meta">${esc(task.key)} · ${esc(task.owner)}</span>
       ${flagged ? '<span class="badge badge-warning">Waiting · no QA owner</span>' : ''}
-      <div class="board-card-foot">${statusBadge(task.workflow)}${priority(task.priority)}</div>
-      <label class="board-move"><span>Move to…</span><select class="select select-sm" data-move-task="${task.id}" aria-label="Move ${esc(task.key)} to">${['To do', 'In progress', 'Waiting', 'Done'].map((status) => option(status, task.status)).join('')}</select></label>
+      <div class="board-card-foot">${taskStatusBadge(task)}${priority(task.priority)}</div>
+      <label class="board-move"><span>Move to…</span><select class="select select-sm" data-move-task="${task.id}" aria-label="Move ${esc(task.key)} to">${BOARD_COLUMNS.map((name) => option(name, currentColumn)).join('')}</select></label>
       ${canSendToQa(state, task) ? `<div class="row-actions"><button class="btn btn-ghost btn-sm" type="button" data-action="task-toqa" data-id="${task.id}">Send to QA</button></div>` : ''}
     </article>`;
   }).join('') || empty('No items.');
-  return `<div class="board">${columns.map((column) => `<section class="board-column" data-board-column="${esc(column)}"><h2>${column}<span class="badge badge-muted">${rows.filter((task) => bucket(task) === column).length}</span></h2>${cards(column)}</section>`).join('')}</div>${boardHealth(state)}`;
+  return `<div class="board">${BOARD_COLUMNS.map((column) => `<section class="board-column" data-board-column="${esc(column)}"><h2>${column}<span class="badge badge-muted">${rows.filter((task) => columnForTask(state, task) === column).length}</span></h2>${cards(column)}</section>`).join('')}</div>${boardHealth(state)}`;
 }
 
 const pad2 = (value) => String(value).padStart(2, '0');

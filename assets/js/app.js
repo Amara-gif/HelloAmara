@@ -15,6 +15,7 @@ import { copyChartImage } from './chart.js';
 import { updateTaskBadge } from './nav-badge.js';
 import { openModal, toast } from './ui.js';
 import { taskFormPatch } from './task-form.js';
+import { canMoveToColumn } from './board-columns.js';
 import { dueReminders, notificationText } from './schedule.js';
 import { startPwa, applyUpdate, setupInstallPrompt, UPDATE_MESSAGE } from './pwa.js';
 
@@ -1322,11 +1323,27 @@ document.addEventListener('change', async (event) => {
   if (oneBug) syncBugSelection();
   const move = event.target.closest('[data-move-task]');
   if (move) {
-    const status = move.value;
-    const workflow = status === 'Waiting' ? 'Fixed' : status === 'Done' ? 'Closed' : status === 'In progress' ? 'In progress' : 'New';
-    await updateTask(move.dataset.moveTask, { status, workflow }, 'status');
-    render();
-    toast('Task moved.', { tone: 'success' });
+    const state = getState();
+    const task = state.tasks.find((row) => row.id === move.dataset.moveTask);
+    const check = canMoveToColumn(state, task, move.value);
+    if (!check.ok) {
+      render();
+      toast(check.reason, { tone: 'danger' });
+      return;
+    }
+    if (check.noop) {
+      render();
+      return;
+    }
+    try {
+      await transitionTask(task.id, { to: check.target ?? check.workflow, as: check.actor });
+      render();
+      toast('Task moved.', { tone: 'success' });
+    } catch (error) {
+      render();
+      toast(error.message, { tone: 'danger' });
+    }
+    return;
   }
   const calendarProject = event.target.closest('[data-form="calendar-project"] select');
   if (calendarProject) {
