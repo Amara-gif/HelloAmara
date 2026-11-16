@@ -71,7 +71,7 @@ test('MR Review Update says the scraper is blocked on the owner decision with no
 test('other Market Review tool tabs are honest Not available placeholders', () => {
   for (const [tab, label] of [['find-user-voices', 'Find user voices'], ['daily-digest', 'Daily Digest'], ['issue-workbench', 'Issue Workbench'], ['pqa-tracker', 'PQA Tracker'], ['report-deck', 'Report Deck']]) {
     const html = render('MR', `tab=${tab}`);
-    assert.match(html, new RegExp(`<h2>${label}</h2>`), `${label} heading missing`);
+    assert.match(html, new RegExp(`<h2 class="card-title">${label}</h2>`), `${label} heading missing`);
     assert.match(html, /Not available in My Platform yet/);
     assert.match(html, /no fake data or run action/i);
     assert.doesNotMatch(html, /\/api\//);

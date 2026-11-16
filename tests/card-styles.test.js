@@ -1,6 +1,10 @@
+import './setup.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { renderView } from '../assets/js/views.js';
+import { buildDemoData } from '../assets/js/demo-data.js';
+import { ROUTES } from '../assets/js/routes.js';
 
 const css = readFileSync(new URL('../assets/css/components.css', import.meta.url), 'utf8');
 const tokens = readFileSync(new URL('../assets/css/tokens.css', import.meta.url), 'utf8');
@@ -145,6 +149,63 @@ test('.modal, .auth-card and .toast use the dialog radius', () => {
     );
     assert.doesNotMatch(rule.body, /border-radius\s*:[^;]*\d+px/, `${selector} has a raw radius`);
   }
+});
+
+const MAIN_ROUTES = ['home', 'mywork', 'pages', 'tasks', 'calendar', 'bugs', 'chat', 'files', 'settings'];
+const demoState = () => {
+  const { stores, meta } = buildDemoData();
+  return {
+    ...stores,
+    ...meta,
+    aiCalls: stores.ai_calls,
+    bugHistory: stores.bug_history,
+    bugComments: stores.bug_comments,
+    taskHistory: stores.task_history,
+    taskComments: stores.task_comments,
+  };
+};
+
+function cardHeadMarkup(html) {
+  const heads = [];
+  const marker = 'class="card-head"';
+  let cursor = 0;
+
+  while ((cursor = html.indexOf(marker, cursor)) !== -1) {
+    const start = html.lastIndexOf('<', cursor);
+    const body = html.indexOf('class="card-body"', cursor);
+    const summaryEnd = html.indexOf('</summary>', cursor);
+    const ends = [body, summaryEnd].filter((index) => index !== -1);
+    const stop = ends.length ? Math.min(...ends) : html.indexOf('>', cursor) + 1;
+    heads.push(html.slice(start, stop));
+    cursor = stop;
+  }
+
+  return heads;
+}
+
+test('every card head title on the main routes carries the one card-title class', () => {
+  let renderedHeads = 0;
+
+  for (const id of MAIN_ROUTES) {
+    const html = renderView({ id, ...ROUTES[id] }, new URLSearchParams(), demoState());
+    const heads = cardHeadMarkup(html);
+    renderedHeads += heads.length;
+
+    for (const head of heads) {
+      assert.doesNotMatch(
+        head,
+        /<h2(?![^>]*\bclass="[^"]*\bcard-title\b)/,
+        `${id} has an unclassed h2 inside a card head`,
+      );
+      assert.match(
+        head,
+        /<(?:h[1-6]|span)\b[^>]*\bclass="[^"]*\bcard-title\b/,
+        `${id} card head title carries card-title`,
+      );
+    }
+  }
+
+  assert.ok(renderedHeads > 0, 'the main routes render card heads to check');
 });
 
 test('the styleguide shows a card, flat card, interactive card, stat card and dialog', () => {

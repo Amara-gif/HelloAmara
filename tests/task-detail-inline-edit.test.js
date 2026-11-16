@@ -25,7 +25,7 @@ test('task detail renders editable content, side fields and Plan controls', () =
   assert.match(html, /data-form="task-details" data-history="description,repro,expected,actual"/);
   assert.match(html, /data-form="task-fields" data-history="owner,priority,severity,type,component,module,due,start"/);
   assert.match(html, /data-form="task-plan" data-history="projectId,module,start,end,depends_on,milestone"/);
-  assert.match(html, /<h2>Plan<\/h2>/);
+  assert.match(html, /<h2 class="card-title">Plan<\/h2>/);
 
   for (const name of ['title', 'description', 'repro', 'expected', 'actual', 'owner', 'priority', 'severity', 'type', 'component', 'module', 'due', 'start', 'projectId', 'end', 'depends_on', 'milestone']) {
     assert.match(html, new RegExp(`name="${name}"`), `missing editable field ${name}`);

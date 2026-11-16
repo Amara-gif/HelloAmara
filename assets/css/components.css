@@ -869,14 +869,6 @@ code {
   color: var(--color-on-card-header);
 }
 
-.card-head h2 {
-  min-width: 0;
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: -0.01em;
-  overflow-wrap: anywhere;
-}
-
 .card-body {
   display: flex;
   flex: 1;
@@ -910,11 +902,17 @@ code {
 }
 
 .card-title {
+  min-width: 0;
   margin-top: var(--space-1);
   color: var(--color-text);
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-semibold);
   letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.card-head .card-title {
+  margin-top: 0;
 }
 
 .card-text {

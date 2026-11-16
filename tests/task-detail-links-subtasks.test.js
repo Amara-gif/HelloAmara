@@ -32,7 +32,7 @@ test('task detail lists children and opens a parent-preset subtask dialog', () =
   const state = demoState();
   const html = renderView(detailRoute('t4'), new URLSearchParams(), state);
 
-  assert.match(html, /<h2>Subtasks<\/h2>/);
+  assert.match(html, /<h2 class="card-title">Subtasks<\/h2>/);
   assert.match(html, /data-action="new-subtask" data-id="t4" data-parent-id="t4"/);
   assert.match(html, /data-subtask-id="t5"/);
   assert.match(html, /data-subtask-id="t6"/);
@@ -54,7 +54,7 @@ test('Schedule time for this opens the Event tab with the task preset', () => {
   const state = demoState();
   const html = renderView(detailRoute('t1'), new URLSearchParams(), state);
 
-  assert.match(html, /<h2>Scheduled<\/h2>/);
+  assert.match(html, /<h2 class="card-title">Scheduled<\/h2>/);
   assert.match(html, /data-action="schedule-task" data-id="t1" data-task-id="t1"/);
   assert.match(html, />Schedule time for this<\/button>/);
 
@@ -74,7 +74,7 @@ test('Depends on shows resolved links, missing refs and the editable Plan list',
   state.tasks = state.tasks.map((task) => (task.id === 't1' ? { ...task, depends_on: 'T-2, missing-key' } : task));
   const html = renderView(detailRoute('t1'), new URLSearchParams(), state);
 
-  assert.match(html, /<h2>Depends on<\/h2>/);
+  assert.match(html, /<h2 class="card-title">Depends on<\/h2>/);
   assert.match(html, /data-dependency-ref="T-2"/);
   assert.match(html, /href="#\/task\/t2"/);
   assert.match(html, /data-dependency-ref="missing-key"/);
@@ -90,7 +90,7 @@ test('pages mentioning the task are listed by task link or by key in the body', 
     : page));
   const html = renderView(detailRoute('t1'), new URLSearchParams(), state);
 
-  assert.match(html, /<h2>Pages mentioning this task<\/h2>/);
+  assert.match(html, /<h2 class="card-title">Pages mentioning this task<\/h2>/);
   assert.match(html, /data-page-id="pg1" href="#\/page\/pg1"/);
   assert.match(html, /data-page-id="pg3" href="#\/page\/pg3"/);
 });
