@@ -4,10 +4,10 @@ import {
   transitionTask, reviewTask,
   createBug, updateBug, transitionBug, addBugComment, softDeleteBugs, createEvent, deleteEvent, createPage,
   updatePage, softDeletePage, createProject, updateProject, createOrder,
-  closeOrder, saveSettings, restoreQaMark,
+  closeOrder, reopenOrder, saveSettings, restoreQaMark,
 } from './data.js';
 import { readLocation, routeForPath, groupRoutes, SETTINGS_LINKS } from './routes.js';
-import { renderView, mountView, renderAccountScreen, renderCreateDialog, bugPrefill, canSendToQa, qaOwnerName } from './views.js';
+import { renderView, mountView, renderAccountScreen, renderCreateDialog, bugPrefill, canSendToQa, qaOwnerName, agentBrief, renderAgentTodo } from './views.js';
 import { icon } from './icons.js';
 import { updateTaskBadge } from './nav-badge.js';
 import { openModal, toast } from './ui.js';
@@ -532,17 +532,18 @@ function openAgendaDialog(rowEl) {
 }
 
 function openAgentTodo(owner) {
-  const state = getState();
   const body = document.createElement('div');
-  const orders = state.orders.filter((order) => order.owner === owner);
-  const tasks = state.tasks.filter((task) => task.owner === owner && task.status !== 'Done').slice(0, 12);
-  body.innerHTML = `<div class="stack">
-    <h3>Open orders</h3>
-    <div class="row-list">${orders.map((order) => `<div class="row-item"><span class="row-main"><span class="row-title">${escAttr(order.text)}</span><span class="row-meta">${order.open ? 'Open' : 'Closed'}</span></span>${order.open ? `<button class="btn btn-ghost btn-sm" type="button" data-action="close-order" data-id="${order.id}">Done</button>` : ''}</div>`).join('') || '<p class="empty-state">No orders.</p>'}</div>
-    <h3>Owned work items</h3>
-    <div class="row-list">${tasks.map((task) => `<a class="row-item" href="#/task/${task.id}"><span class="row-main"><span class="row-title">${escAttr(task.title)}</span><span class="row-meta">${escAttr(task.key)} · ${escAttr(task.status)}</span></span></a>`).join('') || '<p class="empty-state">No owned work items.</p>'}</div>
-  </div>`;
+  body.innerHTML = renderAgentTodo(getState(), owner);
   openModal({ title: `${owner} · to-do list`, content: body, confirmLabel: 'Close' });
+}
+
+async function copyAgentBrief(owner) {
+  try {
+    await navigator.clipboard.writeText(agentBrief(getState(), owner));
+    toast(`${owner}'s brief copied to the clipboard.`, { tone: 'success' });
+  } catch {
+    toast('Clipboard access is not available.', { tone: 'danger' });
+  }
 }
 
 document.addEventListener('click', async (event) => {
@@ -640,7 +641,10 @@ document.addEventListener('click', async (event) => {
   else if (action === 'test-key') toast('Demo key is valid for preview.', { tone: 'success' });
   else if (action === 'fill-gaps') toast('Backfill is not connected to an AI service yet.');
   else if (action === 'agent-todo') openAgentTodo(actionEl.dataset.owner);
-  else if (action === 'close-order') { await closeOrder(id); render(); document.querySelector('.modal-backdrop')?.remove(); }
+  else if (action === 'close-order') { await closeOrder(id); render(); document.querySelector('.modal-backdrop')?.remove(); toast('Order closed. Reopen it from the agent to-do list.', { tone: 'success' }); }
+  else if (action === 'reopen-order') { await reopenOrder(id); render(); document.querySelector('.modal-backdrop')?.remove(); toast('Order reopened and back on the agent To-do list.', { tone: 'success' }); }
+  else if (action === 'copy-brief') await copyAgentBrief(actionEl.dataset.owner);
+  else if (action === 'open-queue-file') toast('Queue files are not available in browser. Orders stay in this account on this device.', { tone: 'danger' });
   else if (action === 'focus-add-project') document.getElementById('add-project-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   else if (action === 'reset-theme') {
     const settings = structuredClone(getState().settings);

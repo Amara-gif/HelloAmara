@@ -1135,29 +1135,78 @@ function bugsPage(state, query) {
 
 function teamPage(state) {
   const openTasks = state.tasks.filter((task) => task.status !== 'Done');
+  const lead = state.team.find((agent) => /lead|owner/i.test(String(agent?.role ?? ''))) ?? state.team[0];
+  const leadName = String(lead?.name ?? 'Amara');
   const stats = [
-    ['Decisions waiting', openTasks.filter((task) => task.pendingDecision).length],
+    ['Decisions awaiting the lead', openTasks.filter((task) => task.pendingDecision || String(task.notes ?? '').includes('[待确认')).length],
     ['Reviews ready', state.tasks.filter((task) => task.status === 'Done' && !task.reviewed).length],
-    ['People working', state.team.filter((agent) => agent.status === 'Working').length],
+    ['People working', state.team.filter((agent) => /^working$/i.test(String(agent.status ?? ''))).length],
     ['Open work items', openTasks.length],
-    ['Actions today', state.events.filter((event) => event.date === today()).length],
+    ["Today's actions", state.events.filter((event) => event.date === today()).length],
   ];
   return `
     ${pageHead('Team', 'Decisions, blocked work and the agents who own it.', `<button class="btn" type="button" data-action="open-create">${icon('spark', 16)}New order</button>`)}
-    <div class="stat-grid">${stats.map(([label, value]) => `<div class="stat"><strong>${value}</strong><span>${label}</span></div>`).join('')}</div>
+    <section class="card team-lead" aria-labelledby="team-lead-name">
+      <div class="card-body team-lead-body">
+        <div class="team-lead-id">${avatar(leadName, 'avatar-lg')}<div><h2 class="team-lead-name" id="team-lead-name">${esc(leadName)}</h2><p class="row-meta">You lead this team · ${esc(lead?.role ?? 'Lead / owner')}</p><p class="row-meta">${esc(lead?.focus ?? '')}</p></div></div>
+        <div class="stat-grid team-lead-stats">${stats.map(([label, value]) => `<div class="stat"><strong>${value}</strong><span>${label}</span></div>`).join('')}</div>
+      </div>
+    </section>
     <div class="card-grid three-up">
       ${state.team.map((agent) => {
         const owned = openTasks.filter((task) => task.owner === agent.name);
         const openOrders = state.orders.filter((order) => order.owner === agent.name && order.open);
-        return `<section class="card team-card">
+        const todayCount = owned.filter((task) => dateOnly(task.updatedAt) === today()).length + openOrders.filter((order) => dateOnly(order.createdAt) === today()).length;
+        const name = owned[0] ? `<a class="table-title" href="#/task/${owned[0].id}">${esc(agent.name)}</a>` : `<span class="table-title">${esc(agent.name)}</span>`;
+        return `<section class="card team-card" data-team-agent="${esc(agent.name)}">
           <div class="card-body">
-            <div class="team-head">${avatar(agent.name, 'avatar-lg')}<div><a class="table-title" href="#/task/${owned[0]?.id ?? ''}">${esc(agent.name)}</a><span class="row-meta">${esc(agent.role)} · ${esc(agent.status)}</span></div><span class="badge badge-${agent.status === 'Working' ? 'accent' : 'muted'}">${esc(agent.status)}</span></div>
-            <dl class="details compact"><div><dt>Focus</dt><dd>${esc(agent.focus)}</dd></div><div><dt>Workload</dt><dd>${owned.length} open${openOrders.length ? ` · ${openOrders.length} order` : ''}</dd></div><div><dt>Model</dt><dd>${esc(agent.model)}</dd></div><div><dt>Latest</dt><dd>${esc(agent.activity)}</dd></div></dl>
-            <form class="order-form" data-form="order"><input type="hidden" name="owner" value="${esc(agent.name)}" /><div class="field"><label for="order-${agent.id}">Give ${esc(agent.name)} an order</label><input id="order-${agent.id}" name="text" type="text" placeholder="What should they do?" required /></div><div class="row-actions"><button class="btn btn-primary btn-sm" type="submit">Send</button><button class="btn btn-ghost btn-sm" type="button" data-action="agent-todo" data-owner="${esc(agent.name)}">To-do list</button></div></form>
+            <div class="team-head">${avatar(agent.name, 'avatar-lg')}<div>${name}<span class="row-meta">${esc(agent.role)}</span></div><span class="badge badge-${/^working$/i.test(agent.status) ? 'accent' : 'muted'}"><span class="badge-dot" aria-hidden="true"></span>${esc(agent.status)}</span></div>
+            <dl class="details compact"><div><dt>Focus</dt><dd>${esc(agent.focus)}</dd></div><div><dt>Latest activity</dt><dd>${esc(agent.activity)}</dd></div><div><dt>Model</dt><dd>${esc(agent.model)}</dd></div></dl>
+            <div class="team-counts" aria-label="Workload for ${esc(agent.name)}"><div class="team-count" data-team-count="on-list"><strong>${owned.length}</strong><span>on the list</span></div><div class="team-count" data-team-count="new-orders"><strong>${openOrders.length}</strong><span>new orders</span></div><div class="team-count" data-team-count="today"><strong>${todayCount}</strong><span>today</span></div></div>
+            <form class="order-form" data-form="order"><input type="hidden" name="owner" value="${esc(agent.name)}" /><div class="field"><label for="order-${agent.id}">Give ${esc(agent.name)} an order</label><textarea id="order-${agent.id}" name="text" rows="2" placeholder="Tell ${esc(agent.name)} what to do, in plain words." required></textarea></div><div class="row-actions"><button class="btn btn-primary btn-sm" type="submit">Send</button><button class="btn btn-ghost btn-sm" type="button" data-action="agent-todo" data-owner="${esc(agent.name)}">To-do list</button><button class="btn btn-ghost btn-sm" type="button" data-action="copy-brief" data-owner="${esc(agent.name)}">Copy brief</button><button class="btn btn-ghost btn-sm" type="button" data-action="open-queue-file" data-owner="${esc(agent.name)}">Open queue file</button></div></form>
           </div>
         </section>`;
       }).join('')}
     </div>`;
+}
+
+export function agentBrief(state = {}, owner) {
+  const agent = (state.team ?? []).find((row) => row.name === owner);
+  const name = String(agent?.name ?? owner ?? 'Agent');
+  const openTasks = (state.tasks ?? []).filter((task) => task.owner === name && task.status !== 'Done');
+  const openOrders = (state.orders ?? []).filter((order) => order.owner === name && order.open);
+  return [
+    `Brief for ${name}`,
+    `Role: ${agent?.role || '—'}`,
+    `Status: ${agent?.status || '—'}`,
+    `Focus: ${agent?.focus || '—'}`,
+    `Model: ${agent?.model || '—'}`,
+    `Workload: ${openTasks.length} open work item${openTasks.length === 1 ? '' : 's'}, ${openOrders.length} open order${openOrders.length === 1 ? '' : 's'}`,
+    `Latest activity: ${agent?.activity || 'No activity recorded yet.'}`,
+    '',
+    'Open orders:',
+    ...(openOrders.length ? openOrders.map((order) => `- ${order.text}`) : ['- None']),
+    '',
+    'Owned work items:',
+    ...(openTasks.length ? openTasks.slice(0, 12).map((task) => `- ${task.key ? `${task.key} · ` : ''}${task.title}`) : ['- None']),
+  ].join('\n');
+}
+
+export function renderAgentTodo(state = {}, owner) {
+  const agent = (state.team ?? []).find((row) => row.name === owner);
+  const orders = (state.orders ?? [])
+    .filter((order) => order.owner === owner)
+    .sort((a, b) => Number(Boolean(b.open)) - Number(Boolean(a.open)) || String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? '')));
+  const tasks = (state.tasks ?? []).filter((task) => task.owner === owner && task.status !== 'Done').slice(0, 12);
+  return `<div class="stack">
+    <h3>Open orders</h3>
+    <div class="row-list">${orders.map((order) => `<div class="row-item"><span class="row-main"><span class="row-title">${esc(order.text)}</span><span class="row-meta">${order.open ? 'Open' : 'Closed'}${order.updatedAt ? ` · ${fmtStamp(order.updatedAt)}` : ''}</span></span>${order.open ? `<button class="btn btn-ghost btn-sm" type="button" data-action="close-order" data-id="${esc(order.id)}">Close</button>` : `<button class="btn btn-ghost btn-sm" type="button" data-action="reopen-order" data-id="${esc(order.id)}">Reopen</button>`}</div>`).join('') || '<p class="empty-state">No orders.</p>'}</div>
+    <h3>Owned work items</h3>
+    <div class="row-list">${tasks.map((task) => `<a class="row-item" href="#/task/${esc(task.id)}"><span class="row-main"><span class="row-title">${esc(task.title)}</span><span class="row-meta">${esc(task.key)} · ${esc(task.status)}</span></span></a>`).join('') || '<p class="empty-state">No owned work items.</p>'}</div>
+    <h3>Agent</h3>
+    <dl class="details compact"><div><dt>Role</dt><dd>${esc(agent?.role ?? '—')}</dd></div><div><dt>Status</dt><dd>${esc(agent?.status ?? '—')}</dd></div><div><dt>Focus</dt><dd>${esc(agent?.focus ?? '—')}</dd></div><div><dt>Model</dt><dd>${esc(agent?.model ?? '—')}</dd></div><div><dt>Recent activity</dt><dd>${esc(agent?.activity ?? 'No activity recorded yet.')}</dd></div></dl>
+    <div class="row-actions"><button class="btn btn-primary btn-sm" type="button" data-action="copy-brief" data-owner="${esc(owner)}">Copy brief</button><button class="btn btn-ghost btn-sm" type="button" data-action="open-queue-file" data-owner="${esc(owner)}">Open queue file</button></div>
+  </div>`;
 }
 
 function filesPage(state, query) {

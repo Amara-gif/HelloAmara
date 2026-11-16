@@ -781,8 +781,19 @@ export async function createOrder(owner, text) {
 export async function closeOrder(id) {
   const order = state.orders.find((row) => row.id === id);
   if (!order) return;
-  await putRecord('orders', { ...order, open: false, updatedAt: nowIso() });
+  const updated = { ...order, open: false, updatedAt: nowIso() };
+  await putRecord('orders', updated);
   state = await readState();
+  return updated;
+}
+
+export async function reopenOrder(id) {
+  const order = state.orders.find((row) => row.id === id);
+  if (!order) return;
+  const updated = { ...order, open: true, updatedAt: nowIso() };
+  await putRecord('orders', updated);
+  state = await readState();
+  return updated;
 }
 
 export async function saveSettings(settings) {
