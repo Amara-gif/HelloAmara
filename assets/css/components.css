@@ -1258,6 +1258,9 @@ code {
 
 /* ---------------------------------------------------------------- Badges */
 .badge {
+  /* Neutral is the base tone; every tone below only overrides the colours. */
+  --badge-solid: var(--color-text-secondary);
+  --badge-solid-ink: var(--color-surface);
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
@@ -1272,38 +1275,96 @@ code {
   white-space: nowrap;
 }
 
+/* Badge tones. Keep every soft-tint rule together: one tone changes here and
+   the same class works on every screen. `.badge-solid` is the only opt-in
+   solid look, including the old solid danger treatment. */
+.badge-neutral {
+  border-color: transparent;
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+  --badge-solid: var(--color-text-secondary);
+  --badge-solid-ink: var(--color-surface);
+}
+
 .badge-accent {
   border-color: transparent;
   background: var(--color-accent-soft);
   color: var(--color-accent-strong);
+  --badge-solid: var(--color-accent-strong);
+  --badge-solid-ink: var(--color-on-accent);
 }
 
 .badge-success {
   border-color: transparent;
   background: var(--color-success-soft);
   color: var(--color-success);
+  --badge-solid: var(--color-success);
+  --badge-solid-ink: var(--color-on-accent);
 }
 
 .badge-warning {
   border-color: transparent;
   background: var(--color-warning-soft);
   color: var(--color-warning);
+  --badge-solid: var(--color-warning);
+  --badge-solid-ink: var(--color-on-accent);
 }
 
 .badge-danger {
   border-color: transparent;
-  background: var(--color-danger);
-  color: var(--color-on-danger);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  --badge-solid: var(--color-danger);
+  --badge-solid-ink: var(--color-on-danger);
+}
+
+.badge-info {
+  border-color: transparent;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+  --badge-solid: var(--color-accent-strong);
+  --badge-solid-ink: var(--color-on-accent);
+}
+
+.badge-band {
+  border-color: transparent;
+  background: var(--color-band);
+  color: var(--color-text-secondary);
+  --badge-solid: var(--color-band);
+  --badge-solid-ink: var(--color-text);
 }
 
 .badge-muted {
-  background: var(--color-surface-muted);
+  border-color: transparent;
+  background: var(--color-bg);
+  color: var(--color-text-faint);
+  --badge-solid: var(--color-text-secondary);
+  --badge-solid-ink: var(--color-surface);
 }
 
 .badge-on-accent {
   border-color: transparent;
   background: var(--color-surface);
   color: var(--color-accent-strong);
+  --badge-solid: var(--color-surface);
+  --badge-solid-ink: var(--color-accent-strong);
+}
+
+.badge-solid {
+  border-color: transparent;
+  background: var(--badge-solid);
+  color: var(--badge-solid-ink);
+}
+
+/* Counts share the badge height and type; tabular numbers keep columns steady. */
+.badge-count {
+  justify-content: center;
+  min-width: var(--size-badge-height);
+  min-height: var(--size-badge-height);
+  padding: 0 var(--space-1);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
 }
 
 .badge-dot {
@@ -2333,8 +2394,6 @@ input[type="radio"],
 
 .toolbar-count {
   margin-left: auto;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
 }
 
 /* Work-items toolbar: view tabs at the start, scope chips at the end. The
@@ -2628,12 +2687,6 @@ input[type="radio"],
 .priority-warning { color: var(--color-warning); }
 .priority-success { color: var(--color-success); }
 .priority-muted { color: var(--color-text-faint); }
-
-.badge-band {
-  border-color: transparent;
-  background: var(--color-band);
-  color: var(--color-text-secondary);
-}
 
 .table-title {
   font-weight: var(--font-weight-semibold);

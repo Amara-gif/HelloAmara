@@ -47,7 +47,7 @@ test('the toolbar In review count matches the board In Review column', () => {
   const state = demoState();
   const route = { id: 'tasks', path: '/tasks', title: 'All work items' };
   const html = renderView(route, new URLSearchParams('view=board&scope=all'), state);
-  const toolbar = html.match(/<span class="toolbar-count">([^<]*)<\/span>/)?.[1] ?? '';
+  const toolbar = html.match(/<span class="[^"]*toolbar-count[^"]*">([^<]*)<\/span>/)?.[1] ?? '';
   const inReview = Number(toolbar.match(/(\d+) in review/)?.[1]);
   const column = html.match(/data-board-column="In Review"[\s\S]*?<\/section>/)?.[0] ?? '';
 

@@ -283,13 +283,34 @@
         </div>
         <div class="card">
           <div class="card-body">
+            <p class="field-help">Soft tints are the default. Add <code>badge-solid</code> only when a solid fill is needed; <code>badge-count</code> keeps numeric badges the same height and uses tabular figures. Both themes follow the system <code>prefers-color-scheme</code> setting.</p>
             <div class="sg-row">
               <span class="badge">Neutral</span>
+              <span class="badge badge-neutral">Neutral tone</span>
               <span class="badge badge-accent">Accent</span>
               <span class="badge badge-success"><span class="badge-dot" aria-hidden="true"></span>Success</span>
               <span class="badge badge-warning">Warning</span>
               <span class="badge badge-danger">Danger</span>
+              <span class="badge badge-info">Info</span>
+              <span class="badge badge-band">Band</span>
               <span class="badge badge-muted">Muted</span>
+              <span class="badge badge-on-accent">On accent</span>
+            </div>
+            <div class="sg-row">
+              <span class="badge badge-solid badge-neutral">Neutral solid</span>
+              <span class="badge badge-solid badge-accent">Accent solid</span>
+              <span class="badge badge-solid badge-success">Success solid</span>
+              <span class="badge badge-solid badge-warning">Warning solid</span>
+              <span class="badge badge-solid badge-danger">Danger solid</span>
+              <span class="badge badge-solid badge-info">Info solid</span>
+              <span class="badge badge-solid badge-band">Band solid</span>
+              <span class="badge badge-solid badge-muted">Muted solid</span>
+            </div>
+            <div class="sg-row">
+              <span class="badge badge-count">0</span>
+              <span class="badge badge-accent badge-count">4</span>
+              <span class="badge badge-muted badge-count">12</span>
+              <span class="badge badge-count toolbar-count">3 in progress · 1 in review · 0 overdue</span>
             </div>
           </div>
         </div>
@@ -752,7 +773,7 @@
             <a class="chip" href="#sg-work-toolbar" aria-current="page">Open 12</a>
             <a class="chip" href="#sg-work-toolbar">All 20</a>
           </div>
-          <span class="toolbar-count">3 in progress · 1 in review · 0 overdue</span>
+          <span class="badge badge-count toolbar-count">3 in progress · 1 in review · 0 overdue</span>
         </div>
       </section>
 
@@ -845,28 +866,28 @@
                       <a class="nav-link" href="#sg-pills">
                         <span class="icon" aria-hidden="true">▤</span>
                         <span>Overview</span>
-                        <span class="badge badge-accent nav-count">4</span>
+                        <span class="badge badge-accent badge-count nav-count">4</span>
                       </a>
                     </td>
                     <td>
                       <a class="nav-link is-hover" href="#sg-pills">
                         <span class="icon" aria-hidden="true">▤</span>
                         <span>Overview</span>
-                        <span class="badge badge-accent nav-count">4</span>
+                        <span class="badge badge-accent badge-count nav-count">4</span>
                       </a>
                     </td>
                     <td>
                       <a class="nav-link" href="#sg-pills" aria-current="page">
                         <span class="icon" aria-hidden="true">▤</span>
                         <span>Overview</span>
-                        <span class="badge badge-accent nav-count">4</span>
+                        <span class="badge badge-accent badge-count nav-count">4</span>
                       </a>
                     </td>
                     <td>
                       <a class="nav-link is-focus-visible" href="#sg-pills">
                         <span class="icon" aria-hidden="true">▤</span>
                         <span>Overview</span>
-                        <span class="badge badge-accent nav-count">4</span>
+                        <span class="badge badge-accent badge-count nav-count">4</span>
                       </a>
                     </td>
                   </tr>
@@ -884,7 +905,7 @@
         </div>
         <div class="board">
           <section class="board-column">
-            <h2>To Do<span class="badge badge-muted">1</span></h2>
+            <h2>To Do<span class="badge badge-muted badge-count">1</span></h2>
             <article class="board-card">
               <a href="#sg-board">Example work item</a>
               <span class="row-meta">T-1 · Amara</span>
@@ -894,15 +915,15 @@
             </article>
           </section>
           <section class="board-column">
-            <h2>In Progress<span class="badge badge-muted">0</span></h2>
+            <h2>In Progress<span class="badge badge-muted badge-count">0</span></h2>
             <p class="empty-state">No items.</p>
           </section>
           <section class="board-column">
-            <h2>In Review<span class="badge badge-muted">0</span></h2>
+            <h2>In Review<span class="badge badge-muted badge-count">0</span></h2>
             <p class="empty-state">No items.</p>
           </section>
           <section class="board-column">
-            <h2>Done<span class="badge badge-muted">0</span></h2>
+            <h2>Done<span class="badge badge-muted badge-count">0</span></h2>
             <p class="empty-state">No items.</p>
           </section>
         </div>
@@ -1012,7 +1033,7 @@
               <ul class="nav-list">
                 <li><a class="nav-link" href="#sg-nav" aria-current="page">Overview</a></li>
                 <li>
-                  <a class="nav-link" href="#sg-nav">Tasks<span class="badge badge-accent nav-count">4</span></a>
+                  <a class="nav-link" href="#sg-nav">Tasks<span class="badge badge-accent badge-count nav-count">4</span></a>
                 </li>
                 <li><a class="nav-link" href="#sg-nav">Calendar</a></li>
               </ul>

@@ -60,7 +60,7 @@ test('board defaults to all statuses so the Done column shows the demo Done task
   for (const key of ['T-4', 'T-7', 'T-12', 'T-14', 'T-18']) {
     assert.match(done, new RegExp(`>${key} ·`), `${key} is missing from the default Done column`);
   }
-  assert.match(done, /<span class="badge badge-muted">5<\/span>/);
+  assert.match(done, /<span class="badge badge-muted badge-count">5<\/span>/);
   assert.match(html, /<a class="chip is-active" href="[^"]*scope=all" aria-current="page">All \d+<\/a>/);
 
   assert.match(boardColumn(html, 'In Review'), />T-3 ·/);
@@ -74,7 +74,7 @@ test('board scope=open hides Done and makes the Open chip active', () => {
   const html = renderView(route, new URLSearchParams('view=board&scope=open'), state);
   const done = boardColumn(html, 'Done');
 
-  assert.match(done, /<span class="badge badge-muted">0<\/span>/);
+  assert.match(done, /<span class="badge badge-muted badge-count">0<\/span>/);
   assert.match(done, /No items\./);
   for (const key of ['T-4', 'T-7', 'T-12', 'T-14', 'T-18']) {
     assert.doesNotMatch(done, new RegExp(`>${key} ·`));

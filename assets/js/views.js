@@ -446,7 +446,7 @@ function mywork(state, query) {
       <select class="control control-sm" name="project" aria-label="Scope by project"><option value="">All projects</option>${projectOptions}</select>
       <button class="btn btn-primary btn-sm" type="submit">Apply</button>
       ${projectFilter ? `<a class="btn btn-ghost btn-sm" href="${pageUrl('/mywork', { all: all ? 1 : '' })}">All projects</a>` : ''}
-      <span class="toolbar-count" data-mywork-count>${scopedCount} open work items in scope</span>
+      <span class="badge badge-count toolbar-count" data-mywork-count>${scopedCount} open work items in scope</span>
     </form>
     <div class="card-grid three-up">
       ${queues.map((queue) => {
@@ -486,7 +486,7 @@ function pagesPage(state, query) {
       <input class="control control-sm" type="search" name="q" value="${esc(query.get('q') ?? '')}" placeholder="Search Pages…" aria-label="Search pages" />
       <select class="control control-sm" name="project" aria-label="Filter by project"><option value="">All projects</option>${projectOptions}</select>
       <button class="btn btn-secondary btn-sm" type="submit">Search</button>
-      <span class="toolbar-count">${rows.length} Pages</span>
+      <span class="badge badge-count toolbar-count">${rows.length} Pages</span>
     </form>
     <div class="row-actions" data-page-selection>
       <button class="btn btn-danger btn-sm" type="button" data-action="delete-selected-pages" disabled>Delete selected</button>
@@ -547,7 +547,7 @@ function projectsPage(state, query) {
   const rows = state.projects.filter((project) => Boolean(project.archived) === archived);
   return `
     ${pageHead('Projects', 'The work in progress, archived work and the daily record.', `<button class="btn btn-primary" type="button" data-action="focus-add-project">${icon('folder', 16)}Add project</button>`)}
-    <div class="chip-row">${chips.join('')}<span class="toolbar-count" data-projects-open-count>${openTaskCount(state.tasks)} open work items in all projects</span></div>
+    <div class="chip-row">${chips.join('')}<span class="badge badge-count toolbar-count" data-projects-open-count>${openTaskCount(state.tasks)} open work items in all projects</span></div>
     <div class="table-wrap">
       <table class="table table-stack">
         <thead><tr><th>Project</th><th>Status</th><th>Start</th><th>Due</th><th>Open work items</th><th>Pages</th><th>Actions</th></tr></thead>
@@ -803,7 +803,7 @@ function taskBoard(state, rows) {
       ${canSendToQa(state, task) ? `<div class="row-actions"><button class="btn btn-ghost btn-sm" type="button" data-action="task-toqa" data-id="${task.id}">Send to QA</button></div>` : ''}
     </article>`;
   }).join('') || empty('No items.');
-  return `<div class="board">${BOARD_COLUMNS.map((column) => `<section class="board-column" data-board-column="${esc(column)}"><h2>${column}<span class="badge badge-muted">${rows.filter((task) => columnForTask(state, task) === column).length}</span></h2>${cards(column)}</section>`).join('')}</div>${boardHealth(state)}`;
+  return `<div class="board">${BOARD_COLUMNS.map((column) => `<section class="board-column" data-board-column="${esc(column)}"><h2>${column}<span class="badge badge-muted badge-count">${rows.filter((task) => columnForTask(state, task) === column).length}</span></h2>${cards(column)}</section>`).join('')}</div>${boardHealth(state)}`;
 }
 
 const pad2 = (value) => String(value).padStart(2, '0');
@@ -1008,7 +1008,7 @@ function workItemsBody(state, query, options = {}) {
         <a class="chip${scope === 'open' ? ' is-active' : ''}" href="${url({ scope: 'open' })}"${scope === 'open' ? ' aria-current="page"' : ''}>Open ${openCount}</a>
         <a class="chip${scope === 'all' ? ' is-active' : ''}" href="${url({ scope: 'all' })}"${scope === 'all' ? ' aria-current="page"' : ''}>All ${allCount}</a>
       </div>
-      <span class="toolbar-count">${inProgressTaskCount(rows)} in progress · ${inReviewCount} in review · ${overdue} overdue</span>
+      <span class="badge badge-count toolbar-count">${inProgressTaskCount(rows)} in progress · ${inReviewCount} in review · ${overdue} overdue</span>
     </div>
     <form class="toolbar" data-form="task-filters" data-path="${esc(path)}">
       <input type="hidden" name="view" value="${view}" /><input type="hidden" name="scope" value="${scope}" /><input type="hidden" name="m" value="${esc(monthParam)}" />${tab ? `<input type="hidden" name="tab" value="${esc(tab)}" />` : ''}
@@ -1195,7 +1195,7 @@ function bugsPage(state, query) {
       <button class="btn btn-primary btn-sm" type="submit">Apply</button><a class="btn btn-ghost btn-sm" href="#/bugs">Reset</a>
     </form>
     <div class="toolbar" aria-label="Bulk actions">
-      <span class="toolbar-count" data-bug-selection aria-live="polite">0 selected</span>
+      <span class="badge badge-count toolbar-count" data-bug-selection aria-live="polite">0 selected</span>
       <button class="btn btn-danger btn-sm" type="button" data-action="delete-selected-bugs" disabled>Delete selected</button>
     </div>
     <div class="table-wrap"><table class="table table-stack">

@@ -113,7 +113,7 @@ function buildNav(state) {
             <a class="nav-link" href="#${route.path}" data-route="${route.id}">
               ${icon(route.icon)}
               <span>${route.label}</span>
-              ${route.id === 'tasks' ? '<span class="badge badge-accent nav-count" data-task-count aria-label="0 open work items" title="0 open work items" hidden>0</span>' : ''}
+              ${route.id === 'tasks' ? '<span class="badge badge-accent badge-count nav-count" data-task-count aria-label="0 open work items" title="0 open work items" hidden>0</span>' : ''}
             </a>
           </li>
           ${route.id === 'projects' ? projectSublist(state) : ''}
