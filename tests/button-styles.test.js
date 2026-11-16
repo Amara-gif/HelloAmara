@@ -135,3 +135,138 @@ test('styleguide.html shows default, -sm, -md and icon buttons', () => {
   assert.match(styleguide, /class="[^"]*\bbtn-md\b[^"]*"/, 'medium button alias example');
   assert.match(styleguide, /class="[^"]*\bbtn-icon\b[^"]*"/, 'icon button example');
 });
+
+const variants = [
+  ['default', '.btn'],
+  ['secondary', '.btn-secondary'],
+  ['primary', '.btn-primary'],
+  ['ghost', '.btn-ghost'],
+  ['danger', '.btn-danger'],
+];
+
+function hasSelectorStarting(prefix) {
+  return componentRules.some((rule) =>
+    splitSelectors(rule.selector).some((selector) => selector.startsWith(prefix)),
+  );
+}
+
+test('every variant has a hover rule guarded by :not(:disabled) and disabled rules', () => {
+  for (const [name, selector] of variants) {
+    assert.ok(
+      hasSelectorStarting(`${selector}:hover:not(:disabled)`),
+      `${name} has :hover:not(:disabled)`,
+    );
+    assert.ok(hasSelectorStarting(`${selector}:active:not(:disabled)`), `${name} has :active:not(:disabled)`);
+    assert.ok(hasSelectorStarting(`${selector}:focus-visible`), `${name} has :focus-visible`);
+    assert.ok(hasSelectorStarting(`${selector}:disabled`), `${name} has a :disabled rule`);
+    assert.ok(
+      hasSelectorStarting(`${selector}[aria-disabled="true"]`),
+      `${name} has an [aria-disabled="true"] rule`,
+    );
+    assert.ok(
+      hasSelectorStarting(`${selector}[aria-pressed="true"]`),
+      `${name} has an [aria-pressed="true"] rule`,
+    );
+    assert.ok(
+      hasSelectorStarting(`${selector}[aria-busy="true"]`),
+      `${name} has an [aria-busy="true"] rule`,
+    );
+  }
+});
+
+test('no hover rule targets an unguarded button', () => {
+  const unguarded = componentRules.flatMap((rule) =>
+    splitSelectors(rule.selector).filter(
+      (selector) =>
+        /^\.(?:btn(?:-[a-z]+)?|link-button):hover/.test(selector) &&
+        !selector.includes(':not(:disabled)'),
+    ),
+  );
+  assert.deepEqual(unguarded, []);
+});
+
+test('.btn-secondary is a named alias for the default button', () => {
+  const base = ruleWithSelector('.btn');
+  assert.ok(base, 'components.css defines .btn');
+  assert.ok(
+    splitSelectors(base.selector).includes('.btn-secondary'),
+    '.btn-secondary is an alias of the default button',
+  );
+  assert.equal(
+    ruleWithSelector('.btn-secondary').body.trim(),
+    base.body.trim(),
+    '.btn-secondary equals the default button',
+  );
+});
+
+test('.btn-link and .link-button share one look and all states', () => {
+  const base = componentRules.find((rule) =>
+    splitSelectors(rule.selector).includes('.btn-link'),
+  );
+  assert.ok(base, 'components.css defines .btn-link');
+  assert.ok(
+    splitSelectors(base.selector).includes('.link-button'),
+    '.btn-link and .link-button share the base rule',
+  );
+
+  for (const state of [':hover:not(:disabled)', ':active:not(:disabled)', ':focus-visible']) {
+    assert.ok(
+      componentRules.some((rule) => {
+        const selectors = splitSelectors(rule.selector);
+        return (
+          selectors.some((selector) => selector.startsWith(`.btn-link${state}`)) &&
+          selectors.some((selector) => selector.startsWith(`.link-button${state}`))
+        );
+      }),
+      `.btn-link and .link-button share ${state}`,
+    );
+  }
+
+  assert.ok(hasSelectorStarting('.btn-link:disabled'), '.btn-link has :disabled');
+  assert.ok(hasSelectorStarting('.link-button:disabled'), '.link-button has :disabled');
+  assert.ok(
+    hasSelectorStarting('.btn-link[aria-pressed="true"]'),
+    '.btn-link has [aria-pressed="true"]',
+  );
+  assert.ok(
+    hasSelectorStarting('.link-button[aria-pressed="true"]'),
+    '.link-button has [aria-pressed="true"]',
+  );
+  assert.ok(hasSelectorStarting('.btn-link[aria-busy="true"]'), '.btn-link has [aria-busy="true"]');
+  assert.ok(
+    hasSelectorStarting('.link-button[aria-busy="true"]'),
+    '.link-button has [aria-busy="true"]',
+  );
+});
+
+test('the busy spinner uses a token colour and reduced motion stops it', () => {
+  const spinner = componentRules.find((rule) =>
+    splitSelectors(rule.selector).includes('.btn[aria-busy="true"]::before'),
+  );
+  assert.ok(spinner, 'components.css styles the busy spinner');
+  assert.match(
+    spinner.body,
+    /border:\s*calc\(var\(--border-width\)\s*\*\s*2\)\s*solid\s+var\(--color-[a-z0-9-]+\)/,
+    'the spinner border uses a colour token',
+  );
+  assert.match(spinner.body, /animation:\s*btn-spin\s+calc\(var\(--duration\)\s*\*\s*5\)/, 'the spinner animates');
+
+  const reduced = stripComments(css).match(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\}/);
+  assert.ok(reduced, 'components.css keeps the reduced-motion block');
+  assert.match(reduced[1], /\.btn\[aria-busy="true"\]::before/, 'reduced motion targets the spinner');
+  assert.match(reduced[1], /animation:\s*none/, 'reduced motion stops the spinner animation');
+});
+
+test('styleguide.html documents all button variants and states', () => {
+  assert.match(styleguide, /id="sg-button-states-title"[^>]*>Button states</);
+  for (const state of ['Default', 'Hover', 'Active', 'Focus-visible', 'Disabled', 'Pressed', 'Busy']) {
+    assert.match(styleguide, new RegExp(`<th scope="col">${state}</th>`), `${state} column`);
+  }
+  for (const variant of ['btn-secondary', 'btn-primary', 'btn-ghost', 'btn-danger', 'btn-link', 'link-button']) {
+    assert.match(
+      styleguide,
+      new RegExp(`class="[^"]*\\b${variant}\\b[^"]*"`),
+      `${variant} example`,
+    );
+  }
+});

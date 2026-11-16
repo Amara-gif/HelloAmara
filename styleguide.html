@@ -108,19 +108,128 @@
       <section class="section" aria-labelledby="sg-buttons-title">
         <div class="section-head">
           <h2 id="sg-buttons-title">Buttons</h2>
-          <p>One button base with primary, ghost, danger and icon variants. Use <code>-sm</code>, the default or <code>-md</code> to make the size explicit; touch targets stay at least 44 px.</p>
+          <p>One button base with secondary (the default), primary, ghost, danger, link and icon variants. Use <code>-sm</code>, the default or <code>-md</code> to make the size explicit; touch targets stay at least 44 px.</p>
         </div>
         <div class="card">
           <div class="card-body">
             <div class="sg-row">
               <button class="btn" type="button">Default</button>
+              <button class="btn btn-secondary" type="button">Secondary</button>
               <button class="btn btn-md" type="button">Medium</button>
               <button class="btn btn-sm" type="button">Small</button>
               <button class="btn btn-primary" type="button">Primary</button>
               <button class="btn btn-ghost" type="button">Ghost</button>
               <button class="btn btn-danger" type="button">Danger</button>
+              <button class="btn-link" type="button">Link</button>
               <button class="btn btn-icon" type="button" aria-label="Icon button">+</button>
               <button class="btn" type="button" disabled>Disabled</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="sg-button-states-title">
+        <div class="section-head">
+          <h2 id="sg-button-states-title">Button states</h2>
+          <p>
+            Every variant shares the same state model. Hover and active are guarded by
+            <code>:not(:disabled)</code>, so a disabled button never changes. Focus-visible gets the
+            shared token outline, <code>aria-pressed</code> adds the pressed ring, and
+            <code>aria-busy</code> shows the CSS-only spinner. Preview classes
+            <code>is-hover</code>, <code>is-active</code> and <code>is-focus-visible</code> make static
+            samples visible without interaction.
+          </p>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <div class="table-wrap">
+              <table class="table btn-state-table">
+                <caption class="sr-only">Button state matrix for every variant</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Variant</th>
+                    <th scope="col">Default</th>
+                    <th scope="col">Hover</th>
+                    <th scope="col">Active</th>
+                    <th scope="col">Focus-visible</th>
+                    <th scope="col">Disabled</th>
+                    <th scope="col">Pressed</th>
+                    <th scope="col">Busy</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th scope="row">Default</th>
+                    <td><button class="btn" type="button">Default</button></td>
+                    <td><button class="btn is-hover" type="button">Hover</button></td>
+                    <td><button class="btn is-active" type="button">Active</button></td>
+                    <td><button class="btn is-focus-visible" type="button">Focus</button></td>
+                    <td><button class="btn" type="button" disabled>Disabled</button></td>
+                    <td><button class="btn" type="button" aria-pressed="true">Pressed</button></td>
+                    <td><button class="btn" type="button" aria-busy="true">Busy</button></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Secondary</th>
+                    <td><button class="btn btn-secondary" type="button">Secondary</button></td>
+                    <td><button class="btn btn-secondary is-hover" type="button">Hover</button></td>
+                    <td><button class="btn btn-secondary is-active" type="button">Active</button></td>
+                    <td><button class="btn btn-secondary is-focus-visible" type="button">Focus</button></td>
+                    <td><button class="btn btn-secondary" type="button" disabled>Disabled</button></td>
+                    <td><button class="btn btn-secondary" type="button" aria-pressed="true">Pressed</button></td>
+                    <td><button class="btn btn-secondary" type="button" aria-busy="true">Busy</button></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Primary</th>
+                    <td><button class="btn btn-primary" type="button">Primary</button></td>
+                    <td><button class="btn btn-primary is-hover" type="button">Hover</button></td>
+                    <td><button class="btn btn-primary is-active" type="button">Active</button></td>
+                    <td><button class="btn btn-primary is-focus-visible" type="button">Focus</button></td>
+                    <td><button class="btn btn-primary" type="button" disabled>Disabled</button></td>
+                    <td><button class="btn btn-primary" type="button" aria-pressed="true">Pressed</button></td>
+                    <td><button class="btn btn-primary" type="button" aria-busy="true">Busy</button></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Ghost</th>
+                    <td><button class="btn btn-ghost" type="button">Ghost</button></td>
+                    <td><button class="btn btn-ghost is-hover" type="button">Hover</button></td>
+                    <td><button class="btn btn-ghost is-active" type="button">Active</button></td>
+                    <td><button class="btn btn-ghost is-focus-visible" type="button">Focus</button></td>
+                    <td><button class="btn btn-ghost" type="button" disabled>Disabled</button></td>
+                    <td><button class="btn btn-ghost" type="button" aria-pressed="true">Pressed</button></td>
+                    <td><button class="btn btn-ghost" type="button" aria-busy="true">Busy</button></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Danger</th>
+                    <td><button class="btn btn-danger" type="button">Danger</button></td>
+                    <td><button class="btn btn-danger is-hover" type="button">Hover</button></td>
+                    <td><button class="btn btn-danger is-active" type="button">Active</button></td>
+                    <td><button class="btn btn-danger is-focus-visible" type="button">Focus</button></td>
+                    <td><button class="btn btn-danger" type="button" disabled>Disabled</button></td>
+                    <td><button class="btn btn-danger" type="button" aria-pressed="true">Pressed</button></td>
+                    <td><button class="btn btn-danger" type="button" aria-busy="true">Busy</button></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Link</th>
+                    <td><button class="btn-link" type="button">Link</button></td>
+                    <td><button class="btn-link is-hover" type="button">Hover</button></td>
+                    <td><button class="btn-link is-active" type="button">Active</button></td>
+                    <td><button class="btn-link is-focus-visible" type="button">Focus</button></td>
+                    <td><button class="btn-link" type="button" disabled>Disabled</button></td>
+                    <td><button class="btn-link" type="button" aria-pressed="true">Pressed</button></td>
+                    <td><button class="btn-link" type="button" aria-busy="true">Busy</button></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Link alias</th>
+                    <td><button class="link-button" type="button">Link alias</button></td>
+                    <td><button class="link-button is-hover" type="button">Hover</button></td>
+                    <td><button class="link-button is-active" type="button">Active</button></td>
+                    <td><button class="link-button is-focus-visible" type="button">Focus</button></td>
+                    <td><button class="link-button" type="button" disabled>Disabled</button></td>
+                    <td><button class="link-button" type="button" aria-pressed="true">Pressed</button></td>
+                    <td><button class="link-button" type="button" aria-busy="true">Busy</button></td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
