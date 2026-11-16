@@ -134,8 +134,9 @@ function applyAppearance(settings) {
 
 function render() {
   const { path, query } = readLocation();
-  const route = routeForPath(path);
   const state = getState();
+  const route = routeForPath(path, state);
+  if (route.redirectFrom) window.history.replaceState(null, '', `#${route.path}`);
   main.innerHTML = renderView(route, query, state);
   document.title = `${route.title} · My Platform`;
   buildNav(state);

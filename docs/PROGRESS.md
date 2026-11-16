@@ -108,7 +108,7 @@ Phone/tablet PNGs are listed for completeness; they are not a layout target.
 | Account picker (pre-shell) | done | Local accounts; Test account seeds demo data; empty accounts get empty DBs. |
 | `#/page/:id` | partial | View + rail + simple markdown; no revisions/export. |
 | `#/settings/language` etc. | partial | Forms save to `meta.settings`; depth below inventory §3.15. |
-| `#/go/T-n`, `#/go/WD-n` | missing | Not routed. |
+| `#/go/T-n`, `#/go/WD-n` | done | Resolves case-insensitive `T-`/`WD-` keys to task/bug detail; unknown keys show Not found. |
 | Tasks `view=calendar` / `timeline` | missing | Placeholder empty cards only. |
 | Export / import JSON | missing | Sidebar copy mentions export; no implementation. |
 | PWA (`manifest`, `sw.js`) | missing | |

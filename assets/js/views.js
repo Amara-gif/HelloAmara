@@ -734,6 +734,7 @@ export function renderView(route, query, state) {
     case 'page-new': return pageEditor(state, route);
     case 'bug-new': return bugNew(state);
     case 'rating-trend': return ratingPage(state);
+    case 'go': return notFound(route.path);
     default: return notFound(route.path);
   }
 }

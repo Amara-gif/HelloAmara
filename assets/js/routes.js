@@ -31,6 +31,7 @@ export const ROUTES = {
   'project-detail': { pattern: '/project/:key', title: 'Project', group: 'Projects', icon: 'folder', nav: 'projects' },
   'page-edit': { pattern: '/page/:id/edit', title: 'Page editor', group: 'Pages', icon: 'page', nav: 'pages' },
   'page-view': { pattern: '/page/:id', title: 'Page', group: 'Pages', icon: 'page', nav: 'pages' },
+  go: { pattern: '/go/:key', title: 'Redirect', group: '', icon: 'arrow', nav: '' },
 };
 
 export const SETTINGS_LINKS = [
@@ -67,13 +68,41 @@ function matchPattern(pattern, path) {
   return params;
 }
 
-export function routeForPath(path) {
+function notFoundRoute(path, params) {
+  return { id: 'not-found', path, label: 'Not found', title: 'Page not found', group: '', icon: 'info', nav: '', ...(params ? { params } : {}) };
+}
+
+// Readable keys are case-insensitive for the T-/WD- prefix (inventory §7).
+export function findReadableKeyTarget(state, rawKey) {
+  const match = /^(T|WD)-(\d+)$/i.exec(String(rawKey ?? '').trim());
+  if (!match || !state) return null;
+  const prefix = match[1].toUpperCase();
+  const key = `${prefix}-${match[2]}`;
+  const rows = prefix === 'T' ? state.tasks : state.bugs;
+  const row = (rows ?? []).find((item) => String(item.key ?? '').toUpperCase() === key);
+  if (!row) return null;
+  return {
+    routeId: prefix === 'T' ? 'task-detail' : 'bug-detail',
+    path: `/${prefix === 'T' ? 'task' : 'bug'}/${encodeURIComponent(row.id)}`,
+    params: { id: row.id },
+  };
+}
+
+function goRoute(path, key, state) {
+  const target = findReadableKeyTarget(state, key);
+  if (!target) return notFoundRoute(path, { key });
+  return { ...ROUTES[target.routeId], id: target.routeId, ...target, path: target.path, redirectFrom: path };
+}
+
+export function routeForPath(path, state) {
   const exact = ROUTE_LIST.find((route) => route.path === path);
   if (exact) return exact;
-  const dynamic = ROUTE_LIST.filter((route) => route.pattern).sort((a, b) => b.pattern.length - a.pattern.length);
+  const goParams = matchPattern(ROUTES.go.pattern, path);
+  if (goParams) return goRoute(path, goParams.key, state);
+  const dynamic = ROUTE_LIST.filter((route) => route.pattern && route.id !== 'go').sort((a, b) => b.pattern.length - a.pattern.length);
   for (const route of dynamic) {
     const params = matchPattern(route.pattern, path);
     if (params) return { ...route, params, path };
   }
-  return { id: 'not-found', path, label: 'Not found', title: 'Page not found', group: '', icon: 'info', nav: '' };
+  return notFoundRoute(path);
 }
