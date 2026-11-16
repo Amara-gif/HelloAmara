@@ -1,6 +1,7 @@
 import { SETTINGS_LINKS } from './routes.js';
 import { icon } from './icons.js';
 import { renderBarChart, renderLineChart, renderParetoChart } from './chart.js';
+import { occurrences, occursOn } from './schedule.js';
 import {
   TASK_WORKFLOW_STATUSES,
   TASK_WAIVER_STATUSES,
@@ -107,17 +108,16 @@ function miniCalendar(state) {
   const first = new Date(year, month, 1);
   const days = new Date(year, month + 1, 0).getDate();
   const lead = (first.getDay() + 6) % 7;
+  const monthValue = `${year}-${String(month + 1).padStart(2, '0')}`;
   const marks = new Set();
-  for (const event of state.events) {
-    const d = new Date(`${event.date}T12:00:00`);
-    if (d.getFullYear() === year && d.getMonth() === month) marks.add(d.getDate());
+  for (const occurrence of occurrences(state.events, `${monthValue}-01`, `${monthValue}-${pad2(days)}`)) {
+    marks.add(Number(occurrence.date.slice(8, 10)));
   }
   for (const task of state.tasks) {
     if (!task.due || task.status === 'Done') continue;
     const d = new Date(`${task.due}T12:00:00`);
     if (d.getFullYear() === year && d.getMonth() === month) marks.add(d.getDate());
   }
-  const monthValue = `${year}-${String(month + 1).padStart(2, '0')}`;
   const monthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   const cells = [];
   for (let i = 0; i < lead; i += 1) cells.push('<span class="calendar-day is-outside"></span>');
@@ -147,8 +147,8 @@ function agendaRows(state) {
   for (const project of state.projects) {
     if (project.status !== 'Done' && project.due && !project.archived) rows.push({ date: project.due, kind: 'Project', title: project.name, href: `#/project/${project.key}`, tone: 'project' });
   }
-  for (const event of state.events) {
-    if (event.date) rows.push({ date: event.date, time: event.time, kind: event.kind, title: event.title, href: event.taskId ? `#/task/${event.taskId}` : '', tone: 'event', link: event.link, eventId: event.id, note: event.note });
+  for (const event of occurrences(state.events, addDays(todayIso, -31), addDays(todayIso, 366))) {
+    rows.push({ date: event.date, time: event.time, kind: event.kind, title: event.title, href: event.taskId ? `#/task/${event.taskId}` : '', tone: 'event', link: event.link, eventId: event.seriesId || event.id, note: event.note });
   }
   rows.sort((a, b) => `${a.date}${a.time ?? ''}`.localeCompare(`${b.date}${b.time ?? ''}`));
   const overdueAll = rows.filter((row) => row.date < todayIso);
@@ -950,7 +950,8 @@ function calendarItems(state, date, projectFilter) {
     if (project.due === date && project.status !== 'Done' && !project.archived && (!projectFilter || project.id === projectFilter)) items.push({ title: project.name, href: `#/project/${project.key}`, kind: 'Project', tone: 'project' });
   }
   for (const event of state.events) {
-    if (event.date === date && (!projectFilter || event.projectId === projectFilter)) items.push({ title: event.title, href: event.taskId ? `#/task/${event.taskId}` : '', kind: event.kind, tone: 'event', link: event.link, id: event.id, time: event.time });
+    if (!occursOn(event, date) || (projectFilter && event.projectId !== projectFilter)) continue;
+    items.push({ title: event.title, href: event.taskId ? `#/task/${event.taskId}` : '', kind: event.kind, tone: 'event', link: event.link, id: event.seriesId || event.id, time: event.time });
   }
   return items;
 }
@@ -971,7 +972,7 @@ function calendarPage(state, query) {
     const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const items = calendarItems(state, date, projectFilter);
     const isToday = date === today();
-    cells.push(`<div class="calendar-day${isToday ? ' is-today' : ''}${items.length ? ' has-items' : ''}"><span class="calendar-date">${day}</span>${items.slice(0, 3).map((item) => item.href ? `<a class="calendar-item calendar-item-${item.tone}" href="${item.href}">${esc(item.title)}</a>` : `<span class="calendar-item calendar-item-${item.tone}">${esc(item.title)}</span>`).join('')}${items.length > 3 ? `<span class="calendar-more">+${items.length - 3}</span>` : ''}</div>`);
+    cells.push(`<div class="calendar-day${isToday ? ' is-today' : ''}${items.length ? ' has-items' : ''}" data-calendar-date="${date}"><span class="calendar-date">${day}</span>${items.slice(0, 3).map((item) => item.href ? `<a class="calendar-item calendar-item-${item.tone}" href="${item.href}">${esc(item.title)}</a>` : `<span class="calendar-item calendar-item-${item.tone}">${esc(item.title)}</span>`).join('')}${items.length > 3 ? `<span class="calendar-more">+${items.length - 3}</span>` : ''}</div>`);
   }
   const week = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const nextSeven = [];
@@ -1000,7 +1001,7 @@ function calendarPage(state, query) {
     </section>
     <section class="card">
       <div class="card-head"><h2>Next seven days</h2><span class="badge badge-muted">${nextSeven.length} items</span></div>
-      <div class="card-body">${nextSeven.length ? `<div class="row-list">${nextSeven.map((item) => `<div class="row-item"><span class="row-date">${fmt(item.date)}</span><span class="row-main"><span class="row-title">${item.href ? `<a href="${item.href}">${esc(item.title)}</a>` : esc(item.title)}</span><span class="row-meta">${esc(item.kind)}${item.time ? ` · ${esc(item.time)}` : ''}</span></span><span class="badge badge-muted">${esc(item.kind)}</span>${item.link ? `<a class="btn btn-ghost btn-sm" href="${esc(item.link)}" target="_blank" rel="noreferrer">Join</a>` : ''}${item.id ? `<button class="btn btn-ghost btn-sm" type="button" data-action="delete-event" data-id="${item.id}">Delete</button>` : ''}</div>`).join('')}</div>` : empty('Nothing scheduled in the next seven days.')}</div>
+      <div class="card-body">${nextSeven.length ? `<div class="row-list">${nextSeven.map((item) => `<div class="row-item"><span class="row-date">${fmt(item.date)}</span><span class="row-main"><span class="row-title">${item.href ? `<a href="${item.href}">${esc(item.title)}</a>` : esc(item.title)}</span><span class="row-meta">${esc(item.kind)}${item.time ? ` · ${esc(item.time)}` : ''}</span></span><span class="badge badge-muted">${esc(item.kind)}</span>${item.link ? `<a class="btn btn-ghost btn-sm" href="${esc(item.link)}" target="_blank" rel="noreferrer">Join</a>` : ''}${item.id ? `<button class="btn btn-ghost btn-sm" type="button" data-action="delete-event" data-id="${esc(item.id)}" data-series-id="${esc(item.id)}">Delete</button>` : ''}</div>`).join('')}</div>` : empty('Nothing scheduled in the next seven days.')}</div>
     </section>`;
 }
 
@@ -1423,6 +1424,7 @@ export function renderCreateDialog(state, preset = {}) {
       <div class="field"><label for="create-event-kind">Kind</label><select id="create-event-kind" class="select" name="kind">${['Meeting', 'Reminder', 'Task', 'Deadline', 'Other'].map((value) => option(value, 'Reminder')).join('')}</select></div>
       <div class="field"><label for="create-event-link">Meeting link</label><input id="create-event-link" name="link" type="url" /></div>
       <div class="field"><label for="create-event-repeat">Repeat</label><select id="create-event-repeat" class="select" name="repeat">${[['', 'Does not repeat'], ['daily', 'Daily'], ['weekdays', 'Weekdays'], ['weekly', 'Weekly'], ['monthly', 'Monthly'], ['yearly', 'Yearly']].map(([value, label]) => option(value, '', label)).join('')}</select></div>
+      <div class="field"><label for="create-event-until">Repeat until</label><input id="create-event-until" name="until" type="date" /><p class="field-help">Optional. The last day this event repeats.</p></div>
       <div class="field"><label for="create-event-remind">Remind</label><select id="create-event-remind" class="select" name="remind">${[['0', 'At start time'], ['5', '5 minutes before'], ['15', '15 minutes before'], ['30', '30 minutes before'], ['60', '1 hour before'], ['1440', '1 day before']].map(([value, label]) => option(value, '5', label)).join('')}</select></div>
       <div class="field"><label for="create-event-project">Project</label><select id="create-event-project" class="select" name="projectId"><option value="">No project</option>${state.projects.filter((p) => !p.archived).map((p) => option(p.id, eventProject, `${p.key} ${p.name}`)).join('')}</select></div>
       <div class="field field-wide"><label for="create-event-note">Note</label><textarea id="create-event-note" name="note" rows="2"></textarea></div>

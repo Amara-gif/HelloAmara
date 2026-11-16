@@ -513,11 +513,13 @@ export async function addBugComment(id, body) {
 
 export async function createEvent(input) {
   const now = nowIso();
+  const id = newId('event');
   const event = {
-    id: newId('event'), date: input.date, time: input.time || '', end: input.end || '',
+    id, seriesId: input.seriesId || id,
+    date: input.date, time: input.time || '', end: input.end || '',
     title: input.title, kind: input.kind || 'Reminder', note: input.note || '',
     link: input.link || '', repeat: input.repeat || '', until: input.until || '',
-    remind: input.remind || '5', projectId: input.projectId || '', taskId: input.taskId || '',
+    remind: input.remind ?? '5', projectId: input.projectId || '', taskId: input.taskId || '',
     createdAt: now, updatedAt: now, deletedAt: null,
   };
   await putRecord('events', event);
@@ -525,10 +527,17 @@ export async function createEvent(input) {
   return event;
 }
 
+// Delete every live occurrence row for a series. Expanded occurrences always
+// point back at the anchor row, so soft-deleting the series id hides the whole
+// repeat without touching other events.
 export async function deleteEvent(id) {
-  const event = state.events.find((row) => row.id === id);
-  if (!event) return;
-  await putRecord('events', { ...event, deletedAt: nowIso(), updatedAt: nowIso() });
+  const key = String(id ?? '');
+  const target = state.events.find((row) => row.id === key) ?? state.events.find((row) => row.seriesId === key);
+  if (!target) return;
+  const seriesId = target.seriesId || target.id;
+  const rows = state.events.filter((row) => row.id === target.id || row.id === seriesId || (row.seriesId && row.seriesId === seriesId));
+  const now = nowIso();
+  await Promise.all(rows.map((row) => putRecord('events', { ...row, deletedAt: now, updatedAt: now })));
   state = await readState();
 }
 

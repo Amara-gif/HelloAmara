@@ -12,6 +12,7 @@ import { icon } from './icons.js';
 import { updateTaskBadge } from './nav-badge.js';
 import { openModal, toast } from './ui.js';
 import { taskFormPatch } from './task-form.js';
+import { dueReminders, notificationText } from './schedule.js';
 
 const shell = document.getElementById('shell');
 const authScreen = document.getElementById('auth-screen');
@@ -36,6 +37,8 @@ let sidebarPinned = readPreference(SIDEBAR_PIN_KEY);
 let lastFocused = null;
 let createTab = 'task';
 let createClose = null;
+let reminderTimer = null;
+const notifiedReminders = new Set();
 
 // Pin always wins if an older session somehow stored a folded, pinned sidebar.
 if (sidebarPinned && sidebarFolded) {
@@ -57,6 +60,28 @@ function writePreference(key, value) {
   } catch {
     // Storage can be unavailable in private or embedded contexts; keep the session state.
   }
+}
+
+function pollReminders() {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return [];
+  const current = getState();
+  const now = new Date();
+  const due = dueReminders(current.events ?? [], now, new Date(now.getTime() + 3600000), { sent: notifiedReminders });
+  for (const reminder of due) {
+    notifiedReminders.add(reminder.reminderKey);
+    try {
+      new Notification(`Reminder · ${reminder.title}`, { body: notificationText(reminder), tag: reminder.reminderKey });
+    } catch {
+      // A browser may deny the constructor even after permission; polling stays quiet.
+    }
+  }
+  return due;
+}
+
+function startReminderTimer() {
+  if (reminderTimer) return;
+  pollReminders();
+  reminderTimer = setInterval(pollReminders, 60000);
 }
 
 function settingsSublist() {
@@ -260,6 +285,7 @@ async function boot() {
     shell.hidden = false;
     authScreen.hidden = true;
     if (fab) fab.hidden = false;
+    startReminderTimer();
     render();
   } catch (error) {
     console.error(error);
@@ -540,9 +566,22 @@ document.addEventListener('click', async (event) => {
   } else if (action === 'delete-event') {
     openModal({ title: 'Delete this event?', message: 'This removes the event from this device.', confirmLabel: 'Delete', tone: 'danger', onConfirm: async () => { await deleteEvent(id); render(); toast('Event deleted.', { tone: 'success' }); } });
   } else if (action === 'enable-reminders') {
-    if ('Notification' in window) {
-      const result = await Notification.requestPermission();
-      toast(result === 'granted' ? 'Reminders enabled.' : 'Notification permission was not granted.', { tone: result === 'granted' ? 'success' : 'danger' });
+    if (typeof Notification !== 'undefined') {
+      let result = Notification.permission;
+      if (result === 'default') {
+        try {
+          result = await Notification.requestPermission();
+        } catch {
+          result = 'denied';
+        }
+      }
+      if (result === 'granted') {
+        startReminderTimer();
+        const due = pollReminders();
+        toast(due.length ? `${due.length} reminder${due.length === 1 ? '' : 's'} due soon.` : 'Reminders enabled. The app checks due reminders every minute.', { tone: 'success' });
+      } else {
+        toast('Notification permission was not granted.', { tone: 'danger' });
+      }
     } else toast('This browser does not support notifications.', { tone: 'danger' });
   } else if (action === 'print') window.print();
   else if (action === 'open-folder') toast('Folder access is not available in a browser.', { tone: 'danger' });
