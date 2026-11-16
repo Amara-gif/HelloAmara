@@ -111,6 +111,40 @@ test('AI key test and Fill gaps stay local in the settings view text', async () 
   assert.match(html, /No network AI request is sent/);
 });
 
+test('Appearance offers six palette presets, live preview and a deferred install', async () => {
+  await boot();
+  const html = htmlFor('settings-appearance', '/settings/appearance');
+  const presets = [...html.matchAll(/data-palette="([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(presets, ['soft', 'apple', 'ocean', 'sunset', 'candy', 'graphite']);
+  assert.match(html, /Live preview/);
+  assert.match(html, /<span class="btn btn-primary btn-sm"[^>]*>Primary<\/span>/);
+  assert.match(html, /<span class="btn btn-sm"[^>]*>Secondary<\/span>/);
+  assert.match(html, /Selected chip/);
+  assert.match(html, /name="preset"/);
+  assert.match(html, /name="radiusBtn"/);
+  assert.match(html, /name="radiusCard"/);
+  assert.match(html, /name="glass"/);
+  assert.match(html, /data-action="reset-theme"/);
+  assert.match(html, /Coming with PWA/);
+  assert.match(html, /disabled aria-disabled="true"/);
+  assert.match(html, /Save theme/);
+});
+
+test('a saved appearance preset survives a database reopen', async () => {
+  const account = await boot();
+  const settings = structuredClone(getState().settings);
+  settings.appearance = { preset: 'ocean', primary: '', radiusBtn: 12, radiusCard: 20, glass: 0.5, enableGlass: false };
+  await saveSettings(settings);
+
+  closeAccountDb();
+  await start(account);
+
+  assert.deepEqual(getState().settings.appearance, settings.appearance);
+  const html = htmlFor('settings-appearance', '/settings/appearance');
+  assert.match(html, /data-palette="ocean" data-action="apply-palette" aria-pressed="true"/);
+  assert.match(html, /name="radiusBtn" type="range" min="0" max="20" step="1" value="12"/);
+});
+
 test('a changed dispatch rule survives closing and reopening the account database', async () => {
   const account = await boot();
   const settings = structuredClone(getState().settings);

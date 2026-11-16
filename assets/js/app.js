@@ -7,7 +7,7 @@ import {
   closeOrder, reopenOrder, saveSettings, restoreQaMark, AI_LIMIT_DEFAULTS,
 } from './data.js';
 import { readLocation, routeForPath, groupRoutes, SETTINGS_LINKS } from './routes.js';
-import { renderView, mountView, renderAccountScreen, renderCreateDialog, bugPrefill, canSendToQa, qaOwnerName, agentBrief, renderAgentTodo } from './views.js';
+import { renderView, mountView, renderAccountScreen, renderCreateDialog, bugPrefill, canSendToQa, qaOwnerName, agentBrief, renderAgentTodo, PALETTE_PRESETS } from './views.js';
 import { icon } from './icons.js';
 import { updateTaskBadge } from './nav-badge.js';
 import { openModal, toast } from './ui.js';
@@ -232,15 +232,107 @@ function updateNav(route) {
   updateTaskBadge(nav.querySelector('[data-task-count]'), getState().tasks);
 }
 
+const PALETTE_BY_ID = new Map(PALETTE_PRESETS.map((preset) => [preset.id, preset]));
+const DEFAULT_APPEARANCE = { preset: 'soft', primary: '', radiusBtn: 8, radiusCard: 16, glass: 0.25, enableGlass: true };
+const APPEARANCE_VARS = [
+  '--color-card-header',
+  '--color-accent',
+  '--color-accent-strong',
+  '--color-accent-strong-hover',
+  '--color-accent-soft',
+  '--color-nav-active',
+  '--color-focus',
+  '--color-on-accent',
+  '--color-on-card-header',
+];
+
+function appearanceNumber(value, fallback, min, max) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+}
+
+function applyPaletteTokens(root, preset) {
+  const primary = `var(${preset.primary})`;
+  const strong = `var(${preset.strong})`;
+  root.style.setProperty('--color-card-header', primary);
+  root.style.setProperty('--color-accent', primary);
+  root.style.setProperty('--color-accent-strong', strong);
+  root.style.setProperty('--color-accent-strong-hover', `var(${preset.hover})`);
+  root.style.setProperty('--color-accent-soft', `color-mix(in srgb, ${primary} 14%, var(--color-surface))`);
+  root.style.setProperty('--color-nav-active', `color-mix(in srgb, ${primary} 11%, var(--color-surface))`);
+  root.style.setProperty('--color-focus', strong);
+  root.style.setProperty('--color-on-accent', `var(${preset.on})`);
+  root.style.setProperty('--color-on-card-header', `var(${preset.on})`);
+}
+
+function applyCustomPrimary(root, primary) {
+  root.style.setProperty('--color-card-header', primary);
+  root.style.setProperty('--color-accent', primary);
+  root.style.setProperty('--color-accent-strong', primary);
+  root.style.setProperty('--color-accent-strong-hover', primary);
+  root.style.setProperty('--color-accent-soft', `color-mix(in srgb, ${primary} 14%, var(--color-surface))`);
+  root.style.setProperty('--color-nav-active', `color-mix(in srgb, ${primary} 11%, var(--color-surface))`);
+  root.style.setProperty('--color-focus', primary);
+}
+
 function applyAppearance(settings) {
   const root = document.documentElement;
-  root.style.removeProperty('--color-card-header');
-  root.style.removeProperty('--color-accent-strong');
-  root.style.removeProperty('--color-focus');
-  const primary = settings?.appearance?.primary;
-  if (primary) {
-    root.style.setProperty('--color-card-header', primary);
-    root.style.setProperty('--color-focus', primary);
+  for (const property of APPEARANCE_VARS) root.style.removeProperty(property);
+  const appearance = settings?.appearance ?? {};
+  const preset = PALETTE_BY_ID.get(String(appearance.preset ?? ''));
+  const primary = String(appearance.primary ?? '').trim();
+  if (preset) applyPaletteTokens(root, preset);
+  else if (primary) applyCustomPrimary(root, primary);
+  root.style.setProperty('--radius-btn', `${appearanceNumber(appearance.radiusBtn, 8, 0, 20)}px`);
+  root.style.setProperty('--radius-card', `${appearanceNumber(appearance.radiusCard, 16, 0, 28)}px`);
+  root.style.setProperty('--glass-opacity', appearance.enableGlass === false ? '1' : String(appearanceNumber(appearance.glass, 0.25, 0.1, 1)));
+}
+
+function appearanceFromForm(form) {
+  const data = formData(form);
+  return {
+    preset: String(data.preset ?? ''),
+    primary: String(data.primary ?? '').trim(),
+    radiusBtn: numericSetting(data.radiusBtn, 8),
+    radiusCard: numericSetting(data.radiusCard, 16),
+    glass: numericSetting(data.glass, 0.25),
+    enableGlass: Boolean(form.elements.enableGlass?.checked),
+  };
+}
+
+function cssColourToInputValue(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  if (/^#[0-9a-f]{6}$/i.test(text)) return text;
+  const probe = document.createElement('span');
+  probe.style.color = text;
+  document.body.append(probe);
+  const computed = getComputedStyle(probe).color;
+  probe.remove();
+  const match = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/i.exec(computed);
+  if (!match) return '';
+  return `#${[1, 2, 3].map((index) => Number(match[index]).toString(16).padStart(2, '0')).join('')}`;
+}
+
+function syncAppearanceForm(form) {
+  if (!form) return;
+  const appearance = appearanceFromForm(form);
+  const root = document.documentElement;
+  applyAppearance({ appearance });
+  const preset = PALETTE_BY_ID.get(appearance.preset);
+  form.querySelectorAll('[data-palette]').forEach((card) => {
+    card.setAttribute('aria-pressed', String(card.dataset.palette === appearance.preset));
+  });
+  form.querySelectorAll('[data-theme-value]').forEach((output) => {
+    const key = output.dataset.themeValue;
+    if (key === 'glass') output.textContent = appearance.enableGlass ? `${Math.round(appearance.glass * 100)}%` : 'Off';
+    else if (key === 'radiusBtn') output.textContent = `${appearance.radiusBtn}px`;
+    else if (key === 'radiusCard') output.textContent = `${appearance.radiusCard}px`;
+  });
+  const primaryInput = form.querySelector('#theme-primary');
+  if (primaryInput && preset) {
+    const resolved = cssColourToInputValue(getComputedStyle(root).getPropertyValue(preset.primary));
+    if (resolved) primaryInput.value = resolved;
   }
 }
 
@@ -771,9 +863,17 @@ document.addEventListener('click', async (event) => {
   else if (action === 'copy-brief') await copyAgentBrief(actionEl.dataset.owner);
   else if (action === 'open-queue-file') toast('Queue files are not available in browser. Orders stay in this account on this device.', { tone: 'danger' });
   else if (action === 'focus-add-project') document.getElementById('add-project-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  else if (action === 'reset-theme') {
+  else if (action === 'apply-palette') {
+    const card = actionEl.closest('[data-palette]');
+    const form = actionEl.closest('form[data-form="settings-appearance"]');
+    if (card && form && PALETTE_BY_ID.has(card.dataset.palette)) {
+      form.querySelector('[data-theme-preset]').value = card.dataset.palette;
+      markSettingsDirty(form);
+      syncAppearanceForm(form);
+    }
+  } else if (action === 'reset-theme') {
     const settings = structuredClone(getState().settings);
-    settings.appearance = { primary: '', radiusBtn: 8, radiusCard: 16, glass: 0.25, enableGlass: true };
+    settings.appearance = { ...DEFAULT_APPEARANCE };
     await saveSettings(settings);
     applyAppearance(settings);
     render();
@@ -784,11 +884,16 @@ document.addEventListener('click', async (event) => {
 document.addEventListener('input', (event) => {
   const form = event.target.closest('form[data-settings-form]');
   if (form) markSettingsDirty(form);
+  if (form?.dataset.form === 'settings-appearance') {
+    if (event.target.name === 'primary') form.querySelector('[data-theme-preset]').value = '';
+    syncAppearanceForm(form);
+  }
 });
 
 document.addEventListener('change', async (event) => {
   const settingsForm = event.target.closest('form[data-settings-form]');
   if (settingsForm) markSettingsDirty(settingsForm);
+  if (settingsForm?.dataset.form === 'settings-appearance') syncAppearanceForm(settingsForm);
   const selectAllBugs = event.target.closest('[data-select-all-bugs]');
   if (selectAllBugs) {
     document.querySelectorAll('[data-bug-select]').forEach((box) => { box.checked = selectAllBugs.checked; });
@@ -902,7 +1007,7 @@ document.addEventListener('submit', async (event) => {
       await commitSettings(settings, 'Areas saved on this device.');
     } else if (form.dataset.form === 'settings-appearance') {
       const settings = structuredClone(getState().settings);
-      settings.appearance = { primary: data.primary, radiusBtn: numericSetting(data.radiusBtn, 8), radiusCard: numericSetting(data.radiusCard, 16), glass: numericSetting(data.glass, 0.25), enableGlass: Boolean(data.enableGlass) };
+      settings.appearance = appearanceFromForm(form);
       setSettingsFormState(form, false);
       await commitSettings(settings, 'Theme saved on this device.', { appearance: true });
     } else if (form.dataset.form === 'page-save') {

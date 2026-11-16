@@ -288,7 +288,7 @@ export const demoSettings = {
   language: { primary: 'en', secondary: 'zh', rule: 'Use plain English. Keep Chinese product names and quoted customer words unchanged.' },
   dispatch: { defaultOwner: 'Dispatcher', rules: [{ keyword: 'battery', owner: 'Worker A' }, { keyword: 'release', owner: 'QA' }] },
   areas: { options: ['Battery', 'Display', 'Firmware', 'Supplier'], fallback: 'NA' },
-  appearance: { primary: '', radiusBtn: 8, radiusCard: 16, glass: 0.25, enableGlass: true },
+  appearance: { preset: 'soft', primary: '', radiusBtn: 8, radiusCard: 16, glass: 0.25, enableGlass: true },
 };
 
 export function buildDemoData() {

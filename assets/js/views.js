@@ -1240,6 +1240,27 @@ const AI_LIMIT_SECTIONS = [
   { key: 'benchmark', label: 'Issue Benchmark', help: 'How many Issue Benchmark rows may be included.' },
 ];
 
+// The palette values themselves live in tokens.css. Each preset names the
+// token family that applyAppearance writes on :root, so no hex literal appears
+// outside the token file.
+export const PALETTE_PRESETS = [
+  { id: 'soft', label: 'Soft A2', note: 'My palette', primary: '--palette-soft-primary', strong: '--palette-soft-strong', hover: '--palette-soft-hover', on: '--palette-soft-on' },
+  { id: 'apple', label: 'Apple system', note: 'Bright system blue', primary: '--palette-apple-primary', strong: '--palette-apple-strong', hover: '--palette-apple-hover', on: '--palette-apple-on' },
+  { id: 'ocean', label: 'Ocean cool', note: 'Teal and sea glass', primary: '--palette-ocean-primary', strong: '--palette-ocean-strong', hover: '--palette-ocean-hover', on: '--palette-ocean-on' },
+  { id: 'sunset', label: 'Sunset warm', note: 'Warm coral', primary: '--palette-sunset-primary', strong: '--palette-sunset-strong', hover: '--palette-sunset-hover', on: '--palette-sunset-on' },
+  { id: 'candy', label: 'Candy pop', note: 'Berry magenta', primary: '--palette-candy-primary', strong: '--palette-candy-strong', hover: '--palette-candy-hover', on: '--palette-candy-on' },
+  { id: 'graphite', label: 'Graphite mono', note: 'Neutral ink', primary: '--palette-graphite-primary', strong: '--palette-graphite-strong', hover: '--palette-graphite-hover', on: '--palette-graphite-on' },
+];
+
+function paletteCard(preset, currentPreset) {
+  const selected = String(currentPreset) === preset.id;
+  return `<button class="palette-card" type="button" data-palette="${esc(preset.id)}" data-action="apply-palette" aria-pressed="${selected ? 'true' : 'false'}"><span class="palette-dots" aria-hidden="true"><span class="palette-dot palette-dot-primary"></span><span class="palette-dot palette-dot-strong"></span><span class="palette-dot"></span></span><span class="palette-name">${esc(preset.label)}</span><span class="palette-note">${esc(preset.note)}</span></button>`;
+}
+
+function appearancePreview() {
+  return `<div class="theme-preview field-wide" role="group" aria-label="Live preview"><span class="theme-preview-label">Live preview</span><span class="btn btn-primary btn-sm" aria-hidden="true">Primary</span><span class="btn btn-sm" aria-hidden="true">Secondary</span><span class="chip is-active" aria-hidden="true">Selected chip</span></div>`;
+}
+
 // One save pattern for every settings form: shared dirty/saved text plus a
 // single primary Save button. The state is updated by the app's input listener.
 function settingsSaveBar({ label = 'Save changes', extra = '' } = {}) {
@@ -1254,7 +1275,7 @@ function settingsSnapshot(state) {
     language: { primary: 'en', secondary: 'zh', rule: '', ...(stored.language ?? {}) },
     dispatch: { defaultOwner: 'Dispatcher', rules: [], ...(stored.dispatch ?? {}) },
     areas: { options: [], fallback: 'NA', ...(stored.areas ?? {}) },
-    appearance: { primary: '', radiusBtn: 8, radiusCard: 16, glass: 0.25, enableGlass: true, ...(stored.appearance ?? {}) },
+    appearance: { preset: 'soft', primary: '', radiusBtn: 8, radiusCard: 16, glass: 0.25, enableGlass: true, ...(stored.appearance ?? {}) },
   };
 }
 
@@ -1308,7 +1329,11 @@ function settingsPage(route, state) {
       return `<section class="card"><div class="card-head"><h2>Responsibility areas</h2></div><div class="card-body"><form class="form-grid" data-form="settings-areas" data-settings-form><div class="field field-wide"><label for="areas-new">Area names</label><div class="chip-row" data-area-chips>${options.map(areaChip).join('')}</div><input id="areas-new" name="newArea" type="text" placeholder="Add an area, then choose Add area" /><input type="hidden" name="options" data-areas-value value="${esc(options.join(', '))}" /><p class="field-help" data-area-empty${options.length ? ' hidden' : ''}>No extra areas yet. Unknown areas use the fallback below.</p><p class="field-help">Remove a chip to stop offering that area. This list is stored in this account.</p></div><div class="field"><label for="areas-fallback">Unknown owner fallback</label><input id="areas-fallback" name="fallback" type="text" value="${esc(s.areas.fallback)}" /><p class="field-help">Default: NA (PQA in reports).</p></div><div class="field"><button class="btn btn-ghost" type="button" data-action="add-area">Add area</button></div>${settingsSaveBar()}</form></div></section>`;
     }
     if (route.id === 'settings-appearance') {
-      return `<section class="card"><div class="card-head"><h2>Appearance &amp; theme</h2></div><div class="card-body"><form class="form-grid" data-form="settings-appearance" data-settings-form><div class="field"><label for="theme-primary">Primary colour</label><input id="theme-primary" name="primary" type="color" value="${esc(s.appearance.primary)}" /></div><div class="field"><label for="theme-radius-btn">Button radius</label><input id="theme-radius-btn" name="radiusBtn" type="range" min="0" max="20" value="${esc(s.appearance.radiusBtn)}" /></div><div class="field"><label for="theme-radius-card">Card radius</label><input id="theme-radius-card" name="radiusCard" type="range" min="0" max="28" value="${esc(s.appearance.radiusCard)}" /></div><div class="field"><label for="theme-glass">Glass opacity</label><input id="theme-glass" name="glass" type="range" min="0.1" max="1" step="0.05" value="${esc(s.appearance.glass)}" /></div><label class="checkbox-row"><input name="enableGlass" type="checkbox"${s.appearance.enableGlass ? ' checked' : ''} /> Enable glass</label>${settingsSaveBar({ label: 'Save theme', extra: '<button class="btn btn-ghost" type="button" data-action="reset-theme">Restore default look</button>' })}</form></div></section>`;
+      const a = s.appearance;
+      const glassPercent = Math.round(Number(a.glass) * 100);
+      const radiusBtn = Number(a.radiusBtn);
+      const radiusCard = Number(a.radiusCard);
+      return `<section class="card"><div class="card-head"><h2>Appearance &amp; theme</h2></div><div class="card-body"><form class="form-grid" data-form="settings-appearance" data-settings-form><div class="field field-wide"><h3>Palette presets</h3><div class="palette-grid">${PALETTE_PRESETS.map((preset) => paletteCard(preset, a.preset)).join('')}</div><p class="field-help">Choose a preset to set the primary colour and its related accent, focus and soft-tint tokens. A custom colour below leaves the preset. Each preset is stored with this account on this device.</p></div><div class="field"><label for="theme-primary">Primary colour</label><input id="theme-primary" name="primary" type="color" value="${esc(a.primary)}" /><p class="field-help">Used for the card header, focus ring and primary button.</p></div><input type="hidden" name="preset" value="${esc(a.preset)}" data-theme-preset /><div class="field"><label for="theme-radius-btn">Button radius</label><input id="theme-radius-btn" name="radiusBtn" type="range" min="0" max="20" step="1" value="${esc(radiusBtn)}" /><output class="field-help" for="theme-radius-btn" data-theme-value="radiusBtn">${esc(radiusBtn)}px</output></div><div class="field"><label for="theme-radius-card">Card radius</label><input id="theme-radius-card" name="radiusCard" type="range" min="0" max="28" step="1" value="${esc(radiusCard)}" /><output class="field-help" for="theme-radius-card" data-theme-value="radiusCard">${esc(radiusCard)}px</output></div><div class="field"><label for="theme-glass">Glass opacity</label><input id="theme-glass" name="glass" type="range" min="0.1" max="1" step="0.05" value="${esc(a.glass)}" /><output class="field-help" for="theme-glass" data-theme-value="glass">${esc(glassPercent)}%</output></div><label class="checkbox-row field-wide"><input name="enableGlass" type="checkbox"${a.enableGlass ? ' checked' : ''} /> Enable glassmorphism (blur effect)</label>${appearancePreview()}${settingsSaveBar({ label: 'Save theme', extra: '<button class="btn btn-ghost" type="button" data-action="reset-theme">Restore default look</button>' })}</form></div></section><section class="card"><div class="card-head"><h2>Install as app</h2><span class="badge badge-muted">Coming with PWA</span></div><div class="card-body"><p>Installing My Platform from the browser will arrive with the PWA release. This build does not fake an install.</p><button class="btn" type="button" disabled aria-disabled="true">Install My Platform</button><p class="field-help">Coming with PWA. The install control stays disabled until the manifest and service worker ship.</p></div></section>`;
     }
     return '';
   })();
@@ -1608,8 +1633,12 @@ export function mountView(route, query, state) {
   }
   if (route.id === 'settings-appearance') {
     const input = document.getElementById('theme-primary');
-    if (input && !state.settings.appearance.primary) {
-      input.value = getComputedStyle(document.documentElement).getPropertyValue('--color-card-header').trim();
+    const appearance = state.settings?.appearance ?? {};
+    if (input && !input.value) {
+      const preset = PALETTE_PRESETS.find((item) => item.id === String(appearance.preset ?? ''));
+      const token = preset ? preset.primary : '--color-card-header';
+      const value = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+      if (/^#[0-9a-f]{6}$/i.test(value)) input.value = value;
     }
   }
 }
