@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Local-first static workspace for tasks, calendar, bugs and pages.",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "check:styles": "node scripts/check-styles.mjs"
   },
   "devDependencies": {
     "fake-indexeddb": "^6.2.8"
