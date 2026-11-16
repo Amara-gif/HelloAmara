@@ -1101,6 +1101,40 @@ code {
   outline-offset: 1px;
 }
 
+/* A colour input is a swatch, not a text field. The extra selector outranks
+   .field input so the tap-sized square wins over the generic width: 100%. */
+.field input[type="color"] {
+  width: var(--tap-size);
+  height: var(--tap-size);
+  min-height: var(--tap-size);
+  padding: calc(var(--space-1) / 2);
+  border: var(--border-width) solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.field input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.field input[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-sm) - var(--space-1));
+}
+
+.field input[type="color"]::-moz-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-sm) - var(--space-1));
+}
+
+.field input[type="color"]:focus-visible {
+  outline: calc(var(--border-width) * 2) solid var(--color-focus);
+  outline-offset: var(--space-1);
+}
+
 .field-help {
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
