@@ -1,5 +1,5 @@
 // Demo rows for the Test account. Dates are relative to the day the demo is seeded.
-export const DEMO_VERSION = '2026-11-16.3';
+export const DEMO_VERSION = '2026-11-16.4';
 
 const pad = (n) => String(n).padStart(2, '0');
 const dayIso = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -100,7 +100,7 @@ const tasks = [
   task('t13', 13, 'Difficult or long setup', 'p3', 'Waiting', 'Fixed', 'Medium', 'Worker B', offsetDate(3), {
     created: -15, notes: '[待核 2026-11-13]',
   }),
-  task('t14', 14, 'Cloth-cover ironing yield', 'p4', 'Done', 'Reopened', 'High', 'Amara', offsetDate(1), {
+  task('t14', 14, 'Cloth-cover ironing yield', 'p4', 'Done', 'Closed', 'High', 'Amara', offsetDate(1), {
     created: -7, reviewed: false,
   }),
   task('t15', 15, 'Mic FPC scrap cost', 'p4', 'To do', 'New', 'Medium', 'Amara', offsetDate(5), {
@@ -150,7 +150,7 @@ const taskHistory = [
   { id: 'th6', taskId: 't5', at: at(-3, '09:50'), who: 'Worker B', field: 'status', old: 'To do', new: 'In progress' },
   { id: 'th7', taskId: 't10', at: at(-2, '14:12'), who: 'Amara', field: 'note', old: '', new: '[待确认]' },
   { id: 'th8', taskId: 't11', at: at(-4, '08:30'), who: 'Worker A', field: 'status', old: 'To do', new: 'In progress' },
-  { id: 'th9', taskId: 't14', at: at(-1, '11:10'), who: 'Amara', field: 'status', old: 'Done', new: 'Reopened' },
+  { id: 'th9', taskId: 't14', at: at(-1, '11:10'), who: 'Amara', field: 'status', old: 'Verified', new: 'Closed' },
   { id: 'th10', taskId: 't17', at: at(-3, '13:45'), who: 'Worker C', field: 'status', old: 'To do', new: 'In progress' },
 ].map((row) => ({ ...row, updatedAt: row.at, deletedAt: null }));
 
