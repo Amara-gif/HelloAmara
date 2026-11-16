@@ -117,6 +117,13 @@ html {
   --radius-xl: 22px;
   --radius-pill: 999px;
 
+  /* Cards follow Settings -> Card radius. Opaque flat boxes keep a fixed
+     radius so a card-radius change never reshapes every panel or chart.
+     Dialogs are overlays above the page, so they get their own fixed radius
+     instead of inheriting the user's inline-card radius. */
+  --surface-flat-radius: var(--radius-md);
+  --surface-dialog-radius: var(--radius-lg);
+
   /* Live appearance controls write these three values on :root. */
   --radius-btn: 8px;
   --radius-card: 16px;

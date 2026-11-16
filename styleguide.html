@@ -329,7 +329,7 @@
       <section class="section" aria-labelledby="sg-cards-title">
         <div class="section-head">
           <h2 id="sg-cards-title">Cards</h2>
-          <p>One card component with an optional blue header. Do not create another card style.</p>
+          <p>One card surface with a glass card, an opaque flat card, an interactive card and a stat card. Do not create another card style.</p>
         </div>
         <div class="grid-2">
           <article class="card">
@@ -345,17 +345,27 @@
             </div>
           </article>
 
-          <a class="card card-link" href="#sg-card-link" id="sg-card-link">
+          <a class="card card-interactive" href="#sg-cards-title" id="sg-card-interactive">
             <span class="card-body">
               <span class="card-top">
                 <span class="card-icon" aria-hidden="true">▤</span>
                 <span class="badge badge-muted">P2</span>
               </span>
-              <span class="card-title">Linked card</span>
-              <span class="card-text">Linked cards use the same card component with hover and focus states.</span>
+              <span class="card-title">Interactive card</span>
+              <span class="card-text">Interactive cards keep the shared card surface and lift on hover or keyboard focus.</span>
               <span class="card-more">Open <span aria-hidden="true">→</span></span>
             </span>
           </a>
+
+          <article class="card-flat">
+            <span class="card-title">Flat card</span>
+            <p class="card-text">Opaque boxes such as stats, board cards, toolbars, notes and charts share this flat surface and its fixed radius.</p>
+          </article>
+
+          <div class="card-stat">
+            <strong>12</strong>
+            <span>Open work items</span>
+          </div>
         </div>
       </section>
 
@@ -1283,6 +1293,18 @@
               <button class="btn btn-primary" type="button" data-demo="dialog">Open dialog</button>
               <button class="btn btn-danger" type="button" data-demo="danger">Destructive dialog</button>
             </div>
+          </div>
+        </div>
+        <div class="modal" role="dialog" aria-modal="false" aria-labelledby="sg-dialog-title">
+          <div class="modal-head">
+            <h2 id="sg-dialog-title">Example dialog</h2>
+          </div>
+          <div class="modal-body">
+            <p>Dialogs, the auth card and toasts use the fixed dialog radius. They sit above the page, so they do not follow the user-adjustable card radius.</p>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-ghost" type="button">Cancel</button>
+            <button class="btn btn-primary" type="button">Got it</button>
           </div>
         </div>
       </section>
