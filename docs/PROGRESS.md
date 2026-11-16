@@ -30,6 +30,14 @@ Standards:
 - Phone layout is a **fresh** responsive design (drawer sidebar, stacked cards, ≥44 px targets).
   Narrow screenshots in `docs/Screen/` show only the broken old sidebar — do not copy them.
 
+## Bugs list delete semantics (task 22)
+
+`#/bugs` supports multi-select delete, but only as a **soft delete**. Selected rows get
+`deletedAt` + `updatedAt` timestamps, so `data.js` hides them from the live list, its counters
+and the detail route while the record, key and history stay in IndexedDB. Nothing is
+hard-deleted, which is why the bug detail page still says “Bugs are never deleted”. The
+confirmation dialog states the same choice before the write.
+
 ## Phase status (re-assessed)
 
 | Phase | Scope | Status |
@@ -37,7 +45,7 @@ Standards:
 | P0 | Static shell, design system, inventory navigation | **Done** (evidence retained below) |
 | P1 | IndexedDB wrapper, schema versioning, `meta`, tests | **Done** — wrapper + demo seed + accounts + fake-IDB CRUD/schema/soft-delete/boot tests + per-account persistent-storage request/status (meta, sidebar, Settings) |
 | P2 | Tasks, Home, My work, Calendar, Projects, Pages | **Partial** — rich shells + demo data; many inventory interactions still incomplete |
-| P3 | Bugs and events | **Partial** — list/detail/create + event CRUD; workflow gates and inline edits incomplete |
+| P3 | Bugs and events | **Partial** — bugs list filters/sorts/multi-select soft delete complete; detail workflow gates and inline edits incomplete |
 | P4 | Export and import | **Not started** |
 | P5 | PWA and offline | **Not started** |
 | P6 | Scraper | **Blocked** on owner (BRIEF §7 / §11) |
@@ -83,7 +91,7 @@ Phone/tablet PNGs are listed for completeness; they are not a layout target.
 | `05-tasks.png` | `#/tasks` | partial | List view, Open/All scope, filters, Send to QA, Brief, key columns. Missing: multi-value filters, parent expand/collapse, board health, Delete shown, severity/component/module filters, Progress column from real progress text. |
 | `06-tasks-all.png` | `#/tasks?scope=all` | partial | Scope=all works on the same list. Same gaps as `05`. |
 | `07-calendar.png` | `#/calendar` | partial | Month grid (≤3 + overflow), Prev/This/Next, project filter, next-seven agenda, Join/Delete, Enable reminders permission. Missing: repeat occurrence expansion, reminder polling/notifications payload, click-day detail dialog. |
-| `08-bugs.png` | `#/bugs` | partial | Open/total/QA/past-due stats, search/filters, table → detail, Report a bug. Missing: multi-select delete, full sort set, priority filter, “More fields”. |
+| `08-bugs.png` | `#/bugs` | done for task 22 | Open/total/QA/past-due stats, full columns, q/status/severity/priority/component/assignee filters, smart/newest/oldest/severity/due/key sorts, multi-select soft delete, table → detail, Report a bug. Missing: “More fields”. |
 | `09-chat.png` | `#/chat` | partial | Summary tiles, agent cards, Send order, To-do modal, close order. Missing: lead (Amara) summary strip, Copy brief, reopen closed orders, richer per-agent counters. “Open queue file” has no static equivalent (toast). |
 | `10-files.png` | `#/files` | partial | Chart Studio + Agent Configuration tabs; stub chart when “opened”. Missing: real local chart builder UX (no OS folder), pivots/palettes, agent-file edit. Folder open correctly refused for browser. |
 | `11-settings.png` | `#/settings` | partial | AI connection fields, Save, Test/Fill toasts, demo reset for Test account. Missing: dirty-state save bar, advanced polish instructions / never-send terms, real key test (no network AI yet — keep local-only). Shared secret file path does not apply. |

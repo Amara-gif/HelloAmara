@@ -2,7 +2,7 @@ import { listAccounts, getAccount, getActiveAccountId, setActiveAccount, clearAc
 import {
   start, getState, refresh, resetDemo, createTask, updateTask, addTaskComment,
   transitionTask, reviewTask,
-  createBug, updateBug, addBugComment, createEvent, deleteEvent, createPage,
+  createBug, updateBug, addBugComment, softDeleteBugs, createEvent, deleteEvent, createPage,
   updatePage, softDeletePage, createProject, updateProject, createOrder,
   closeOrder, saveSettings, restoreQaMark,
 } from './data.js';
@@ -307,6 +307,24 @@ function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
 
+function selectedBugIds() {
+  return [...document.querySelectorAll('[data-bug-select]:checked')].map((input) => input.value);
+}
+
+function syncBugSelection() {
+  const selected = selectedBugIds();
+  const boxes = [...document.querySelectorAll('[data-bug-select]')];
+  const selection = document.querySelector('[data-bug-selection]');
+  const bulkDelete = document.querySelector('[data-action="delete-selected-bugs"]');
+  const selectAll = document.querySelector('[data-select-all-bugs]');
+  if (selection) selection.textContent = `${selected.length} selected`;
+  if (bulkDelete) bulkDelete.disabled = selected.length === 0;
+  if (selectAll) {
+    selectAll.checked = boxes.length > 0 && selected.length === boxes.length;
+    selectAll.indeterminate = selected.length > 0 && selected.length < boxes.length;
+  }
+}
+
 function openCreateDialog(preset = {}) {
   const options = typeof preset === 'string' ? { tab: preset } : (preset ?? {});
   const state = getState();
@@ -565,6 +583,24 @@ document.addEventListener('click', async (event) => {
     openModal({ title: 'Delete this page?', message: 'The page is soft-deleted on this device. Other versions stay in the account.', confirmLabel: 'Delete', tone: 'danger', onConfirm: async () => { await softDeletePage(id); render(); toast('Page deleted.', { tone: 'success' }); } });
   } else if (action === 'delete-event') {
     openModal({ title: 'Delete this event?', message: 'This removes the event from this device.', confirmLabel: 'Delete', tone: 'danger', onConfirm: async () => { await deleteEvent(id); render(); toast('Event deleted.', { tone: 'success' }); } });
+  } else if (action === 'delete-selected-bugs') {
+    const ids = selectedBugIds();
+    if (!ids.length) {
+      toast('Select at least one bug first.', { tone: 'danger' });
+    } else {
+      const count = ids.length;
+      openModal({
+        title: `Delete ${count} selected bug${count === 1 ? '' : 's'}?`,
+        message: 'Selected bugs are soft-deleted on this device: they disappear from the list and its counters, but the stored rows and their history remain in IndexedDB. There is no hard delete.',
+        confirmLabel: 'Delete selected',
+        tone: 'danger',
+        onConfirm: async () => {
+          const deleted = await softDeleteBugs(ids);
+          render();
+          toast(`${deleted} bug${deleted === 1 ? '' : 's'} hidden from the list.`, { tone: 'success' });
+        },
+      });
+    }
   } else if (action === 'enable-reminders') {
     if (typeof Notification !== 'undefined') {
       let result = Notification.permission;
@@ -603,6 +639,13 @@ document.addEventListener('click', async (event) => {
 });
 
 document.addEventListener('change', async (event) => {
+  const selectAllBugs = event.target.closest('[data-select-all-bugs]');
+  if (selectAllBugs) {
+    document.querySelectorAll('[data-bug-select]').forEach((box) => { box.checked = selectAllBugs.checked; });
+    syncBugSelection();
+  }
+  const oneBug = event.target.closest('[data-bug-select]');
+  if (oneBug) syncBugSelection();
   const move = event.target.closest('[data-move-task]');
   if (move) {
     const status = move.value;

@@ -1022,33 +1022,109 @@ function calendarPage(state, query) {
     </section>`;
 }
 
-function bugsPage(state, query) {
-  const q = (query.get('q') ?? '').toLowerCase();
+const BUG_STATUSES = ['New', 'Triaged', 'In progress', 'Fixed', 'Verified', 'Closed', 'Reopened', 'Duplicate', 'Wont fix', 'Deferred', 'Rejected'];
+const BUG_SEVERITIES = ['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'];
+const BUG_SORT_OPTIONS = [
+  ['smart', 'Smart order'],
+  ['newest', 'Newest'],
+  ['oldest', 'Oldest'],
+  ['severity', 'Severity'],
+  ['due', 'Due date'],
+  ['key', 'Key'],
+];
+const BUG_CLOSED_STATUSES = ['Closed', 'Verified', 'Wont fix'];
+const bugKeyCompare = (a, b) => a.key.localeCompare(b.key, undefined, { numeric: true });
+const bugDueValue = (bug) => dateOnly(bug.due) || '9999-12-31';
+const bugSeverityRank = (bug) => {
+  const rank = BUG_SEVERITIES.indexOf(bug.severity);
+  return rank === -1 ? BUG_SEVERITIES.length : rank;
+};
+const bugPriorityRank = (bug) => {
+  const rank = PRIORITY_ORDER.indexOf(bug.priority);
+  return rank === -1 ? PRIORITY_ORDER.length : rank;
+};
+const bugOpenRank = (bug) => (BUG_CLOSED_STATUSES.includes(bug.status) ? 1 : 0);
+
+export function filterBugs(state, query) {
+  const q = (query.get('q') ?? '').trim();
   const status = query.get('status') ?? '';
-  const assignee = query.get('assignee') ?? '';
   const severity = query.get('severity') ?? '';
-  const rows = state.bugs.filter((bug) => (!q || `${bug.title} ${bug.key} ${bug.description}`.toLowerCase().includes(q)) && (!status || bug.status === status) && (!assignee || bug.assignee === assignee) && (!severity || bug.severity === severity));
-  const open = state.bugs.filter((bug) => !['Closed', 'Verified', 'Wont fix'].includes(bug.status)).length;
-  const waiting = state.bugs.filter((bug) => bug.status === 'Fixed').length;
-  const past = state.bugs.filter((bug) => bug.due && bug.due < today() && !['Closed', 'Verified', 'Wont fix'].includes(bug.status)).length;
+  const priorityFilter = query.get('priority') ?? '';
+  const component = query.get('component') ?? '';
+  const assignee = query.get('assignee') ?? '';
+  const sortParam = query.get('sort') ?? 'smart';
+  const sort = BUG_SORT_OPTIONS.some(([value]) => value === sortParam) ? sortParam : 'smart';
+  const needle = q.toLowerCase();
+
+  let rows = (state.bugs ?? []).filter((bug) => {
+    const haystack = `${bug.title ?? ''} ${bug.key ?? ''} ${bug.description ?? ''} ${bug.component ?? ''} ${bug.assignee ?? ''}`.toLowerCase();
+    return (!needle || haystack.includes(needle))
+      && (!status || bug.status === status)
+      && (!severity || bug.severity === severity)
+      && (!priorityFilter || bug.priority === priorityFilter)
+      && (!component || bug.component === component)
+      && (!assignee || bug.assignee === assignee);
+  });
+
+  rows = [...rows].sort((a, b) => {
+    if (sort === 'newest') return String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')) || bugKeyCompare(a, b);
+    if (sort === 'oldest') return String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')) || bugKeyCompare(a, b);
+    if (sort === 'severity') {
+      return bugSeverityRank(a) - bugSeverityRank(b)
+        || bugOpenRank(a) - bugOpenRank(b)
+        || bugPriorityRank(a) - bugPriorityRank(b)
+        || bugDueValue(a).localeCompare(bugDueValue(b))
+        || bugKeyCompare(a, b);
+    }
+    if (sort === 'due') {
+      return bugDueValue(a).localeCompare(bugDueValue(b))
+        || bugOpenRank(a) - bugOpenRank(b)
+        || bugSeverityRank(a) - bugSeverityRank(b)
+        || bugKeyCompare(a, b);
+    }
+    if (sort === 'key') return bugKeyCompare(a, b);
+    return bugOpenRank(a) - bugOpenRank(b)
+      || bugSeverityRank(a) - bugSeverityRank(b)
+      || bugPriorityRank(a) - bugPriorityRank(b)
+      || bugDueValue(a).localeCompare(bugDueValue(b))
+      || bugKeyCompare(a, b);
+  });
+
+  return { rows, q, status, severity, priority: priorityFilter, component, assignee, sort };
+}
+
+function bugsPage(state, query) {
+  const { rows, q, status, severity, priority: priorityFilter, component, assignee, sort } = filterBugs(state, query);
+  const bugs = state.bugs ?? [];
+  const open = bugs.filter((bug) => !BUG_CLOSED_STATUSES.includes(bug.status)).length;
+  const waiting = bugs.filter((bug) => bug.status === 'Fixed').length;
+  const past = bugs.filter((bug) => bug.due && dateOnly(bug.due) < today() && !BUG_CLOSED_STATUSES.includes(bug.status)).length;
+  const unique = (field) => [...new Set(bugs.map((bug) => bug[field]).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
   return `
     ${pageHead('Bugs', 'Defects with the eleven-status workflow.', `<a class="btn btn-primary" href="#/bugs/new">${icon('bug', 16)}Report a bug</a>`)}
     <div class="stat-grid">
       <div class="stat"><strong>${open}</strong><span>Open</span></div>
-      <div class="stat"><strong>${state.bugs.length}</strong><span>Total</span></div>
+      <div class="stat"><strong>${bugs.length}</strong><span>Total</span></div>
       <div class="stat"><strong>${waiting}</strong><span>Waiting for QA</span></div>
       <div class="stat"><strong>${past}</strong><span>Past due</span></div>
     </div>
     <form class="toolbar" data-form="bug-filters">
-      <input class="input" type="search" name="q" value="${esc(query.get('q') ?? '')}" placeholder="Search bugs…" aria-label="Search bugs" />
-      <select class="select" name="status"><option value="">All statuses</option>${['New', 'Triaged', 'In progress', 'Fixed', 'Verified', 'Closed', 'Reopened', 'Duplicate', 'Wont fix', 'Deferred', 'Rejected'].map((value) => option(value, status)).join('')}</select>
-      <select class="select" name="assignee"><option value="">All assignees</option>${[...new Set(state.bugs.map((bug) => bug.assignee))].map((value) => option(value, assignee)).join('')}</select>
-      <select class="select" name="severity"><option value="">All severities</option>${['S1 Blocker', 'S2 Critical', 'S3 Major', 'S4 Minor'].map((value) => option(value, severity)).join('')}</select>
+      <input class="input" type="search" name="q" value="${esc(q)}" placeholder="Search bugs…" aria-label="Search bugs" />
+      <select class="select" name="status" aria-label="Status"><option value="">All statuses</option>${BUG_STATUSES.map((value) => option(value, status)).join('')}</select>
+      <select class="select" name="severity" aria-label="Severity"><option value="">All severities</option>${BUG_SEVERITIES.map((value) => option(value, severity)).join('')}</select>
+      <select class="select" name="priority" aria-label="Priority"><option value="">All priorities</option>${PRIORITY_ORDER.map((value) => option(value, priorityFilter)).join('')}</select>
+      <select class="select" name="component" aria-label="Component"><option value="">All components</option>${unique('component').map((value) => option(value, component)).join('')}</select>
+      <select class="select" name="assignee" aria-label="Assignee"><option value="">All assignees</option>${unique('assignee').map((value) => option(value, assignee)).join('')}</select>
+      <select class="select" name="sort" aria-label="Sort">${BUG_SORT_OPTIONS.map(([value, label]) => option(value, sort, label)).join('')}</select>
       <button class="btn btn-sm btn-primary" type="submit">Apply</button><a class="btn btn-ghost btn-sm" href="#/bugs">Reset</a>
     </form>
+    <div class="toolbar" aria-label="Bulk actions">
+      <span class="toolbar-count" data-bug-selection aria-live="polite">0 selected</span>
+      <button class="btn btn-danger btn-sm" type="button" data-action="delete-selected-bugs" disabled>Delete selected</button>
+    </div>
     <div class="table-wrap"><table class="table table-stack">
-      <thead><tr><th>Key</th><th>Summary</th><th>Status</th><th>Assignee</th><th>Due</th><th>Priority</th><th>Severity</th><th>Component</th><th>Age</th></tr></thead>
-      <tbody>${rows.map((bug) => `<tr><td data-label="Key"><a class="key-link" href="#/bug/${bug.id}">${esc(bug.key)}</a></td><td data-label="Summary"><a class="table-title" href="#/bug/${bug.id}">${esc(bug.title)}</a></td><td data-label="Status">${statusBadge(bug.status)}</td><td data-label="Assignee"><span class="assignee">${avatar(bug.assignee)}${esc(bug.assignee)}</span></td><td data-label="Due">${fmt(bug.due)}</td><td data-label="Priority">${priority(bug.priority)}</td><td data-label="Severity">${esc(bug.severity)}</td><td data-label="Component">${esc(bug.component)}</td><td data-label="Age">${age(bug.createdAt)}</td></tr>`).join('') || `<tr><td colspan="9">${empty('No bugs match these filters.')}</td></tr>`}</tbody>
+      <thead><tr><th><input type="checkbox" data-select-all-bugs aria-label="Select all bugs" /> Key</th><th>Summary</th><th>Status</th><th>Assignee</th><th>Due</th><th>Priority</th><th>Severity</th><th>Component</th><th>Age</th></tr></thead>
+      <tbody>${rows.map((bug) => `<tr><td data-label="Key"><input type="checkbox" data-bug-select value="${esc(bug.id)}" aria-label="Select ${esc(bug.key)}" /> <a class="key-link" href="#/bug/${bug.id}">${esc(bug.key)}</a></td><td data-label="Summary"><a class="table-title" href="#/bug/${bug.id}">${esc(bug.title)}</a></td><td data-label="Status">${statusBadge(bug.status)}</td><td data-label="Assignee"><span class="assignee">${avatar(bug.assignee)}${esc(bug.assignee)}</span></td><td data-label="Due">${fmt(bug.due)}</td><td data-label="Priority">${priority(bug.priority)}</td><td data-label="Severity">${esc(bug.severity)}</td><td data-label="Component">${esc(bug.component)}</td><td data-label="Age">${age(bug.createdAt)}</td></tr>`).join('') || `<tr><td colspan="9">${empty('No bugs match these filters.')}</td></tr>`}</tbody>
     </table></div>`;
 }
 

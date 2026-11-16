@@ -472,9 +472,9 @@ Data root: `ROOT` = parent of App; production `WORK = ROOT/Data`, `DATA = WORK/d
 - [ ] `/note/<id>` redirects to `/page/<id>`.
 
 ### Bugs
-- [ ] /bugs shows open/total, waiting-for-QA, past-due counters.
-- [ ] Filters q/status/severity/priority/component/assignee narrow the table; sort options smart/newest/oldest/severity/due/key work; reset clears.
-- [ ] Table columns Key, Summary, Status, Assignee, Due, Priority, Severity, Component, Age; rows open `/bug/<id>`.
+- [x] /bugs shows open/total, waiting-for-QA, past-due counters.
+- [x] Filters q/status/severity/priority/component/assignee narrow the table; sort options smart/newest/oldest/severity/due/key work; reset clears.
+- [x] Table columns Key, Summary, Status, Assignee, Due, Priority, Severity, Component, Age; rows open `/bug/<id>`.
 - [ ] /bugs/new auto-opens the bug form with `t/d/component/severity` prefills (severity default S3).
 - [ ] New bug receives WD-n key and severity SLA due (S1 today, S2 +2d, S3 +5d, S4 none).
 - [ ] Bug title and all detail fields edit inline via `/api/bug/update`; each change writes a history line (who/when/field/old/new).
@@ -484,7 +484,7 @@ Data root: `ROOT` = parent of App; production `WORK = ROOT/Data`, `DATA = WORK/d
 - [ ] Comments post via button or Ctrl+Enter and appear with author/time.
 - [ ] Pasting a screenshot attaches evidence (`/api/attach` → `/api/bug/attach`); attachments render via `/raw`; detach works.
 - [ ] Bug activity feed interleaves comments and field changes.
-- [ ] Bugs-list delete control removes a bug (`/api/bug/delete`) while the detail page states bugs are never deleted.
+- [x] Bugs-list delete control removes a bug (`/api/bug/delete`) while the detail page states bugs are never deleted. Local static build uses a soft delete (tombstone), documented in PROGRESS.
 
 ### Team (/chat)
 - [ ] Summary tiles show decisions pending, reviews ready, people working, open items, today's actions.

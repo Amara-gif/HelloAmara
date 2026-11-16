@@ -511,6 +511,21 @@ export async function addBugComment(id, body) {
   state = await readState();
 }
 
+// The bugs list offers multi-select delete, but a bug is never hard-deleted:
+// selected rows get a deletedAt tombstone and disappear from the live list only.
+// The bug detail page keeps its "Bugs are never deleted" statement because the
+// stored record and its key/history remain in IndexedDB.
+export async function softDeleteBugs(ids) {
+  const selected = new Set((ids ?? []).map((id) => String(id)));
+  if (!selected.size) return 0;
+  const rows = state.bugs.filter((bug) => selected.has(bug.id));
+  if (!rows.length) return 0;
+  const now = nowIso();
+  await Promise.all(rows.map((bug) => putRecord('bugs', { ...bug, deletedAt: now, updatedAt: now })));
+  state = await readState();
+  return rows.length;
+}
+
 export async function createEvent(input) {
   const now = nowIso();
   const id = newId('event');
